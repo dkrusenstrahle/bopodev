@@ -19,7 +19,8 @@ import {
   ShieldCheck,
   Target,
   Users,
-  Settings
+  Settings,
+  Puzzle
 } from "lucide-react";
 import type { SectionLabel, SectionSlug } from "@/lib/sections";
 import {
@@ -66,6 +67,7 @@ const navGroups: Array<{
       { slug: "org-chart", label: "Organization", icon: GitBranch },
       { slug: "office-space", label: "Office", icon: Map },
       { slug: "costs", label: "Costs", icon: BarChart3 },
+      { slug: "plugins", label: "Plugins", icon: Puzzle },
       { slug: "settings", label: "Settings", icon: Settings }
     ]
   }

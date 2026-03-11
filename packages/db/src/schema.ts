@@ -243,6 +243,56 @@ export const auditEvents = pgTable("audit_events", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
 });
 
+export const plugins = pgTable("plugins", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  kind: text("kind").notNull(),
+  runtimeType: text("runtime_type").notNull(),
+  runtimeEntrypoint: text("runtime_entrypoint").notNull(),
+  hooksJson: text("hooks_json").notNull().default("[]"),
+  capabilitiesJson: text("capabilities_json").notNull().default("[]"),
+  manifestJson: text("manifest_json").notNull().default("{}"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
+});
+
+export const pluginConfigs = pgTable(
+  "plugin_configs",
+  {
+    companyId: text("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    pluginId: text("plugin_id")
+      .notNull()
+      .references(() => plugins.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    priority: integer("priority").notNull().default(100),
+    configJson: text("config_json").notNull().default("{}"),
+    grantedCapabilitiesJson: text("granted_capabilities_json").notNull().default("[]"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
+  },
+  (table) => [primaryKey({ columns: [table.companyId, table.pluginId] })]
+);
+
+export const pluginRuns = pgTable("plugin_runs", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  runId: text("run_id").references(() => heartbeatRuns.id, { onDelete: "cascade" }),
+  pluginId: text("plugin_id")
+    .notNull()
+    .references(() => plugins.id, { onDelete: "cascade" }),
+  hook: text("hook").notNull(),
+  status: text("status").notNull(),
+  durationMs: integer("duration_ms").notNull().default(0),
+  error: text("error"),
+  diagnosticsJson: text("diagnostics_json").notNull().default("{}"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
+});
+
 export const agentIssueLabels = pgTable(
   "agent_issue_labels",
   {
@@ -272,6 +322,9 @@ export const schema = {
   approvalInboxStates,
   costLedger,
   auditEvents,
+  plugins,
+  pluginConfigs,
+  pluginRuns,
   agentIssueLabels
 };
 

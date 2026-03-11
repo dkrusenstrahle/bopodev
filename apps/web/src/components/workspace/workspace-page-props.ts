@@ -8,6 +8,7 @@ import type {
   GovernanceInboxRow,
   HeartbeatRunRow,
   IssueRow,
+  PluginRow,
   ProjectRow
 } from "@/components/workspace/types";
 
@@ -24,4 +25,5 @@ export interface WorkspacePageProps {
   auditEvents: AuditRow[];
   costEntries: CostRow[];
   projects: ProjectRow[];
+  plugins?: PluginRow[];
 }

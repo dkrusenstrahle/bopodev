@@ -17,7 +17,7 @@ import { CreateIssueModal } from "@/components/modals/create-issue-modal";
 import { CreateProjectModal } from "@/components/modals/create-project-modal";
 import { RunDetailsModal } from "@/components/modals/run-details-modal";
 import { TextActionModal } from "@/components/modals/text-action-modal";
-import { ApiError, apiDelete, apiPost, apiPut } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { cn } from "@/lib/utils";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
@@ -267,6 +267,33 @@ interface CompanyRow {
   mission: string | null;
 }
 
+interface PluginRow {
+  id: string;
+  name: string;
+  version: string;
+  kind: string;
+  runtimeType: string;
+  runtimeEntrypoint: string;
+  hooks: string[];
+  capabilities: string[];
+  companyConfig: {
+    enabled: boolean;
+    priority: number;
+    config: Record<string, unknown>;
+    grantedCapabilities: string[];
+  } | null;
+}
+
+interface PluginRunRow {
+  id: string;
+  runId: string | null;
+  pluginId: string;
+  hook: string;
+  status: string;
+  createdAt: string;
+  diagnostics?: Record<string, unknown>;
+}
+
 const goalStatusOptions = [
   { value: "draft", label: "Draft" },
   { value: "active", label: "Active" },
@@ -398,7 +425,8 @@ export function WorkspaceClient({
   governanceInbox = [],
   auditEvents,
   costEntries,
-  projects
+  projects,
+  plugins = []
 }: {
   activeNav: SectionLabel;
   companyId: string | null;
@@ -413,6 +441,7 @@ export function WorkspaceClient({
   auditEvents: AuditRow[];
   costEntries: CostRow[];
   projects: ProjectRow[];
+  plugins?: PluginRow[];
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -444,6 +473,11 @@ export function WorkspaceClient({
   const [inboxStateFilter, setInboxStateFilter] = useState<"all" | "pending" | "resolved">("all");
   const [inboxSeenFilter, setInboxSeenFilter] = useState<"all" | "seen" | "unseen">("all");
   const [inboxDismissedFilter, setInboxDismissedFilter] = useState<"all" | "active" | "dismissed">("all");
+  const [pluginsQuery, setPluginsQuery] = useState("");
+  const [pluginsStatusFilter, setPluginsStatusFilter] = useState<"all" | "active" | "installed" | "not_installed">("all");
+  const [pluginsKindFilter, setPluginsKindFilter] = useState<string>("all");
+  const [selectedPluginPreviewId, setSelectedPluginPreviewId] = useState<string | null>(null);
+  const [pluginPreviewRuns, setPluginPreviewRuns] = useState<PluginRunRow[]>([]);
   const onboardingRuntimeFallback = useMemo(() => {
     const ceo = agents.find((entry) => entry.role === "CEO" || entry.name === "CEO");
     if (!ceo || !isRuntimeDefaultsProviderType(ceo.providerType)) {
@@ -463,6 +497,7 @@ export function WorkspaceClient({
   const isLogsNav = activeNav === "Logs";
   const isRunsNav = activeNav === "Runs";
   const isCostsNav = activeNav === "Costs";
+  const isPluginsNav = activeNav === "Plugins";
   const includeCostAggregations = isCostsNav || isDashboardNav;
 
   const isActionPending = useCallback(
@@ -561,6 +596,56 @@ export function WorkspaceClient({
     await runCrudAction(async () => {
       await apiPost(`/governance/inbox/${approvalId}/undismiss`, companyId!, {});
     }, "Failed to restore inbox item.", `inbox:${approvalId}:undismiss`);
+  }
+
+  async function installPlugin(pluginId: string) {
+    await runCrudAction(async () => {
+      await apiPost(`/plugins/${pluginId}/install`, companyId!, {});
+    }, "Failed to install plugin.", `plugin:${pluginId}:install`);
+  }
+
+  async function setPluginEnabled(plugin: PluginRow, enabled: boolean) {
+    await runCrudAction(async () => {
+      await apiPut(`/plugins/${plugin.id}`, companyId!, {
+        enabled,
+        priority: plugin.companyConfig?.priority ?? 100,
+        grantedCapabilities: plugin.companyConfig?.grantedCapabilities ?? [],
+        config: plugin.companyConfig?.config ?? {},
+        requestApproval: false
+      });
+    }, `Failed to ${enabled ? "activate" : "deactivate"} plugin.`, `plugin:${plugin.id}:${enabled ? "activate" : "deactivate"}`);
+  }
+
+  async function previewPluginRuns(pluginId: string) {
+    setActionError(null);
+    if (!companyId) {
+      setActionError("Create or select a company first.");
+      return;
+    }
+    if (isActionPending(`plugin:${pluginId}:preview`)) {
+      return;
+    }
+    setPendingActionKeys((prev) => ({ ...prev, [`plugin:${pluginId}:preview`]: true }));
+    try {
+      const response = (await apiGet(
+        `/plugins/runs?pluginId=${encodeURIComponent(pluginId)}&limit=25`,
+        companyId
+      )) as { ok: true; data: PluginRunRow[] };
+      setSelectedPluginPreviewId(pluginId);
+      setPluginPreviewRuns(response.data);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setActionError(error.message);
+      } else {
+        setActionError("Failed to load plugin preview runs.");
+      }
+    } finally {
+      setPendingActionKeys((prev) => {
+        const next = { ...prev };
+        delete next[`plugin:${pluginId}:preview`];
+        return next;
+      });
+    }
   }
 
   async function stopHeartbeatRunById(runId: string) {
@@ -1178,6 +1263,53 @@ export function WorkspaceClient({
       );
     });
   }, [agents, agentsProviderFilter, agentsQuery, agentsStatusFilter, isAgentsNav]);
+  const pluginKindOptions = useMemo(
+    () => Array.from(new Set(plugins.map((plugin) => plugin.kind))).sort((a, b) => a.localeCompare(b)),
+    [plugins]
+  );
+  const filteredPlugins = useMemo(() => {
+    if (!isPluginsNav) {
+      return [];
+    }
+    const normalizedQuery = pluginsQuery.trim().toLowerCase();
+    return plugins.filter((plugin) => {
+      const installed = Boolean(plugin.companyConfig);
+      const active = Boolean(plugin.companyConfig?.enabled);
+      if (pluginsStatusFilter === "active" && !active) {
+        return false;
+      }
+      if (pluginsStatusFilter === "installed" && (!installed || active)) {
+        return false;
+      }
+      if (pluginsStatusFilter === "not_installed" && installed) {
+        return false;
+      }
+      if (pluginsKindFilter !== "all" && plugin.kind !== pluginsKindFilter) {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+      return (
+        plugin.name.toLowerCase().includes(normalizedQuery) ||
+        plugin.id.toLowerCase().includes(normalizedQuery) ||
+        plugin.kind.toLowerCase().includes(normalizedQuery) ||
+        plugin.capabilities.some((capability) => capability.toLowerCase().includes(normalizedQuery)) ||
+        plugin.hooks.some((hook) => hook.toLowerCase().includes(normalizedQuery))
+      );
+    });
+  }, [isPluginsNav, plugins, pluginsKindFilter, pluginsQuery, pluginsStatusFilter]);
+  const pluginsSummary = useMemo(() => {
+    const total = filteredPlugins.length;
+    const installed = filteredPlugins.filter((plugin) => Boolean(plugin.companyConfig)).length;
+    const active = filteredPlugins.filter((plugin) => Boolean(plugin.companyConfig?.enabled)).length;
+    const kinds = new Set(filteredPlugins.map((plugin) => plugin.kind)).size;
+    const grantedCapabilities = filteredPlugins.reduce(
+      (sum, plugin) => sum + (plugin.companyConfig?.grantedCapabilities.length ?? 0),
+      0
+    );
+    return { total, installed, active, kinds, grantedCapabilities };
+  }, [filteredPlugins]);
   const dashboardIssueStatusData = useMemo(() => {
     if (!isDashboardNav) {
       return [];
@@ -1906,6 +2038,107 @@ export function WorkspaceClient({
       }
     ],
     [companyId, isActionPending]
+  );
+  const pluginColumns = useMemo<ColumnDef<PluginRow>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Plugin" />,
+        cell: ({ row }) => {
+          const plugin = row.original;
+          return (
+            <div className={styles.workspaceSectionCellStack}>
+              <div className={styles.workspaceSectionCellPrimary}>{plugin.name}</div>
+              <div className={styles.workspaceSectionCellMeta}>
+                {plugin.id} · {plugin.version} · {plugin.kind}
+              </div>
+            </div>
+          );
+        }
+      },
+      {
+        id: "status",
+        header: "Status",
+        cell: ({ row }) => {
+          const plugin = row.original;
+          if (!plugin.companyConfig) {
+            return <Badge variant="outline">Not installed</Badge>;
+          }
+          return plugin.companyConfig.enabled ? <Badge>Active</Badge> : <Badge variant="secondary">Installed</Badge>;
+        }
+      },
+      {
+        accessorKey: "capabilities",
+        header: "Capabilities",
+        cell: ({ row }) => {
+          const plugin = row.original;
+          return (
+            <div className={styles.workspaceSectionBadges}>
+              {plugin.capabilities.length > 0 ? (
+                plugin.capabilities.map((capability) => (
+                  <Badge key={`${plugin.id}-${capability}`} variant="outline">
+                    {capability}
+                  </Badge>
+                ))
+              ) : (
+                <span className={styles.workspaceSectionMutedText}>-</span>
+              )}
+            </div>
+          );
+        }
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => {
+          const plugin = row.original;
+          const installActionKey = `plugin:${plugin.id}:install`;
+          const activateActionKey = `plugin:${plugin.id}:activate`;
+          const deactivateActionKey = `plugin:${plugin.id}:deactivate`;
+          const previewActionKey = `plugin:${plugin.id}:preview`;
+          return (
+            <div className={styles.workspaceSectionActions}>
+              {!plugin.companyConfig ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isActionPending(installActionKey)}
+                  onClick={() => installPlugin(plugin.id)}
+                >
+                  Install
+                </Button>
+              ) : plugin.companyConfig.enabled ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={isActionPending(deactivateActionKey)}
+                  onClick={() => setPluginEnabled(plugin, false)}
+                >
+                  Deactivate
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={isActionPending(activateActionKey)}
+                  onClick={() => setPluginEnabled(plugin, true)}
+                >
+                  Activate
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isActionPending(previewActionKey)}
+                onClick={() => previewPluginRuns(plugin.id)}
+              >
+                Preview
+              </Button>
+            </div>
+          );
+        }
+      }
+    ],
+    [isActionPending]
   );
 
   function renderSectionActions(section: SectionLabel) {
@@ -2905,6 +3138,106 @@ export function WorkspaceClient({
             <AgentRuntimeDefaultsCard fallbackDefaults={onboardingRuntimeFallback} />
           </>
         );
+      case "Plugins": {
+        const selectedPlugin = selectedPluginPreviewId
+          ? plugins.find((plugin) => plugin.id === selectedPluginPreviewId) ?? null
+          : null;
+        return (
+          <>
+            <SectionHeading
+              title="Plugins"
+              description="Install plugins, activate or deactivate them, and preview recent plugin runs."
+            />
+            <div className="ui-stats">
+              <MetricCard label="Plugins in scope" value={pluginsSummary.total} />
+              <MetricCard label="Active" value={pluginsSummary.active} />
+              <MetricCard label="Installed" value={pluginsSummary.installed} />
+              <MetricCard label="Kinds / Granted caps" value={`${pluginsSummary.kinds} / ${pluginsSummary.grantedCapabilities}`} />
+            </div>
+            <DataTable
+              columns={pluginColumns}
+              data={filteredPlugins}
+              emptyMessage="No plugins match current filters."
+              toolbarActions={
+                <div className={styles.governanceFiltersCardContent}>
+                  <Input
+                    value={pluginsQuery}
+                    onChange={(event) => setPluginsQuery(event.target.value)}
+                    placeholder="Search plugins, hooks, capabilities..."
+                    className={styles.governanceFiltersInput}
+                  />
+                  <Select value={pluginsStatusFilter} onValueChange={(value) => setPluginsStatusFilter(value as typeof pluginsStatusFilter)}>
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="installed">Installed (inactive)</SelectItem>
+                      <SelectItem value="not_installed">Not installed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={pluginsKindFilter} onValueChange={setPluginsKindFilter}>
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Kind" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All kinds</SelectItem>
+                      {pluginKindOptions.map((kind) => (
+                        <SelectItem key={kind} value={kind}>
+                          {kind}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              }
+            />
+            {selectedPlugin ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Preview: {selectedPlugin.name}</CardTitle>
+                  <CardDescription>Recent plugin runs for {selectedPlugin.id}.</CardDescription>
+                </CardHeader>
+                <CardContent className={styles.workspaceSectionCardContent}>
+                  {pluginPreviewRuns.length === 0 ? (
+                    <div className={styles.workspaceSectionMutedText}>No plugin runs found for this plugin yet.</div>
+                  ) : (
+                    <div className={styles.workspaceSectionPreviewList}>
+                      {pluginPreviewRuns.map((row) => (
+                        <Card key={row.id}>
+                          <CardContent className={styles.workspaceSectionPreviewCardContent}>
+                            <div className={styles.workspaceSectionCellMeta}>
+                              {new Date(row.createdAt).toLocaleString()} · run {row.runId ?? "n/a"}
+                            </div>
+                            <div className={styles.workspaceSectionActions}>
+                              <span className={styles.workspaceSectionCellPrimary}>{row.hook}</span>
+                              <Badge
+                                variant={
+                                  row.status === "ok"
+                                    ? "default"
+                                    : row.status === "blocked"
+                                      ? "destructive"
+                                      : "secondary"
+                                }
+                              >
+                                {row.status}
+                              </Badge>
+                            </div>
+                            <pre className={styles.workspaceSectionPre}>
+                              {JSON.stringify(row.diagnostics ?? {}, null, 2)}
+                            </pre>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+          </>
+        );
+      }
       default:
         return (
           <>

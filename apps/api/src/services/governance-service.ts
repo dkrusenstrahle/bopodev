@@ -13,7 +13,8 @@ import {
   listAgents,
   listIssues,
   listProjects,
-  projects
+  projects,
+  updatePluginConfig
 } from "bopodev-db";
 import {
   normalizeRuntimeConfig,
@@ -31,7 +32,8 @@ const approvalGatedActions = new Set([
   "override_budget",
   "pause_agent",
   "terminate_agent",
-  "promote_memory_fact"
+  "promote_memory_fact",
+  "grant_plugin_capabilities"
 ]);
 
 const hireAgentPayloadSchema = AgentCreateRequestSchema.extend({
@@ -64,6 +66,13 @@ const promoteMemoryFactPayloadSchema = z.object({
   agentId: z.string().min(1),
   fact: z.string().min(1),
   sourceRunId: z.string().optional()
+});
+const grantPluginCapabilitiesPayloadSchema = z.object({
+  pluginId: z.string().min(1),
+  enabled: z.boolean().optional(),
+  priority: z.number().int().min(0).max(1000).optional(),
+  grantedCapabilities: z.array(z.string().min(1)).default([]),
+  config: z.record(z.string(), z.unknown()).default({})
 });
 const AGENT_STARTUP_PROJECT_NAME = "Agent Onboarding";
 const AGENT_STARTUP_TASK_MARKER = "[bopodev:onboarding:agent-startup:v1]";
@@ -307,6 +316,31 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
         sourceRunId: parsed.data.sourceRunId ?? null,
         fact: parsed.data.fact,
         targetFile
+      }
+    };
+  }
+  if (action === "grant_plugin_capabilities") {
+    const parsed = grantPluginCapabilitiesPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new GovernanceError("Approval payload for plugin capability grant is invalid.");
+    }
+    await updatePluginConfig(db, {
+      companyId,
+      pluginId: parsed.data.pluginId,
+      enabled: parsed.data.enabled,
+      priority: parsed.data.priority,
+      grantedCapabilitiesJson: JSON.stringify(parsed.data.grantedCapabilities),
+      configJson: JSON.stringify(parsed.data.config)
+    });
+    return {
+      applied: true,
+      entityType: "memory" as const,
+      entityId: parsed.data.pluginId,
+      entity: {
+        pluginId: parsed.data.pluginId,
+        enabled: parsed.data.enabled ?? null,
+        priority: parsed.data.priority ?? null,
+        grantedCapabilities: parsed.data.grantedCapabilities
       }
     };
   }

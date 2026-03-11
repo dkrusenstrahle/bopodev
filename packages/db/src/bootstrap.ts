@@ -300,6 +300,48 @@ export async function bootstrapDatabase(dbPath?: string) {
     );
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS plugins (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      version TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      runtime_type TEXT NOT NULL,
+      runtime_entrypoint TEXT NOT NULL,
+      hooks_json TEXT NOT NULL DEFAULT '[]',
+      capabilities_json TEXT NOT NULL DEFAULT '[]',
+      manifest_json TEXT NOT NULL DEFAULT '{}',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS plugin_configs (
+      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      plugin_id TEXT NOT NULL REFERENCES plugins(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      priority INTEGER NOT NULL DEFAULT 100,
+      config_json TEXT NOT NULL DEFAULT '{}',
+      granted_capabilities_json TEXT NOT NULL DEFAULT '[]',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (company_id, plugin_id)
+    );
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS plugin_runs (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      run_id TEXT REFERENCES heartbeat_runs(id) ON DELETE CASCADE,
+      plugin_id TEXT NOT NULL REFERENCES plugins(id) ON DELETE CASCADE,
+      hook TEXT NOT NULL,
+      status TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      diagnostics_json TEXT NOT NULL DEFAULT '{}',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS agent_issue_labels (
       company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
       issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
@@ -343,6 +385,14 @@ export async function bootstrapDatabase(dbPath?: string) {
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_approval_inbox_states_company_actor_updated
       ON approval_inbox_states (company_id, actor_id, updated_at DESC);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_plugin_configs_company_enabled_priority
+      ON plugin_configs (company_id, enabled, priority ASC, plugin_id ASC);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_plugin_runs_company_created
+      ON plugin_runs (company_id, created_at DESC);
   `);
 
   return { db, client };

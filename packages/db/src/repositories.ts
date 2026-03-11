@@ -15,6 +15,9 @@ import {
   issueAttachments,
   issueComments,
   issues,
+  pluginConfigs,
+  pluginRuns,
+  plugins,
   projects,
   touchUpdatedAtSql
 } from "./schema";
@@ -1074,6 +1077,157 @@ export async function appendActivity(
     payloadJson: JSON.stringify(input.payload)
   });
   return id;
+}
+
+export async function upsertPlugin(
+  db: BopoDb,
+  input: {
+    id: string;
+    name: string;
+    version: string;
+    kind: string;
+    runtimeType: string;
+    runtimeEntrypoint: string;
+    hooksJson?: string;
+    capabilitiesJson?: string;
+    manifestJson?: string;
+  }
+) {
+  await db
+    .insert(plugins)
+    .values({
+      id: input.id,
+      name: input.name,
+      version: input.version,
+      kind: input.kind,
+      runtimeType: input.runtimeType,
+      runtimeEntrypoint: input.runtimeEntrypoint,
+      hooksJson: input.hooksJson ?? "[]",
+      capabilitiesJson: input.capabilitiesJson ?? "[]",
+      manifestJson: input.manifestJson ?? "{}"
+    })
+    .onConflictDoUpdate({
+      target: plugins.id,
+      set: {
+        name: input.name,
+        version: input.version,
+        kind: input.kind,
+        runtimeType: input.runtimeType,
+        runtimeEntrypoint: input.runtimeEntrypoint,
+        hooksJson: input.hooksJson ?? "[]",
+        capabilitiesJson: input.capabilitiesJson ?? "[]",
+        manifestJson: input.manifestJson ?? "{}",
+        updatedAt: touchUpdatedAtSql
+      }
+    });
+  return input.id;
+}
+
+export async function listPlugins(db: BopoDb) {
+  return db.select().from(plugins).orderBy(asc(plugins.name));
+}
+
+export async function updatePluginConfig(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+    enabled?: boolean;
+    priority?: number;
+    configJson?: string;
+    grantedCapabilitiesJson?: string;
+  }
+) {
+  await db
+    .insert(pluginConfigs)
+    .values({
+      companyId: input.companyId,
+      pluginId: input.pluginId,
+      enabled: input.enabled ?? false,
+      priority: input.priority ?? 100,
+      configJson: input.configJson ?? "{}",
+      grantedCapabilitiesJson: input.grantedCapabilitiesJson ?? "[]"
+    })
+    .onConflictDoUpdate({
+      target: [pluginConfigs.companyId, pluginConfigs.pluginId],
+      set: compactUpdate({
+        enabled: input.enabled,
+        priority: input.priority,
+        configJson: input.configJson,
+        grantedCapabilitiesJson: input.grantedCapabilitiesJson,
+        updatedAt: touchUpdatedAtSql
+      })
+    });
+}
+
+export async function listCompanyPluginConfigs(db: BopoDb, companyId: string) {
+  return db
+    .select({
+      companyId: pluginConfigs.companyId,
+      pluginId: pluginConfigs.pluginId,
+      enabled: pluginConfigs.enabled,
+      priority: pluginConfigs.priority,
+      configJson: pluginConfigs.configJson,
+      grantedCapabilitiesJson: pluginConfigs.grantedCapabilitiesJson,
+      pluginName: plugins.name,
+      pluginVersion: plugins.version,
+      pluginKind: plugins.kind,
+      runtimeType: plugins.runtimeType,
+      runtimeEntrypoint: plugins.runtimeEntrypoint,
+      hooksJson: plugins.hooksJson,
+      capabilitiesJson: plugins.capabilitiesJson
+    })
+    .from(pluginConfigs)
+    .innerJoin(plugins, eq(pluginConfigs.pluginId, plugins.id))
+    .where(eq(pluginConfigs.companyId, companyId))
+    .orderBy(asc(pluginConfigs.priority), asc(pluginConfigs.pluginId));
+}
+
+export async function appendPluginRun(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    runId?: string | null;
+    pluginId: string;
+    hook: string;
+    status: string;
+    durationMs: number;
+    error?: string | null;
+    diagnosticsJson?: string;
+  }
+) {
+  const id = nanoid(14);
+  await db.insert(pluginRuns).values({
+    id,
+    companyId: input.companyId,
+    runId: input.runId ?? null,
+    pluginId: input.pluginId,
+    hook: input.hook,
+    status: input.status,
+    durationMs: Math.max(0, Math.floor(input.durationMs)),
+    error: input.error ?? null,
+    diagnosticsJson: input.diagnosticsJson ?? "{}"
+  });
+  return id;
+}
+
+export async function listPluginRuns(
+  db: BopoDb,
+  input: { companyId: string; pluginId?: string; runId?: string; limit?: number }
+) {
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), 1000);
+  return db
+    .select()
+    .from(pluginRuns)
+    .where(
+      and(
+        eq(pluginRuns.companyId, input.companyId),
+        input.pluginId ? eq(pluginRuns.pluginId, input.pluginId) : undefined,
+        input.runId ? eq(pluginRuns.runId, input.runId) : undefined
+      )
+    )
+    .orderBy(desc(pluginRuns.createdAt))
+    .limit(limit);
 }
 
 function compactUpdate<T extends Record<string, unknown>>(input: T) {

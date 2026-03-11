@@ -5,7 +5,8 @@ import {
   listAuditEvents,
   listCostEntries,
   listHeartbeatRunMessages,
-  listHeartbeatRuns
+  listHeartbeatRuns,
+  listPluginRuns
 } from "bopodev-db";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
@@ -209,6 +210,22 @@ export function createObservabilityRouter(ctx: AppContext) {
     } catch (error) {
       return sendError(res, String(error), 422);
     }
+  });
+
+  router.get("/plugins/runs", async (req, res) => {
+    const companyId = req.companyId!;
+    const pluginId = typeof req.query.pluginId === "string" && req.query.pluginId.trim() ? req.query.pluginId.trim() : undefined;
+    const runId = typeof req.query.runId === "string" && req.query.runId.trim() ? req.query.runId.trim() : undefined;
+    const rawLimit = Number(req.query.limit ?? 200);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 1000) : 200;
+    const rows = await listPluginRuns(ctx.db, { companyId, pluginId, runId, limit });
+    return sendOk(
+      res,
+      rows.map((row) => ({
+        ...row,
+        diagnostics: parsePayload(row.diagnosticsJson)
+      }))
+    );
   });
 
   return router;

@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { config as loadDotenv } from "dotenv";
-import { bootstrapDatabase } from "bopodev-db";
+import { bootstrapDatabase, listCompanies } from "bopodev-db";
 import { checkRuntimeCommandHealth } from "bopodev-agent-sdk";
 import type { RuntimeCommandHealth } from "bopodev-agent-sdk";
 import { createApp } from "./app";
@@ -11,6 +11,7 @@ import { loadGovernanceRealtimeSnapshot } from "./realtime/governance";
 import { loadOfficeSpaceRealtimeSnapshot } from "./realtime/office-space";
 import { loadHeartbeatRunsRealtimeSnapshot } from "./realtime/heartbeat-runs";
 import { attachRealtimeHub } from "./realtime/hub";
+import { ensureBuiltinPluginsRegistered } from "./services/plugin-runtime";
 import { createHeartbeatScheduler } from "./worker/scheduler";
 
 loadApiEnv();
@@ -19,6 +20,11 @@ async function main() {
   const dbPath = process.env.BOPO_DB_PATH;
   const port = Number(process.env.PORT ?? 4020);
   const { db } = await bootstrapDatabase(dbPath);
+  const existingCompanies = await listCompanies(db);
+  await ensureBuiltinPluginsRegistered(
+    db,
+    existingCompanies.map((company) => company.id)
+  );
   const codexCommand = process.env.BOPO_CODEX_COMMAND ?? "codex";
   const openCodeCommand = process.env.BOPO_OPENCODE_COMMAND ?? "opencode";
   const skipCodexPreflight = process.env.BOPO_SKIP_CODEX_PREFLIGHT === "1";

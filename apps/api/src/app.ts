@@ -13,6 +13,7 @@ import { createHeartbeatRouter } from "./routes/heartbeats";
 import { createIssuesRouter } from "./routes/issues";
 import { createObservabilityRouter } from "./routes/observability";
 import { createProjectsRouter } from "./routes/projects";
+import { createPluginsRouter } from "./routes/plugins";
 import { sendError } from "./http";
 import { attachRequestActor } from "./middleware/request-actor";
 
@@ -62,6 +63,7 @@ export function createApp(ctx: AppContext) {
   app.use("/governance", createGovernanceRouter(ctx));
   app.use("/heartbeats", createHeartbeatRouter(ctx));
   app.use("/observability", createObservabilityRouter(ctx));
+  app.use("/plugins", createPluginsRouter(ctx));
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof RepositoryValidationError) {

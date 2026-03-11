@@ -205,6 +205,67 @@ export const AgentRuntimeConfigSchema = z.object({
 });
 export type AgentRuntimeConfig = z.infer<typeof AgentRuntimeConfigSchema>;
 
+export const PluginKindSchema = z.enum(["lifecycle", "tool", "integration"]);
+export type PluginKind = z.infer<typeof PluginKindSchema>;
+export const PluginHookSchema = z.enum([
+  "beforeClaim",
+  "afterClaim",
+  "beforeAdapterExecute",
+  "afterAdapterExecute",
+  "beforePersist",
+  "afterPersist",
+  "onError"
+]);
+export type PluginHook = z.infer<typeof PluginHookSchema>;
+export const PluginCapabilitySchema = z.enum([
+  "emit_audit",
+  "read_memory",
+  "write_memory",
+  "queue_publish",
+  "network",
+  "tool_expose",
+  "issue_write"
+]);
+export type PluginCapability = z.infer<typeof PluginCapabilitySchema>;
+export const PluginRuntimeTypeSchema = z.enum(["builtin", "stdio", "http"]);
+export type PluginRuntimeType = z.infer<typeof PluginRuntimeTypeSchema>;
+export const PluginManifestSchema = z.object({
+  id: z.string().min(1),
+  version: z.string().min(1),
+  displayName: z.string().min(1),
+  description: z.string().optional(),
+  kind: PluginKindSchema,
+  hooks: z.array(PluginHookSchema).default([]),
+  capabilities: z.array(PluginCapabilitySchema).default([]),
+  runtime: z.object({
+    type: PluginRuntimeTypeSchema,
+    entrypoint: z.string().min(1),
+    timeoutMs: z.number().int().positive().max(120000).default(10000),
+    retryCount: z.number().int().nonnegative().max(2).default(0)
+  }),
+  configSchema: z.record(z.string(), z.unknown()).optional(),
+  minimumBopoVersion: z.string().optional()
+});
+export type PluginManifest = z.infer<typeof PluginManifestSchema>;
+export const PluginRunStatusSchema = z.enum(["ok", "skipped", "failed", "blocked"]);
+export type PluginRunStatus = z.infer<typeof PluginRunStatusSchema>;
+export const PluginInvocationResultSchema = z.object({
+  status: PluginRunStatusSchema,
+  summary: z.string().default(""),
+  diagnostics: z.record(z.string(), z.unknown()).default({}),
+  blockers: z
+    .array(
+      z.object({
+        code: z.string().min(1),
+        message: z.string().min(1),
+        retryable: z.boolean().default(false)
+      })
+    )
+    .default([]),
+  metadataPatch: z.record(z.string(), z.unknown()).optional()
+});
+export type PluginInvocationResult = z.infer<typeof PluginInvocationResultSchema>;
+
 export const AgentCreateRequestSchema = z.object({
   managerAgentId: z.string().optional(),
   role: z.string().min(1),

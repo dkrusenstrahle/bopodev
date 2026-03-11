@@ -32,6 +32,7 @@ import { createHeartbeatRunsRealtimeEvent } from "../realtime/heartbeat-runs";
 import { publishOfficeOccupantForAgent } from "../realtime/office-space";
 import { checkAgentBudget } from "./budget-service";
 import { appendDurableFact, loadAgentMemoryContext, persistHeartbeatMemory } from "./memory-file-service";
+import { runPluginHook } from "./plugin-runtime";
 
 type HeartbeatRunTrigger = "manual" | "scheduler";
 type HeartbeatRunMode = "default" | "resume" | "redo";
@@ -378,6 +379,7 @@ export async function runHeartbeatForAgent(
   let transcriptLiveUsefulCount = 0;
   let transcriptLiveHighSignalCount = 0;
   let transcriptPersistFailureReported = false;
+  let pluginFailureSummary: string[] = [];
 
   const enqueueTranscriptEvent = (event: {
     kind: string;
@@ -484,8 +486,31 @@ export async function runHeartbeatForAgent(
   };
 
   try {
+    await runPluginHook(db, {
+      hook: "beforeClaim",
+      context: {
+        companyId,
+        agentId,
+        runId,
+        requestId: options?.requestId,
+        providerType: agent.providerType
+      },
+      failClosed: false
+    });
     const workItems = await claimIssuesForAgent(db, companyId, agentId, runId);
     issueIds = workItems.map((item) => item.id);
+    await runPluginHook(db, {
+      hook: "afterClaim",
+      context: {
+        companyId,
+        agentId,
+        runId,
+        requestId: options?.requestId,
+        providerType: agent.providerType,
+        workItemCount: workItems.length
+      },
+      failClosed: false
+    });
     await publishOfficeOccupantForAgent(db, options?.realtimeHub, companyId, agentId);
     const adapter = resolveAdapter(agent.providerType as HeartbeatProviderType);
     const parsedState = parseAgentState(agent.stateBlob);
@@ -694,6 +719,27 @@ export async function runHeartbeatForAgent(
       abortController: activeRunAbort
     });
 
+    const beforeAdapterHook = await runPluginHook(db, {
+      hook: "beforeAdapterExecute",
+      context: {
+        companyId,
+        agentId,
+        runId,
+        requestId: options?.requestId,
+        providerType: agent.providerType,
+        workItemCount: workItems.length,
+        runtime: {
+          command: workspaceResolution.runtime.command,
+          cwd: workspaceResolution.runtime.cwd
+        }
+      },
+      failClosed: true
+    });
+    if (beforeAdapterHook.blocked) {
+      pluginFailureSummary = beforeAdapterHook.failures;
+      throw new Error(`Plugin policy blocked adapter execution: ${beforeAdapterHook.failures.join(" | ")}`);
+    }
+
     const execution = await executeAdapterWithWatchdog({
       execute: (abortSignal) =>
         adapter.execute({
@@ -708,6 +754,24 @@ export async function runHeartbeatForAgent(
       externalAbortSignal: activeRunAbort.signal
     });
     executionSummary = execution.summary;
+    const afterAdapterHook = await runPluginHook(db, {
+      hook: "afterAdapterExecute",
+      context: {
+        companyId,
+        agentId,
+        runId,
+        requestId: options?.requestId,
+        providerType: agent.providerType,
+        status: execution.status,
+        summary: execution.summary,
+        trace: execution.trace ?? null,
+        outcome: execution.outcome ?? null
+      },
+      failClosed: false
+    });
+    if (afterAdapterHook.failures.length > 0) {
+      pluginFailureSummary = [...pluginFailureSummary, ...afterAdapterHook.failures];
+    }
     emitCanonicalResultEvent(executionSummary, "completed");
     executionTrace = execution.trace ?? null;
     const parsedOutcome = ExecutionOutcomeSchema.safeParse(execution.outcome);
@@ -845,6 +909,23 @@ export async function runHeartbeatForAgent(
       });
     }
 
+    const beforePersistHook = await runPluginHook(db, {
+      hook: "beforePersist",
+      context: {
+        companyId,
+        agentId,
+        runId,
+        requestId: options?.requestId,
+        providerType: agent.providerType,
+        status: execution.status,
+        summary: execution.summary
+      },
+      failClosed: false
+    });
+    if (beforePersistHook.failures.length > 0) {
+      pluginFailureSummary = [...pluginFailureSummary, ...beforePersistHook.failures];
+    }
+
     await db
       .update(heartbeatRuns)
       .set({
@@ -920,6 +1001,25 @@ export async function runHeartbeatForAgent(
       );
     }
 
+    const afterPersistHook = await runPluginHook(db, {
+      hook: "afterPersist",
+      context: {
+        companyId,
+        agentId,
+        runId,
+        requestId: options?.requestId,
+        providerType: agent.providerType,
+        status: execution.status,
+        summary: execution.summary,
+        trace: executionTrace,
+        outcome: executionOutcome
+      },
+      failClosed: false
+    });
+    if (afterPersistHook.failures.length > 0) {
+      pluginFailureSummary = [...pluginFailureSummary, ...afterPersistHook.failures];
+    }
+
     await appendAuditEvent(db, {
       companyId,
       actorType: "system",
@@ -943,7 +1043,8 @@ export async function runHeartbeatForAgent(
         diagnostics: {
           stateParseError,
           requestId: options?.requestId,
-          trigger: runTrigger
+          trigger: runTrigger,
+          pluginFailures: pluginFailureSummary
         }
       }
     });
@@ -954,6 +1055,22 @@ export async function runHeartbeatForAgent(
         ? "Heartbeat cancelled by stop request."
         : `Heartbeat failed (${classified.type}): ${classified.message}`;
     emitCanonicalResultEvent(executionSummary, "failed");
+    const pluginErrorHook = await runPluginHook(db, {
+      hook: "onError",
+      context: {
+        companyId,
+        agentId,
+        runId,
+        requestId: options?.requestId,
+        providerType: agent.providerType,
+        error: String(error),
+        summary: executionSummary
+      },
+      failClosed: false
+    });
+    if (pluginErrorHook.failures.length > 0) {
+      pluginFailureSummary = [...pluginFailureSummary, ...pluginErrorHook.failures];
+    }
     if (!executionTrace && classified.type === "cancelled") {
       executionTrace = {
         command: runtimeLaunchSummary?.command ?? null,
@@ -1016,7 +1133,8 @@ export async function runHeartbeatForAgent(
         diagnostics: {
           stateParseError,
           requestId: options?.requestId,
-          trigger: runTrigger
+          trigger: runTrigger,
+          pluginFailures: pluginFailureSummary
         }
       }
     });

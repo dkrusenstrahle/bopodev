@@ -153,3 +153,30 @@ export interface CompanyRow {
   name: string;
   mission: string | null;
 }
+
+export interface PluginRow {
+  id: string;
+  name: string;
+  version: string;
+  kind: string;
+  runtimeType: string;
+  runtimeEntrypoint: string;
+  hooks: string[];
+  capabilities: string[];
+  companyConfig: {
+    enabled: boolean;
+    priority: number;
+    config: Record<string, unknown>;
+    grantedCapabilities: string[];
+  } | null;
+}
+
+export interface PluginRunRow {
+  id: string;
+  runId: string | null;
+  pluginId: string;
+  hook: string;
+  status: string;
+  createdAt: string;
+  diagnostics?: Record<string, unknown>;
+}

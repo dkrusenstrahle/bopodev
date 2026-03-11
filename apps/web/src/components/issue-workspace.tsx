@@ -65,10 +65,12 @@ function formatDateTime(value: string | Date) {
 
 function IssueStatusSelect({
   value,
-  onValueChange
+  onValueChange,
+  includeAllOption = false
 }: {
   value: IssueStatus | "all";
   onValueChange: (value: string) => void;
+  includeAllOption?: boolean;
 }) {
   return (
     <Select value={value} onValueChange={onValueChange}>
@@ -76,7 +78,7 @@ function IssueStatusSelect({
         <SelectValue placeholder="Select a status" />
       </SelectTrigger>
       <SelectContent>
-        {value === "all" ? <SelectItem value="all">All statuses</SelectItem> : null}
+        {includeAllOption ? <SelectItem value="all">All statuses</SelectItem> : null}
         {issueStatusOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}
@@ -363,82 +365,82 @@ export function IssueWorkspace({
             <MetricCard label="Unassigned issues" value={issueSummary.unassigned} />
           </div>
           {viewMode === "list" ? (
-            filteredIssues.length > 0 ? (
-              <DataTable
-                columns={issueColumns}
-                data={filteredIssues}
-                emptyMessage="No issues match the current view."
-                onRowClick={(issue) => openIssue(issue.id)}
-                toolbarActions={
-                  <div className={styles.issueFiltersCardContent}>
-                    <Input
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Search issue title, id, status, assignee, or project..."
-                      className={styles.issueFiltersInput}
-                    />
-                    <IssueStatusSelect value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | IssueStatus)} />
-                    <Select value={priorityFilter} onValueChange={(value) => setPriorityFilter(value as (typeof priorityOptions)[number])}>
-                      <SelectTrigger className={styles.issueCardSelectTrigger}>
-                        <SelectValue placeholder="Priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {priorityOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option === "all" ? "All priorities" : `${option.slice(0, 1).toUpperCase()}${option.slice(1)}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-                      <SelectTrigger className={styles.issueCardSelectTrigger}>
-                        <SelectValue placeholder="Assignee" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All assignees</SelectItem>
-                        {agents.map((agent) => (
-                          <SelectItem key={agent.id} value={agent.id}>
-                            {agent.name}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={projectFilter} onValueChange={setProjectFilter}>
-                      <SelectTrigger className={styles.issueCardSelectTrigger}>
-                        <SelectValue placeholder="Project" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All projects</SelectItem>
-                        {projects.map((project) => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={windowFilter}
-                      onValueChange={(value) => setWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
-                    >
-                      <SelectTrigger className={styles.issueCardSelectTrigger}>
-                        <SelectValue placeholder="Window" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="today">Today</SelectItem>
-                        <SelectItem value="7d">Last 7 days</SelectItem>
-                        <SelectItem value="30d">Last 30 days</SelectItem>
-                        <SelectItem value="90d">Last 90 days</SelectItem>
-                        <SelectItem value="all">All time</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                }
-                showViewOptions
-              />
-            ) : (
-              <EmptyState>No issues match the current view.</EmptyState>
-            )
+            <DataTable
+              columns={issueColumns}
+              data={filteredIssues}
+              emptyMessage="No issues match the current view."
+              onRowClick={(issue) => openIssue(issue.id)}
+              toolbarActions={
+                <div className={styles.issueFiltersCardContent}>
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search issue title, id, status, assignee, or project..."
+                    className={styles.issueFiltersInput}
+                  />
+                  <IssueStatusSelect
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value as "all" | IssueStatus)}
+                    includeAllOption
+                  />
+                  <Select value={priorityFilter} onValueChange={(value) => setPriorityFilter(value as (typeof priorityOptions)[number])}>
+                    <SelectTrigger className={styles.issueCardSelectTrigger}>
+                      <SelectValue placeholder="Priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priorityOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option === "all" ? "All priorities" : `${option.slice(0, 1).toUpperCase()}${option.slice(1)}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                    <SelectTrigger className={styles.issueCardSelectTrigger}>
+                      <SelectValue placeholder="Assignee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All assignees</SelectItem>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={projectFilter} onValueChange={setProjectFilter}>
+                    <SelectTrigger className={styles.issueCardSelectTrigger}>
+                      <SelectValue placeholder="Project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All projects</SelectItem>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={windowFilter}
+                    onValueChange={(value) => setWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
+                  >
+                    <SelectTrigger className={styles.issueCardSelectTrigger}>
+                      <SelectValue placeholder="Window" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="7d">Last 7 days</SelectItem>
+                      <SelectItem value="30d">Last 30 days</SelectItem>
+                      <SelectItem value="90d">Last 90 days</SelectItem>
+                      <SelectItem value="all">All time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              }
+              showViewOptions
+            />
           ) : (
             <div className={styles.issueCardContainer13}>
               <div className={styles.issueCardContainer15}>

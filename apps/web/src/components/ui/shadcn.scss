@@ -1214,7 +1214,7 @@
 }
 
 .run-transcript-filters {
-  @apply grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_180px_180px_auto] items-center mb-6;
+  @apply grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_180px_180px_auto] items-center mt-7 mb-7;
 }
 
 .run-transcript-filters-search {
@@ -1226,7 +1226,7 @@
 }
 
 .run-transcript-outer {
-  @apply rounded border bg-muted/10 h-[calc(100dvh-11.5rem)];
+  @apply rounded border bg-muted/10 h-[calc(100dvh-13rem)];
 }
 
 .run-transcript-col-header {
@@ -1234,7 +1234,7 @@
 }
 
 .run-transcript-scroll {
-  @apply w-full h-[calc(100dvh-14rem)] space-y-1 overflow-y-auto p-3 font-mono text-xs;
+  @apply w-full h-[calc(100dvh-16rem)] space-y-1 overflow-y-auto p-3 font-mono text-xs;
 }
 
 .run-transcript-row {

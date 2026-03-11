@@ -62,7 +62,7 @@ const navGroups: Array<{
   },
   {
     label: "Company",
-    items: [,
+    items: [
       { slug: "costs", label: "Costs", icon: BarChart3 },
       { slug: "org-chart", label: "Organization", icon: GitBranch },
       { slug: "office-space", label: "Office", icon: Map },

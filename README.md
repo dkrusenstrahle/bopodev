@@ -8,6 +8,16 @@ If an coding agent is an employee, Bopo is the operating system for the company 
 
 Manage goals, projects, issues, agents, approvals, runs, and costs from one place.
 
+## Supported CLIs
+
+| CLI | Icon |
+| --- | --- |
+| Claude Code | <img src="./assets/icon_claude.svg" alt="Claude Code icon" width="28" /> |
+| Codex | <img src="./assets/icon_codex.svg" alt="Codex icon" width="28" /> |
+| OpenCode | <img src="./assets/icon_opencode.png" alt="OpenCode icon" width="28" /> |
+| Bash | <img src="./assets/icon_bash.svg" alt="Bash icon" width="28" /> |
+
+
 ## Built For This Workflow
 
 1. Define business goals and break them into projects and issues.

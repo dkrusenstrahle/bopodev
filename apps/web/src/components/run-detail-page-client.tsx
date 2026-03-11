@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { subscribeToRealtime } from "@/lib/realtime";
+import { isSkippedRun } from "@/lib/workspace-logic";
 import type { HeartbeatRunDetailData, HeartbeatRunMessageRow } from "@/lib/workspace-data";
 import { SectionHeading } from "./workspace/shared";
 
@@ -157,6 +158,7 @@ export function RunDetailPageClient({
     ? { pathname: `/agents/${scopedAgentId}`, query: { companyId } }
     : { pathname: "/runs", query: { companyId } };
   const backLabel = scopedAgentId ? "Back to agent" : "Back to runs";
+  const visibleRecentRuns = useMemo(() => recentRuns.filter((entry) => !isSkippedRun(entry)), [recentRuns]);
 
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -175,7 +177,7 @@ export function RunDetailPageClient({
       secondaryPane={
         <div className="run-sidebar-pane">
           <div className="run-sidebar-list">
-            {recentRuns.map((entry) => {
+            {visibleRecentRuns.map((entry) => {
               const isActive = entry.id === run.id;
               return (
                 <Link

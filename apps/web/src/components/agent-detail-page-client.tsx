@@ -17,7 +17,7 @@ import { ApiError, apiDelete, apiPost } from "@/lib/api";
 import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { parseRuntimeFromAgentColumns } from "@/lib/agent-detail-logic";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
-import { isNoAssignedWorkRun } from "@/lib/workspace-logic";
+import { isSkippedRun } from "@/lib/workspace-logic";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import styles from "./agent-detail-page-client.module.scss";
 import { MetricCard, SectionHeading } from "./workspace/shared";
@@ -326,7 +326,7 @@ export function AgentDetailPageClient({
     () =>
       heartbeatRuns
         .filter((run) => run.agentId === agent.id)
-        .filter((run) => !isNoAssignedWorkRun(run))
+        .filter((run) => !isSkippedRun(run))
         .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()),
     [agent.id, heartbeatRuns]
   );

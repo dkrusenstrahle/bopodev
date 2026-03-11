@@ -91,6 +91,39 @@ interface AgentRow {
   stateBlob?: string;
 }
 
+type RuntimeDefaultsProviderType =
+  | "claude_code"
+  | "codex"
+  | "opencode"
+  | "openai_api"
+  | "anthropic_api"
+  | "http"
+  | "shell";
+
+function isRuntimeDefaultsProviderType(value: unknown): value is RuntimeDefaultsProviderType {
+  return (
+    value === "claude_code" ||
+    value === "codex" ||
+    value === "opencode" ||
+    value === "openai_api" ||
+    value === "anthropic_api" ||
+    value === "http" ||
+    value === "shell"
+  );
+}
+
+function parseRuntimeModelFromStateBlob(rawStateBlob: string | undefined) {
+  if (!rawStateBlob) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(rawStateBlob) as { runtime?: { model?: unknown } };
+    return typeof parsed.runtime?.model === "string" ? parsed.runtime.model : "";
+  } catch {
+    return "";
+  }
+}
+
 interface HeartbeatRunRow {
   id: string;
   agentId: string;
@@ -411,6 +444,16 @@ export function WorkspaceClient({
   const [inboxStateFilter, setInboxStateFilter] = useState<"all" | "pending" | "resolved">("all");
   const [inboxSeenFilter, setInboxSeenFilter] = useState<"all" | "seen" | "unseen">("all");
   const [inboxDismissedFilter, setInboxDismissedFilter] = useState<"all" | "active" | "dismissed">("all");
+  const onboardingRuntimeFallback = useMemo(() => {
+    const ceo = agents.find((entry) => entry.role === "CEO" || entry.name === "CEO");
+    if (!ceo || !isRuntimeDefaultsProviderType(ceo.providerType)) {
+      return undefined;
+    }
+    return {
+      providerType: ceo.providerType,
+      runtimeModel: ceo.runtimeModel ?? parseRuntimeModelFromStateBlob(ceo.stateBlob)
+    };
+  }, [agents]);
   const isDashboardNav = activeNav === "Dashboard";
   const isProjectsNav = activeNav === "Projects";
   const isGoalsNav = activeNav === "Goals";
@@ -740,10 +783,17 @@ export function WorkspaceClient({
     }
     return details;
   }, [auditEvents, isRunsNav]);
-  const runStatusOptions = useMemo(
-    () => (isRunsNav ? Array.from(new Set(heartbeatRuns.map((run) => run.status))).sort((a, b) => a.localeCompare(b)) : []),
-    [heartbeatRuns, isRunsNav]
-  );
+  const runStatusOptions = useMemo(() => {
+    if (!isRunsNav) {
+      return [];
+    }
+    const preferredOrder = ["started", "completed", "failed", "skipped"];
+    const observed = Array.from(new Set(heartbeatRuns.map((run) => run.status)));
+    const additional = observed
+      .filter((status) => !preferredOrder.includes(status))
+      .sort((a, b) => a.localeCompare(b));
+    return preferredOrder.concat(additional);
+  }, [heartbeatRuns, isRunsNav]);
   const runTypeOptions = useMemo(
     () => (isRunsNav ? Array.from(new Set(heartbeatRuns.map((run) => run.runType))).sort((a, b) => a.localeCompare(b)) : []),
     [heartbeatRuns, isRunsNav]
@@ -756,7 +806,10 @@ export function WorkspaceClient({
     const normalizedQuery = runsQuery.trim().toLowerCase();
     return heartbeatRuns
       .filter((run) => {
-        if (runsTypeFilter === "exclude_no_assigned_work" && isNoAssignedWorkRun(run)) {
+        if (
+          runsTypeFilter === "exclude_no_assigned_work" &&
+          (isNoAssignedWorkRun(run) || run.status === "skipped" || run.runType.endsWith("_skip"))
+        ) {
           return false;
         }
         if (runsTypeFilter !== "all" && runsTypeFilter !== "exclude_no_assigned_work" && run.runType !== runsTypeFilter) {
@@ -1367,7 +1420,7 @@ export function WorkspaceClient({
         }
       }
     ],
-    [companyId, isActionPending]
+    [companyId, isActionPending, onboardingRuntimeFallback, suggestedAgentRuntimeCwd]
   );
 
   const agentColumns = useMemo<ColumnDef<AgentRow>[]>(
@@ -1421,6 +1474,7 @@ export function WorkspaceClient({
               <CreateAgentModal
                 companyId={companyId!}
                 suggestedRuntimeCwd={suggestedAgentRuntimeCwd}
+                fallbackDefaults={onboardingRuntimeFallback}
                 agent={{
                   id: agent.id,
                   name: agent.name,
@@ -1764,21 +1818,22 @@ export function WorkspaceClient({
       {
         accessorKey: "providerType",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Provider" />,
-        cell: ({ row }) => (
-          <div className={styles.formatDurationContainer4}>
-            <div className={styles.formatDurationContainer1}>{row.original.providerType}</div>
-            <div className={styles.formatDurationContainer5}>${row.original.usdCost.toFixed(2)}</div>
-          </div>
-        )
+        cell: ({ row }) => <div className={styles.formatDurationContainer1}>{row.original.providerType}</div>
       },
       {
-        id: "usage",
-        header: "Usage",
-        cell: ({ row }) => (
-          <div className={styles.formatDurationContainer5}>
-            in:{row.original.tokenInput} · out:{row.original.tokenOutput}
-          </div>
-        )
+        accessorKey: "tokenInput",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Input tokens" />,
+        cell: ({ row }) => <div className={styles.formatDurationContainer5}>{row.original.tokenInput.toLocaleString()}</div>
+      },
+      {
+        accessorKey: "tokenOutput",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Output tokens" />,
+        cell: ({ row }) => <div className={styles.formatDurationContainer5}>{row.original.tokenOutput.toLocaleString()}</div>
+      },
+      {
+        accessorKey: "usdCost",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />,
+        cell: ({ row }) => <div className={styles.formatDurationContainer5}>${row.original.usdCost.toFixed(2)}</div>
       },
       {
         id: "scope",
@@ -1892,7 +1947,11 @@ export function WorkspaceClient({
       case "Organization":
         return (
           <div className={styles.renderSectionActionsContainer1}>
-            <CreateAgentModal companyId={scopedCompanyId} suggestedRuntimeCwd={suggestedAgentRuntimeCwd} />
+            <CreateAgentModal
+              companyId={scopedCompanyId}
+              suggestedRuntimeCwd={suggestedAgentRuntimeCwd}
+              fallbackDefaults={onboardingRuntimeFallback}
+            />
           </div>
         );
       case "Settings":
@@ -2178,7 +2237,13 @@ export function WorkspaceClient({
             <SectionHeading
               title="Agents"
               description="Your AI workforce."
-              actions={<CreateAgentModal companyId={companyId} suggestedRuntimeCwd={suggestedAgentRuntimeCwd} />}
+              actions={
+                <CreateAgentModal
+                  companyId={companyId}
+                  suggestedRuntimeCwd={suggestedAgentRuntimeCwd}
+                  fallbackDefaults={onboardingRuntimeFallback}
+                />
+              }
             />
             {agents.length === 0 ? (
               <EmptyState>Hire your first agent to populate the org chart and issue assignees.</EmptyState>
@@ -2837,7 +2902,7 @@ export function WorkspaceClient({
                 </div>
               </CardContent>
             </Card>
-            <AgentRuntimeDefaultsCard />
+            <AgentRuntimeDefaultsCard fallbackDefaults={onboardingRuntimeFallback} />
           </>
         );
       default:

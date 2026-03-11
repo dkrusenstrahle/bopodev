@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api";
 import { formatArgsInput, formatEnvInput, parseArgsInput, parseEnvInput } from "@/lib/agent-config-form";
-import { readAgentRuntimeDefaults } from "@/lib/agent-defaults";
+import { agentDefaultsStorageKey, readAgentRuntimeDefaults } from "@/lib/agent-defaults";
 import {
   getModelOptionsForProvider,
   heartbeatCronToIntervalSec,
@@ -91,6 +91,7 @@ export function CreateAgentModal({
   companyId,
   agent,
   suggestedRuntimeCwd,
+  fallbackDefaults,
   triggerLabel,
   triggerVariant = "default",
   triggerSize
@@ -117,6 +118,10 @@ export function CreateAgentModal({
     stateBlob?: string;
   };
   suggestedRuntimeCwd?: string | null;
+  fallbackDefaults?: {
+    providerType?: ProviderType | null;
+    runtimeModel?: string | null;
+  };
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "secondary" | "ghost" | "destructive";
   triggerSize?: "default" | "sm" | "lg" | "icon";
@@ -282,6 +287,19 @@ export function CreateAgentModal({
     }
   }
 
+  function isProviderType(value: unknown): value is ProviderType {
+    return (
+      value === "claude_code" ||
+      value === "codex" ||
+      value === "cursor" ||
+      value === "opencode" ||
+      value === "openai_api" ||
+      value === "anthropic_api" ||
+      value === "http" ||
+      value === "shell"
+    );
+  }
+
   useEffect(() => {
     if (!open) {
       return;
@@ -353,24 +371,33 @@ export function CreateAgentModal({
       return;
     }
     const defaults = readAgentRuntimeDefaults();
+    const hasStoredDefaults = window.localStorage.getItem(agentDefaultsStorageKey) !== null;
+    const effectiveDefaults =
+      !hasStoredDefaults && fallbackDefaults
+        ? {
+            ...defaults,
+            providerType: isProviderType(fallbackDefaults.providerType) ? fallbackDefaults.providerType : defaults.providerType,
+            runtimeModel: typeof fallbackDefaults.runtimeModel === "string" ? fallbackDefaults.runtimeModel : defaults.runtimeModel
+          }
+        : defaults;
     setName("");
     setRole("Engineer");
-    setProviderType(defaults.providerType);
-    setHeartbeatIntervalSec(defaults.heartbeatIntervalSec);
-    setBudget(defaults.monthlyBudgetUsd);
+    setProviderType(effectiveDefaults.providerType);
+    setHeartbeatIntervalSec(effectiveDefaults.heartbeatIntervalSec);
+    setBudget(effectiveDefaults.monthlyBudgetUsd);
     setCanHireAgents(false);
-    setRuntimeCommand(defaults.runtimeCommand);
-    setRuntimeArgs(defaults.runtimeArgs);
-    const initialRuntimeCwd = defaults.runtimeCwd || suggestedRuntimeCwd || "";
+    setRuntimeCommand(effectiveDefaults.runtimeCommand);
+    setRuntimeArgs(effectiveDefaults.runtimeArgs);
+    const initialRuntimeCwd = effectiveDefaults.runtimeCwd || suggestedRuntimeCwd || "";
     setRuntimeCwd(initialRuntimeCwd);
-    setRuntimeModel(defaults.runtimeModel);
-    setRuntimeThinkingEffort(defaults.runtimeThinkingEffort);
-    setBootstrapPrompt(defaults.bootstrapPrompt);
-    setRuntimeEnv(defaults.runtimeEnv);
-    setRuntimeTimeoutSec(defaults.runtimeTimeoutSec);
-    setInterruptGraceSec(defaults.interruptGraceSec);
-    setSandboxMode(defaults.sandboxMode);
-    setAllowWebSearch(defaults.allowWebSearch);
+    setRuntimeModel(effectiveDefaults.runtimeModel);
+    setRuntimeThinkingEffort(effectiveDefaults.runtimeThinkingEffort);
+    setBootstrapPrompt(effectiveDefaults.bootstrapPrompt);
+    setRuntimeEnv(effectiveDefaults.runtimeEnv);
+    setRuntimeTimeoutSec(effectiveDefaults.runtimeTimeoutSec);
+    setInterruptGraceSec(effectiveDefaults.interruptGraceSec);
+    setSandboxMode(effectiveDefaults.sandboxMode);
+    setAllowWebSearch(effectiveDefaults.allowWebSearch);
     setError(null);
     if (!initialRuntimeCwd) {
       void apiGet<{ runtimeCwd: string }>("/agents/runtime-default-cwd", companyId)
@@ -381,7 +408,7 @@ export function CreateAgentModal({
           // Silent fallback: keep field empty when suggestion lookup fails.
         });
     }
-  }, [open, isEditing, agent, suggestedRuntimeCwd, companyId]);
+  }, [open, isEditing, agent, suggestedRuntimeCwd, companyId, fallbackDefaults]);
 
   useEffect(() => {
     if (!open) {

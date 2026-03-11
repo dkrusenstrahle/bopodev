@@ -62,6 +62,10 @@ export function isNoAssignedWorkRun(run: RunFilterCandidate) {
   return run.runType === "no_assigned_work";
 }
 
+export function isSkippedRun(run: RunFilterCandidate) {
+  return run.status === "skipped" || run.runType === "no_assigned_work" || run.runType?.endsWith("_skip") === true;
+}
+
 export function selectedProjectNameFor(projectId: string, projects: NamedProject[]) {
   return projects.find((project) => project.id === projectId)?.name ?? "Unknown";
 }

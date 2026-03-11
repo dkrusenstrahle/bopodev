@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  agentDefaultsStorageKey,
   defaultAgentRuntimeDefaults,
   readAgentRuntimeDefaults,
   writeAgentRuntimeDefaults,
@@ -30,14 +31,47 @@ import {
 } from "@/components/ui/select";
 import { getSupportedModelOptionsForProvider } from "@/lib/agent-runtime-options";
 
-export function AgentRuntimeDefaultsCard() {
+export function AgentRuntimeDefaultsCard({
+  fallbackDefaults
+}: {
+  fallbackDefaults?: {
+    providerType?: AgentRuntimeDefaults["providerType"] | null;
+    runtimeModel?: string | null;
+  };
+}) {
   const [defaults, setDefaults] = useState<AgentRuntimeDefaults>(defaultAgentRuntimeDefaults);
   const [saved, setSaved] = useState(false);
   const modelOptions = getSupportedModelOptionsForProvider(defaults.providerType);
 
+  function buildFallbackDefaults(): AgentRuntimeDefaults {
+    if (!fallbackDefaults?.providerType) {
+      return defaultAgentRuntimeDefaults;
+    }
+    return {
+      ...defaultAgentRuntimeDefaults,
+      providerType: fallbackDefaults.providerType,
+      runtimeModel: fallbackDefaults.runtimeModel ?? ""
+    };
+  }
+
   useEffect(() => {
-    setDefaults(readAgentRuntimeDefaults());
-  }, []);
+    const stored = readAgentRuntimeDefaults();
+    const hasStoredDefaults = window.localStorage.getItem(agentDefaultsStorageKey) !== null;
+    if (!hasStoredDefaults && fallbackDefaults?.providerType) {
+      const next = {
+        ...stored,
+        providerType: fallbackDefaults.providerType,
+        runtimeModel: fallbackDefaults.runtimeModel ?? ""
+      };
+      const allowedValues = getSupportedModelOptionsForProvider(next.providerType).map((option) => option.value);
+      setDefaults({
+        ...next,
+        runtimeModel: next.runtimeModel && allowedValues.includes(next.runtimeModel) ? next.runtimeModel : ""
+      });
+      return;
+    }
+    setDefaults(stored);
+  }, [fallbackDefaults]);
 
   function update<K extends keyof AgentRuntimeDefaults>(key: K, value: AgentRuntimeDefaults[K]) {
     setDefaults((current) => ({ ...current, [key]: value }));
@@ -59,8 +93,9 @@ export function AgentRuntimeDefaultsCard() {
   }
 
   function reset() {
-    setDefaults(defaultAgentRuntimeDefaults);
-    writeAgentRuntimeDefaults(defaultAgentRuntimeDefaults);
+    const baseDefaults = buildFallbackDefaults();
+    setDefaults(baseDefaults);
+    writeAgentRuntimeDefaults(baseDefaults);
     setSaved(true);
   }
 

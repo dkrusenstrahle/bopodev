@@ -42,7 +42,7 @@ const navGroups: Array<{
   items: Array<{ slug: SectionSlug; label: SectionLabel; icon: React.ComponentType<{ className?: string }> }>;
 }> = [
   {
-    label: "Home",
+    label: "Work",
     items: [
       { slug: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { slug: "projects", label: "Projects", icon: BriefcaseBusiness },
@@ -63,9 +63,9 @@ const navGroups: Array<{
   {
     label: "Company",
     items: [
-      { slug: "costs", label: "Costs", icon: BarChart3 },
       { slug: "org-chart", label: "Organization", icon: GitBranch },
       { slug: "office-space", label: "Office", icon: Map },
+      { slug: "costs", label: "Costs", icon: BarChart3 },
       { slug: "settings", label: "Settings", icon: Settings }
     ]
   }

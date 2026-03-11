@@ -30,6 +30,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import styles from "./workspace-client.module.scss";
@@ -270,6 +271,7 @@ interface CompanyRow {
 interface PluginRow {
   id: string;
   name: string;
+  description?: string | null;
   version: string;
   kind: string;
   runtimeType: string;
@@ -282,16 +284,6 @@ interface PluginRow {
     config: Record<string, unknown>;
     grantedCapabilities: string[];
   } | null;
-}
-
-interface PluginRunRow {
-  id: string;
-  runId: string | null;
-  pluginId: string;
-  hook: string;
-  status: string;
-  createdAt: string;
-  diagnostics?: Record<string, unknown>;
 }
 
 const goalStatusOptions = [
@@ -477,7 +469,6 @@ export function WorkspaceClient({
   const [pluginsStatusFilter, setPluginsStatusFilter] = useState<"all" | "active" | "installed" | "not_installed">("all");
   const [pluginsKindFilter, setPluginsKindFilter] = useState<string>("all");
   const [selectedPluginPreviewId, setSelectedPluginPreviewId] = useState<string | null>(null);
-  const [pluginPreviewRuns, setPluginPreviewRuns] = useState<PluginRunRow[]>([]);
   const onboardingRuntimeFallback = useMemo(() => {
     const ceo = agents.find((entry) => entry.role === "CEO" || entry.name === "CEO");
     if (!ceo || !isRuntimeDefaultsProviderType(ceo.providerType)) {
@@ -614,38 +605,6 @@ export function WorkspaceClient({
         requestApproval: false
       });
     }, `Failed to ${enabled ? "activate" : "deactivate"} plugin.`, `plugin:${plugin.id}:${enabled ? "activate" : "deactivate"}`);
-  }
-
-  async function previewPluginRuns(pluginId: string) {
-    setActionError(null);
-    if (!companyId) {
-      setActionError("Create or select a company first.");
-      return;
-    }
-    if (isActionPending(`plugin:${pluginId}:preview`)) {
-      return;
-    }
-    setPendingActionKeys((prev) => ({ ...prev, [`plugin:${pluginId}:preview`]: true }));
-    try {
-      const response = (await apiGet(
-        `/plugins/runs?pluginId=${encodeURIComponent(pluginId)}&limit=25`,
-        companyId
-      )) as { ok: true; data: PluginRunRow[] };
-      setSelectedPluginPreviewId(pluginId);
-      setPluginPreviewRuns(response.data);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        setActionError(error.message);
-      } else {
-        setActionError("Failed to load plugin preview runs.");
-      }
-    } finally {
-      setPendingActionKeys((prev) => {
-        const next = { ...prev };
-        delete next[`plugin:${pluginId}:preview`];
-        return next;
-      });
-    }
   }
 
   async function stopHeartbeatRunById(runId: string) {
@@ -2089,15 +2048,14 @@ export function WorkspaceClient({
       },
       {
         id: "actions",
-        header: "Actions",
+        header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
         cell: ({ row }) => {
           const plugin = row.original;
           const installActionKey = `plugin:${plugin.id}:install`;
           const activateActionKey = `plugin:${plugin.id}:activate`;
           const deactivateActionKey = `plugin:${plugin.id}:deactivate`;
-          const previewActionKey = `plugin:${plugin.id}:preview`;
           return (
-            <div className={styles.workspaceSectionActions}>
+            <div className={styles.formatDurationContainer3}>
               {!plugin.companyConfig ? (
                 <Button
                   variant="outline"
@@ -2109,7 +2067,7 @@ export function WorkspaceClient({
                 </Button>
               ) : plugin.companyConfig.enabled ? (
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   disabled={isActionPending(deactivateActionKey)}
                   onClick={() => setPluginEnabled(plugin, false)}
@@ -2118,6 +2076,7 @@ export function WorkspaceClient({
                 </Button>
               ) : (
                 <Button
+                  variant="outline"
                   size="sm"
                   disabled={isActionPending(activateActionKey)}
                   onClick={() => setPluginEnabled(plugin, true)}
@@ -2128,10 +2087,9 @@ export function WorkspaceClient({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={isActionPending(previewActionKey)}
-                onClick={() => previewPluginRuns(plugin.id)}
+                onClick={() => setSelectedPluginPreviewId(plugin.id)}
               >
-                Preview
+                Details
               </Button>
             </div>
           );
@@ -3193,48 +3151,97 @@ export function WorkspaceClient({
                 </div>
               }
             />
-            {selectedPlugin ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Preview: {selectedPlugin.name}</CardTitle>
-                  <CardDescription>Recent plugin runs for {selectedPlugin.id}.</CardDescription>
-                </CardHeader>
-                <CardContent className={styles.workspaceSectionCardContent}>
-                  {pluginPreviewRuns.length === 0 ? (
-                    <div className={styles.workspaceSectionMutedText}>No plugin runs found for this plugin yet.</div>
-                  ) : (
-                    <div className={styles.workspaceSectionPreviewList}>
-                      {pluginPreviewRuns.map((row) => (
-                        <Card key={row.id}>
-                          <CardContent className={styles.workspaceSectionPreviewCardContent}>
-                            <div className={styles.workspaceSectionCellMeta}>
-                              {new Date(row.createdAt).toLocaleString()} · run {row.runId ?? "n/a"}
-                            </div>
-                            <div className={styles.workspaceSectionActions}>
-                              <span className={styles.workspaceSectionCellPrimary}>{row.hook}</span>
-                              <Badge
-                                variant={
-                                  row.status === "ok"
-                                    ? "default"
-                                    : row.status === "blocked"
-                                      ? "destructive"
-                                      : "secondary"
-                                }
-                              >
-                                {row.status}
-                              </Badge>
-                            </div>
-                            <pre className={styles.workspaceSectionPre}>
-                              {JSON.stringify(row.diagnostics ?? {}, null, 2)}
-                            </pre>
-                          </CardContent>
-                        </Card>
-                      ))}
+            <Dialog
+              open={Boolean(selectedPlugin)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setSelectedPluginPreviewId(null);
+                }
+              }}
+            >
+              <DialogContent size="xl">
+                <DialogHeader>
+                  <DialogTitle>{selectedPlugin?.name ?? "Plugin"}</DialogTitle>
+                  <DialogDescription>
+                    {selectedPlugin?.description?.trim() || "No plugin description provided."}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 text-sm">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border bg-muted/20 p-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Identifier</div>
+                      <div className="font-medium">{selectedPlugin?.id ?? "-"}</div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
+                    <div className="rounded-md border bg-muted/20 p-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Version</div>
+                      <div className="font-medium">{selectedPlugin?.version ?? "-"}</div>
+                    </div>
+                    <div className="rounded-md border bg-muted/20 p-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Kind</div>
+                      <div className="font-medium">{selectedPlugin?.kind ?? "-"}</div>
+                    </div>
+                    <div className="rounded-md border bg-muted/20 p-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Status</div>
+                      {selectedPlugin?.companyConfig ? (
+                        selectedPlugin.companyConfig.enabled ? (
+                          <Badge>Active</Badge>
+                        ) : (
+                          <Badge variant="secondary">Installed</Badge>
+                        )
+                      ) : (
+                        <Badge variant="outline">Not installed</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-muted/20 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Runtime</div>
+                    <div className="mt-1 font-medium">
+                      {selectedPlugin?.runtimeType ?? "-"} - {selectedPlugin?.runtimeEntrypoint ?? "-"}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-muted/20 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Hooks</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {selectedPlugin?.hooks?.length ? (
+                        selectedPlugin.hooks.map((hook) => (
+                          <Badge key={`hook-${hook}`} variant="outline">
+                            {hook}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">No hooks declared.</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-muted/20 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Capabilities</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {selectedPlugin?.capabilities?.length ? (
+                        selectedPlugin.capabilities.map((capability) => (
+                          <Badge key={`cap-${capability}`} variant="outline">
+                            {capability}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">No capabilities declared.</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-muted/20 p-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Granted Capabilities</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {selectedPlugin?.companyConfig?.grantedCapabilities?.length ? (
+                        selectedPlugin.companyConfig.grantedCapabilities.map((capability) => (
+                          <Badge key={`grant-${capability}`}>{capability}</Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">No company grants configured.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </>
         );
       }

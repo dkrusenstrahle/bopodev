@@ -141,7 +141,15 @@ const builtinExecutors: Record<string, BuiltinPluginExecutor> = {
 };
 
 export function pluginSystemEnabled() {
-  return process.env.BOPO_PLUGIN_SYSTEM_ENABLED === "1" || process.env.BOPO_PLUGIN_SYSTEM_ENABLED === "true";
+  const disabled = process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
+  if (disabled === "1" || disabled === "true") {
+    return false;
+  }
+  const legacyEnabled = process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
+  if (legacyEnabled === "0" || legacyEnabled === "false") {
+    return false;
+  }
+  return true;
 }
 
 export async function ensureBuiltinPluginsRegistered(db: BopoDb, companyIds: string[] = []) {

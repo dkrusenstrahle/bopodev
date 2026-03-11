@@ -13,6 +13,7 @@ Use this section to understand internals, APIs, and extension points.
 - [`domain-model.md`](./domain-model.md): canonical entities and lifecycle semantics.
 - [`api-reference.md`](./api-reference.md): route groups, headers, and behavior contracts.
 - [`configuration-reference.md`](./configuration-reference.md): environment variables and defaults.
+- [`plugin-system.md`](./plugin-system.md): plugin architecture, hooks, governance, and APIs.
 - [`contributing.md`](./contributing.md): workflow and quality standards.
 
 ## Related

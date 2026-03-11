@@ -47,17 +47,31 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  size = "md",
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "full"
   showCloseButton?: boolean
 }) {
+  const sizeClassName =
+    size === "sm"
+      ? "sm:max-w-sm"
+      : size === "lg"
+        ? "sm:max-w-2xl"
+        : size === "xl"
+          ? "sm:max-w-4xl"
+          : size === "2xl"
+            ? "sm:max-w-6xl"
+            : size === "full"
+              ? "sm:max-w-[calc(100vw-4rem)]"
+              : "sm:max-w-lg"
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        className={cn("ui-dialog-content", className)}
+        className={cn("ui-dialog-content", sizeClassName, className)}
         {...props}
       >
         {children}

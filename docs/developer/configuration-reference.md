@@ -54,6 +54,8 @@ Give contributors and operators one reference for key environment variables and 
 | `BOPO_HEARTBEAT_SWEEP_MS` | `60000` | Scheduler interval for heartbeat sweeps. |
 | `BOPO_HEARTBEAT_STALE_RUN_MS` | `600000` | Recovery threshold for stale `started` runs. |
 | `BOPO_HEARTBEAT_EXECUTION_TIMEOUT_MS` | computed by service | Execution timeout fallback when runtime config omits explicit timeout. |
+| `BOPO_PLUGIN_SYSTEM_DISABLED` | `0` (plugin system enabled) | Global emergency kill switch for plugin hook execution when `1`/`true`. |
+| `BOPO_PLUGIN_SYSTEM_ENABLED` | legacy compatibility | If explicitly set to `0`/`false`, plugin hooks are disabled. |
 
 ## Communication Preflight Controls
 

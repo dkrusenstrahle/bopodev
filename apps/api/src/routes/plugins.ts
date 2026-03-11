@@ -33,9 +33,11 @@ export function createPluginsRouter(ctx: AppContext) {
       res,
       catalog.map((plugin) => {
         const config = configByPluginId.get(plugin.id);
+        const manifest = safeParseJsonObject(plugin.manifestJson) as Record<string, unknown>;
         return {
           id: plugin.id,
           name: plugin.name,
+          description: typeof manifest.description === "string" ? manifest.description : null,
           version: plugin.version,
           kind: plugin.kind,
           runtimeType: plugin.runtimeType,

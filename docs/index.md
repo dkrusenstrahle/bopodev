@@ -28,6 +28,7 @@ This documentation set covers Bopo from two angles:
 - [`developer/domain-model.md`](./developer/domain-model.md)
 - [`developer/api-reference.md`](./developer/api-reference.md)
 - [`developer/configuration-reference.md`](./developer/configuration-reference.md)
+- [`developer/plugin-system.md`](./developer/plugin-system.md)
 - [`developer/contributing.md`](./developer/contributing.md)
 - Adapter docs:
   - [`adapters/overview.md`](./adapters/overview.md)

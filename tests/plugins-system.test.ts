@@ -15,11 +15,14 @@ describe("plugin system", { timeout: 30_000 }, () => {
   let tempDir: string;
   let companyId: string;
   let client: { close?: () => Promise<void> };
-  let originalFlag: string | undefined;
+  let originalEnabledFlag: string | undefined;
+  let originalDisabledFlag: string | undefined;
 
   beforeEach(async () => {
-    originalFlag = process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
-    process.env.BOPO_PLUGIN_SYSTEM_ENABLED = "true";
+    originalEnabledFlag = process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
+    originalDisabledFlag = process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
+    delete process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
+    delete process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
     tempDir = await mkdtemp(join(tmpdir(), "bopodev-plugin-test-"));
     const boot = await bootstrapDatabase(join(tempDir, "test.db"));
     db = boot.db;
@@ -31,10 +34,15 @@ describe("plugin system", { timeout: 30_000 }, () => {
   });
 
   afterEach(async () => {
-    if (originalFlag === undefined) {
+    if (originalEnabledFlag === undefined) {
       delete process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
     } else {
-      process.env.BOPO_PLUGIN_SYSTEM_ENABLED = originalFlag;
+      process.env.BOPO_PLUGIN_SYSTEM_ENABLED = originalEnabledFlag;
+    }
+    if (originalDisabledFlag === undefined) {
+      delete process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
+    } else {
+      process.env.BOPO_PLUGIN_SYSTEM_DISABLED = originalDisabledFlag;
     }
     await client.close?.();
     await rm(tempDir, { recursive: true, force: true });

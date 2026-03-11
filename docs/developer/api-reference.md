@@ -101,6 +101,13 @@ Adapter and runtime support:
 - `POST /governance/inbox/:approvalId/undismiss`
 - `POST /governance/resolve`
 
+## Plugins
+
+- `GET /plugins`
+- `POST /plugins/:pluginId/install`
+- `PUT /plugins/:pluginId`
+- `GET /plugins/runs`
+
 ## Heartbeats
 
 - `POST /heartbeats/run-agent`
@@ -116,6 +123,7 @@ Adapter and runtime support:
 - `GET /observability/heartbeats`
 - `GET /observability/heartbeats/:runId`
 - `GET /observability/heartbeats/:runId/messages`
+- `GET /observability/plugins/runs` (supports `pluginId`, `runId`, `limit`)
 - `GET /observability/memory` (supports `agentId` and `limit` query filters)
 - `GET /observability/memory/:agentId/file?path=...`
 

@@ -157,6 +157,7 @@ export interface CompanyRow {
 export interface PluginRow {
   id: string;
   name: string;
+  description?: string | null;
   version: string;
   kind: string;
   runtimeType: string;

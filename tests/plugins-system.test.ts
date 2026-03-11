@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
@@ -227,5 +228,215 @@ describe("plugin system", { timeout: 30_000, hookTimeout: 30_000 }, () => {
     expect(createdPlugin).toBeTruthy();
     expect(createdPlugin.companyConfig).toBeTruthy();
     expect(createdPlugin.companyConfig.enabled).toBe(false);
+  });
+
+  it("applies prompt plugin patch on beforeAdapterExecute", async () => {
+    const response = await request(app)
+      .post("/plugins/install-from-json")
+      .set("x-company-id", companyId)
+      .send({
+        manifestJson: JSON.stringify({
+          id: "prompt-context-plugin",
+          version: "0.1.0",
+          displayName: "Prompt Context Plugin",
+          description: "Appends prompt context before adapter execution.",
+          kind: "lifecycle",
+          hooks: ["beforeAdapterExecute"],
+          capabilities: ["emit_audit"],
+          runtime: {
+            type: "prompt",
+            entrypoint: "prompt:inline",
+            timeoutMs: 5000,
+            retryCount: 0,
+            promptTemplate: "Injected context for run {{runId}}"
+          }
+        }),
+        install: true
+      });
+    expect(response.status).toBe(200);
+
+    await request(app)
+      .put("/plugins/prompt-context-plugin")
+      .set("x-company-id", companyId)
+      .send({
+        enabled: true,
+        grantedCapabilities: [],
+        config: {},
+        requestApproval: false
+      });
+
+    const project = await createProject(db, {
+      companyId,
+      name: "Prompt plugin project",
+      workspaceLocalPath: tempDir
+    });
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Worker",
+      name: "Prompt plugin agent",
+      providerType: "shell",
+      heartbeatCron: "* * * * *",
+      monthlyBudgetUsd: "20.0000",
+      runtimeCommand: "echo",
+      runtimeArgsJson: '["{\\"summary\\":\\"prompt-plugin\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
+      runtimeCwd: tempDir
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Execute prompt plugin",
+      assigneeAgentId: agent.id
+    });
+    const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    const pluginRunsResponse = await request(app)
+      .get(`/plugins/runs?pluginId=prompt-context-plugin&runId=${encodeURIComponent(runId!)}`)
+      .set("x-company-id", companyId);
+    expect(pluginRunsResponse.status).toBe(200);
+    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "ok")).toBe(true);
+    expect(
+      pluginRunsResponse.body.data.some((row: { diagnostics: Record<string, unknown> }) =>
+        String((row.diagnostics ?? {}).promptAppendApplied ?? "").includes("Injected context")
+      )
+    ).toBe(true);
+  });
+
+  it("fails prompt plugin when webhook is requested without network capability", async () => {
+    await request(app)
+      .post("/plugins/install-from-json")
+      .set("x-company-id", companyId)
+      .send({
+        manifestJson: JSON.stringify({
+          id: "prompt-webhook-no-network",
+          version: "0.1.0",
+          displayName: "Prompt Webhook No Network",
+          description: "Webhook without capability should fail.",
+          kind: "lifecycle",
+          hooks: ["beforeAdapterExecute"],
+          capabilities: ["emit_audit"],
+          runtime: {
+            type: "prompt",
+            entrypoint: "prompt:inline",
+            timeoutMs: 5000,
+            retryCount: 0,
+            promptTemplate: "noop"
+          }
+        }),
+        install: true
+      });
+    await request(app)
+      .put("/plugins/prompt-webhook-no-network")
+      .set("x-company-id", companyId)
+      .send({
+        enabled: true,
+        grantedCapabilities: [],
+        config: {
+          webhookRequests: [{ url: "http://localhost:1/test", method: "POST", timeoutMs: 100 }]
+        },
+        requestApproval: false
+      });
+
+    const project = await createProject(db, {
+      companyId,
+      name: "Webhook capability project",
+      workspaceLocalPath: tempDir
+    });
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Worker",
+      name: "Webhook capability agent",
+      providerType: "shell",
+      heartbeatCron: "* * * * *",
+      monthlyBudgetUsd: "20.0000",
+      runtimeCommand: "echo",
+      runtimeArgsJson: '["{\\"summary\\":\\"webhook-capability\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
+      runtimeCwd: tempDir
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Execute webhook capability plugin",
+      assigneeAgentId: agent.id
+    });
+    await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    const pluginRunsResponse = await request(app)
+      .get("/plugins/runs?pluginId=prompt-webhook-no-network")
+      .set("x-company-id", companyId);
+    expect(pluginRunsResponse.status).toBe(200);
+    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
+  });
+
+  it("fails prompt plugin on webhook timeout/error when network capability is granted", async () => {
+    await request(app)
+      .post("/plugins/install-from-json")
+      .set("x-company-id", companyId)
+      .send({
+        manifestJson: JSON.stringify({
+          id: "prompt-webhook-timeout",
+          version: "0.1.0",
+          displayName: "Prompt Webhook Timeout",
+          description: "Webhook timeout should fail plugin run.",
+          kind: "lifecycle",
+          hooks: ["beforeAdapterExecute"],
+          capabilities: ["network"],
+          runtime: {
+            type: "prompt",
+            entrypoint: "prompt:inline",
+            timeoutMs: 5000,
+            retryCount: 0,
+            promptTemplate: "noop"
+          }
+        }),
+        install: true
+      });
+    const server = createServer((_req, _res) => {
+      // Intentionally never responding to force timeout.
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    await request(app)
+      .put("/plugins/prompt-webhook-timeout")
+      .set("x-company-id", companyId)
+      .send({
+        enabled: true,
+        grantedCapabilities: ["network"],
+        config: {
+          webhookRequests: [{ url: `http://127.0.0.1:${port}/timeout`, method: "POST", timeoutMs: 50 }]
+        },
+        requestApproval: false
+      });
+    const project = await createProject(db, {
+      companyId,
+      name: "Webhook timeout project",
+      workspaceLocalPath: tempDir
+    });
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Worker",
+      name: "Webhook timeout agent",
+      providerType: "shell",
+      heartbeatCron: "* * * * *",
+      monthlyBudgetUsd: "20.0000",
+      runtimeCommand: "echo",
+      runtimeArgsJson: '["{\\"summary\\":\\"webhook-timeout\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
+      runtimeCwd: tempDir
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Execute webhook timeout plugin",
+      assigneeAgentId: agent.id
+    });
+    await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    const pluginRunsResponse = await request(app)
+      .get("/plugins/runs?pluginId=prompt-webhook-timeout")
+      .set("x-company-id", companyId);
+    expect(pluginRunsResponse.status).toBe(200);
+    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   });
 });

@@ -227,8 +227,21 @@ export const PluginCapabilitySchema = z.enum([
   "issue_write"
 ]);
 export type PluginCapability = z.infer<typeof PluginCapabilitySchema>;
-export const PluginRuntimeTypeSchema = z.enum(["builtin", "stdio", "http"]);
+export const PluginRuntimeTypeSchema = z.enum(["builtin", "stdio", "http", "prompt"]);
 export type PluginRuntimeType = z.infer<typeof PluginRuntimeTypeSchema>;
+export const PluginWebhookRequestSchema = z.object({
+  url: z.string().url(),
+  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("POST"),
+  headers: z.record(z.string(), z.string()).default({}),
+  body: z.record(z.string(), z.unknown()).optional(),
+  timeoutMs: z.number().int().positive().max(15000).default(5000)
+});
+export type PluginWebhookRequest = z.infer<typeof PluginWebhookRequestSchema>;
+export const PluginTraceEventSchema = z.object({
+  eventType: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()).default({})
+});
+export type PluginTraceEvent = z.infer<typeof PluginTraceEventSchema>;
 export const PluginManifestSchema = z.object({
   id: z.string().min(1),
   version: z.string().min(1),
@@ -241,12 +254,20 @@ export const PluginManifestSchema = z.object({
     type: PluginRuntimeTypeSchema,
     entrypoint: z.string().min(1),
     timeoutMs: z.number().int().positive().max(120000).default(10000),
-    retryCount: z.number().int().nonnegative().max(2).default(0)
+    retryCount: z.number().int().nonnegative().max(2).default(0),
+    promptTemplate: z.string().optional()
   }),
   configSchema: z.record(z.string(), z.unknown()).optional(),
   minimumBopoVersion: z.string().optional()
 });
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;
+export const PluginPromptExecutionResultSchema = z.object({
+  promptAppend: z.string().max(20000).optional(),
+  traceEvents: z.array(PluginTraceEventSchema).max(20).default([]),
+  webhookRequests: z.array(PluginWebhookRequestSchema).max(5).default([]),
+  diagnostics: z.record(z.string(), z.unknown()).default({})
+});
+export type PluginPromptExecutionResult = z.infer<typeof PluginPromptExecutionResultSchema>;
 export const PluginRunStatusSchema = z.enum(["ok", "skipped", "failed", "blocked"]);
 export type PluginRunStatus = z.infer<typeof PluginRunStatusSchema>;
 export const PluginInvocationResultSchema = z.object({

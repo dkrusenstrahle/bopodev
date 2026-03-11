@@ -57,6 +57,7 @@ Give contributors and operators one reference for key environment variables and 
 | `BOPO_PLUGIN_SYSTEM_DISABLED` | `0` (plugin system enabled) | Global emergency kill switch for plugin hook execution when `1`/`true`. |
 | `BOPO_PLUGIN_SYSTEM_ENABLED` | legacy compatibility | If explicitly set to `0`/`false`, plugin hooks are disabled. |
 | `BOPO_PLUGIN_MANIFESTS_DIR` | `<repo>/plugins` | Filesystem directory scanned at API startup for `*/plugin.json` manifests. |
+| `BOPO_PLUGIN_WEBHOOK_ALLOWLIST` | unset (allow all) | Optional comma-separated webhook host allowlist for prompt plugin webhook execution. |
 
 ## Communication Preflight Controls
 

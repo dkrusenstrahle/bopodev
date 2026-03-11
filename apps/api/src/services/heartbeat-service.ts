@@ -576,7 +576,7 @@ export async function runHeartbeatForAgent(
       agentId
     });
 
-    const context = await buildHeartbeatContext(db, companyId, {
+    let context = await buildHeartbeatContext(db, companyId, {
       agentId,
       agentName: agent.name,
       agentRole: agent.role,
@@ -738,6 +738,19 @@ export async function runHeartbeatForAgent(
     if (beforeAdapterHook.blocked) {
       pluginFailureSummary = beforeAdapterHook.failures;
       throw new Error(`Plugin policy blocked adapter execution: ${beforeAdapterHook.failures.join(" | ")}`);
+    }
+    if (beforeAdapterHook.promptAppend && beforeAdapterHook.promptAppend.trim().length > 0) {
+      const existingPrompt = context.runtime?.bootstrapPrompt ?? "";
+      const nextPrompt = existingPrompt.trim().length > 0
+        ? `${existingPrompt}\n\n${beforeAdapterHook.promptAppend}`
+        : beforeAdapterHook.promptAppend;
+      context = {
+        ...context,
+        runtime: {
+          ...(context.runtime ?? {}),
+          bootstrapPrompt: nextPrompt
+        }
+      };
     }
 
     const execution = await executeAdapterWithWatchdog({

@@ -158,6 +158,7 @@ export interface PluginRow {
   id: string;
   name: string;
   description?: string | null;
+  promptTemplate?: string | null;
   version: string;
   kind: string;
   runtimeType: string;

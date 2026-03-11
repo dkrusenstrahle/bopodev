@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { PluginManifestSchema, type PluginManifest } from "bopodev-contracts";
 
@@ -45,10 +45,21 @@ export function resolvePluginManifestsDir() {
 
 export async function writePluginManifestToFilesystem(manifest: PluginManifest) {
   const pluginRoot = resolvePluginManifestsDir();
-  const safeDirName = manifest.id.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const safeDirName = sanitizePluginDirectoryName(manifest.id);
   const pluginDir = resolve(pluginRoot, safeDirName);
   const manifestPath = resolve(pluginDir, "plugin.json");
   await mkdir(pluginDir, { recursive: true });
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
   return manifestPath;
+}
+
+export async function deletePluginManifestFromFilesystem(pluginId: string) {
+  const pluginRoot = resolvePluginManifestsDir();
+  const safeDirName = sanitizePluginDirectoryName(pluginId);
+  const pluginDir = resolve(pluginRoot, safeDirName);
+  await rm(pluginDir, { recursive: true, force: true });
+}
+
+function sanitizePluginDirectoryName(pluginId: string) {
+  return pluginId.replace(/[^a-zA-Z0-9._-]/g, "-");
 }

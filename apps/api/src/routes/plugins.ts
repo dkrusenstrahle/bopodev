@@ -3,6 +3,8 @@ import { z } from "zod";
 import { PluginManifestSchema } from "bopodev-contracts";
 import {
   createApprovalRequest,
+  deletePluginById,
+  deletePluginConfig,
   listCompanyPluginConfigs,
   listCompanies,
   listPluginRuns,
@@ -12,7 +14,7 @@ import {
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
-import { writePluginManifestToFilesystem } from "../services/plugin-manifest-loader";
+import { deletePluginManifestFromFilesystem, writePluginManifestToFilesystem } from "../services/plugin-manifest-loader";
 import { registerPluginManifest } from "../services/plugin-runtime";
 
 const pluginConfigSchema = z.object({
@@ -45,6 +47,12 @@ export function createPluginsRouter(ctx: AppContext) {
           id: plugin.id,
           name: plugin.name,
           description: typeof manifest.description === "string" ? manifest.description : null,
+          promptTemplate:
+            typeof manifest.runtime === "object" &&
+            manifest.runtime !== null &&
+            typeof (manifest.runtime as Record<string, unknown>).promptTemplate === "string"
+              ? ((manifest.runtime as Record<string, unknown>).promptTemplate as string)
+              : null,
           version: plugin.version,
           kind: plugin.kind,
           runtimeType: plugin.runtimeType,
@@ -163,6 +171,43 @@ export function createPluginsRouter(ctx: AppContext) {
       grantedCapabilitiesJson: "[]"
     });
     return sendOk(res, { ok: true, pluginId, installed: true, enabled: false });
+  });
+
+  router.delete("/:pluginId/install", async (req, res) => {
+    const pluginId = req.params.pluginId;
+    const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
+    const plugin = catalog.find((item) => item.id === pluginId);
+    if (!plugin) {
+      return sendError(res, `Plugin '${pluginId}' was not found.`, 404);
+    }
+    const companyExists = companies.some((company) => company.id === req.companyId);
+    if (!companyExists) {
+      return sendError(res, `Company '${req.companyId}' does not exist.`, 404);
+    }
+    await deletePluginConfig(ctx.db, {
+      companyId: req.companyId!,
+      pluginId
+    });
+    return sendOk(res, { ok: true, pluginId, installed: false });
+  });
+
+  router.delete("/:pluginId", async (req, res) => {
+    const pluginId = req.params.pluginId;
+    const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
+    const plugin = catalog.find((item) => item.id === pluginId);
+    if (!plugin) {
+      return sendError(res, `Plugin '${pluginId}' was not found.`, 404);
+    }
+    if (plugin.runtimeEntrypoint.startsWith("builtin:")) {
+      return sendError(res, `Plugin '${pluginId}' is built-in and cannot be deleted.`, 400);
+    }
+    const companyExists = companies.some((company) => company.id === req.companyId);
+    if (!companyExists) {
+      return sendError(res, `Company '${req.companyId}' does not exist.`, 404);
+    }
+    await deletePluginManifestFromFilesystem(pluginId);
+    await deletePluginById(ctx.db, pluginId);
+    return sendOk(res, { ok: true, pluginId, deleted: true });
   });
 
   router.get("/runs", async (req, res) => {

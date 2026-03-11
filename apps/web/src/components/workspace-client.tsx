@@ -30,7 +30,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
@@ -52,6 +53,15 @@ const AgentRuntimeDefaultsCard = dynamic(
 const OrgChart = dynamic(() => import("@/components/org-chart").then((module) => module.OrgChart), {
   loading: () => <div>Loading org chart...</div>
 });
+const pluginBuilderHooks = [
+  "beforeClaim",
+  "afterClaim",
+  "beforeAdapterExecute",
+  "afterAdapterExecute",
+  "beforePersist",
+  "afterPersist",
+  "onError"
+] as const;
 
 interface IssueRow {
   id: string;
@@ -273,6 +283,7 @@ interface PluginRow {
   id: string;
   name: string;
   description?: string | null;
+  promptTemplate?: string | null;
   version: string;
   kind: string;
   runtimeType: string;
@@ -470,8 +481,13 @@ export function WorkspaceClient({
   const [pluginsStatusFilter, setPluginsStatusFilter] = useState<"all" | "active" | "installed" | "not_installed">("all");
   const [pluginsKindFilter, setPluginsKindFilter] = useState<string>("all");
   const [installPluginDialogOpen, setInstallPluginDialogOpen] = useState(false);
-  const [pluginManifestDraft, setPluginManifestDraft] = useState("");
-  const [selectedPluginPreviewId, setSelectedPluginPreviewId] = useState<string | null>(null);
+  const [pluginBuilderMode, setPluginBuilderMode] = useState<"create" | "edit">("create");
+  const [pluginBuilderId, setPluginBuilderId] = useState("");
+  const [pluginBuilderName, setPluginBuilderName] = useState("");
+  const [pluginBuilderDescription, setPluginBuilderDescription] = useState("");
+  const [pluginBuilderHook, setPluginBuilderHook] = useState<(typeof pluginBuilderHooks)[number]>("beforeAdapterExecute");
+  const [pluginBuilderCapabilities, setPluginBuilderCapabilities] = useState("emit_audit");
+  const [pluginBuilderPromptTemplate, setPluginBuilderPromptTemplate] = useState("");
   const onboardingRuntimeFallback = useMemo(() => {
     const ceo = agents.find((entry) => entry.role === "CEO" || entry.name === "CEO");
     if (!ceo || !isRuntimeDefaultsProviderType(ceo.providerType)) {
@@ -598,6 +614,12 @@ export function WorkspaceClient({
     }, "Failed to install plugin.", `plugin:${pluginId}:install`);
   }
 
+  async function deletePlugin(pluginId: string) {
+    await runCrudAction(async () => {
+      await apiDelete(`/plugins/${pluginId}`, companyId!);
+    }, "Failed to delete plugin.", `plugin:${pluginId}:delete`);
+  }
+
   async function setPluginEnabled(plugin: PluginRow, enabled: boolean) {
     await runCrudAction(async () => {
       await apiPut(`/plugins/${plugin.id}`, companyId!, {
@@ -608,6 +630,33 @@ export function WorkspaceClient({
         requestApproval: false
       });
     }, `Failed to ${enabled ? "activate" : "deactivate"} plugin.`, `plugin:${plugin.id}:${enabled ? "activate" : "deactivate"}`);
+  }
+
+  function openCreatePluginDialog() {
+    setPluginBuilderMode("create");
+    setPluginBuilderId("");
+    setPluginBuilderName("");
+    setPluginBuilderDescription("");
+    setPluginBuilderHook("beforeAdapterExecute");
+    setPluginBuilderCapabilities("emit_audit");
+    setPluginBuilderPromptTemplate("");
+    setInstallPluginDialogOpen(true);
+  }
+
+  function openEditPluginDialog(plugin: PluginRow) {
+    const primaryHook = plugin.hooks[0];
+    setPluginBuilderMode("edit");
+    setPluginBuilderId(plugin.id);
+    setPluginBuilderName(plugin.name);
+    setPluginBuilderDescription(plugin.description ?? "");
+    setPluginBuilderHook(
+      pluginBuilderHooks.includes(primaryHook as (typeof pluginBuilderHooks)[number])
+        ? (primaryHook as (typeof pluginBuilderHooks)[number])
+        : "beforeAdapterExecute"
+    );
+    setPluginBuilderCapabilities(plugin.capabilities.join(","));
+    setPluginBuilderPromptTemplate(plugin.promptTemplate ?? "");
+    setInstallPluginDialogOpen(true);
   }
 
   async function stopHeartbeatRunById(runId: string) {
@@ -1272,6 +1321,51 @@ export function WorkspaceClient({
     );
     return { total, installed, active, kinds, grantedCapabilities };
   }, [filteredPlugins]);
+  const pluginBuilderManifestJson = useMemo(() => {
+    const capabilities = pluginBuilderCapabilities
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    return JSON.stringify(
+      {
+        id: pluginBuilderId.trim(),
+        version: "0.1.0",
+        displayName: pluginBuilderName.trim(),
+        description: pluginBuilderDescription.trim(),
+        kind: "lifecycle",
+        hooks: [pluginBuilderHook],
+        capabilities,
+        runtime: {
+          type: "prompt",
+          entrypoint: "prompt:inline",
+          timeoutMs: 5000,
+          retryCount: 0,
+          promptTemplate: pluginBuilderPromptTemplate.trim()
+        }
+      },
+      null,
+      2
+    );
+  }, [
+    pluginBuilderCapabilities,
+    pluginBuilderDescription,
+    pluginBuilderHook,
+    pluginBuilderId,
+    pluginBuilderName,
+    pluginBuilderPromptTemplate
+  ]);
+  const pluginBuilderValidationError = useMemo(() => {
+    if (!pluginBuilderId.trim()) {
+      return "Plugin id is required.";
+    }
+    if (!pluginBuilderName.trim()) {
+      return "Plugin title is required.";
+    }
+    if (!pluginBuilderPromptTemplate.trim()) {
+      return "Prompt template is required.";
+    }
+    return null;
+  }, [pluginBuilderId, pluginBuilderName, pluginBuilderPromptTemplate]);
   const dashboardIssueStatusData = useMemo(() => {
     if (!isDashboardNav) {
       return [];
@@ -1683,7 +1777,7 @@ export function WorkspaceClient({
           )
       }
     ],
-    [isActionPending]
+    [isActionPending, openEditPluginDialog]
   );
 
   const inboxColumns = useMemo<ColumnDef<GovernanceInboxRow>[]>(
@@ -2061,6 +2155,7 @@ export function WorkspaceClient({
         header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
         cell: ({ row }) => {
           const plugin = row.original;
+          const canDeletePlugin = !plugin.runtimeEntrypoint.startsWith("builtin:");
           const installActionKey = `plugin:${plugin.id}:install`;
           const activateActionKey = `plugin:${plugin.id}:activate`;
           const deactivateActionKey = `plugin:${plugin.id}:deactivate`;
@@ -2097,16 +2192,28 @@ export function WorkspaceClient({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setSelectedPluginPreviewId(plugin.id)}
+                onClick={() => openEditPluginDialog(plugin)}
               >
-                Details
+                Edit
               </Button>
+              {canDeletePlugin ? (
+                <ConfirmActionModal
+                  triggerLabel="Delete"
+                  triggerVariant="outline"
+                  triggerSize="sm"
+                  title="Delete plugin?"
+                  description={`Delete "${plugin.name}" from catalog and remove its plugin folder/file from disk.`}
+                  confirmLabel="Delete"
+                  onConfirm={() => deletePlugin(plugin.id)}
+                  triggerDisabled={isActionPending(`plugin:${plugin.id}:delete`)}
+                />
+              ) : null}
             </div>
           );
         }
       }
     ],
-    [isActionPending]
+    [deletePlugin, isActionPending]
   );
 
   function renderSectionActions(section: SectionLabel) {
@@ -3107,23 +3214,18 @@ export function WorkspaceClient({
           </>
         );
       case "Plugins": {
-        const selectedPlugin = selectedPluginPreviewId
-          ? plugins.find((plugin) => plugin.id === selectedPluginPreviewId) ?? null
-          : null;
         return (
           <>
             <SectionHeading
               title="Plugins"
-              description="Install plugins, activate or deactivate them, and preview recent plugin runs."
+              description="Install plugins, activate or deactivate them, and manage installed plugin entries."
               actions={
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setInstallPluginDialogOpen(true);
-                  }}
+                  onClick={openCreatePluginDialog}
                 >
-                  Install Plugin
+                  Install
                 </Button>
               }
             />
@@ -3176,153 +3278,110 @@ export function WorkspaceClient({
               open={installPluginDialogOpen}
               onOpenChange={setInstallPluginDialogOpen}
             >
-              <DialogContent>
+              <DialogContent size="2xl">
                 <DialogHeader>
-                  <DialogTitle>Install Plugin</DialogTitle>
+                  <DialogTitle>{pluginBuilderMode === "edit" ? "Edit plugin" : "Install plugin"}</DialogTitle>
                   <DialogDescription>
-                    Paste plugin manifest JSON to save it as a file and install it for this company.
+                    {pluginBuilderMode === "edit"
+                      ? "Update plugin metadata and runtime prompt."
+                      : "Create a prompt plugin."}
                   </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Plugin JSON</div>
-                  <Textarea
-                    value={pluginManifestDraft}
-                    onChange={(event) => setPluginManifestDraft(event.target.value)}
-                    className="min-h-[220px] font-mono text-xs"
-                    placeholder={`{
-  "id": "my-plugin",
-  "version": "0.1.0",
-  "displayName": "My Plugin",
-  "description": "Describe what this plugin does.",
-  "kind": "lifecycle",
-  "hooks": ["afterPersist"],
-  "capabilities": ["emit_audit"],
-  "runtime": {
-    "type": "builtin",
-    "entrypoint": "builtin:my-plugin",
-    "timeoutMs": 5000,
-    "retryCount": 0
-  }
-}`}
-                  />
-                  <div className="text-xs text-muted-foreground">
-                    The API validates with Zod, writes `plugin.json` to your manifests directory, and installs it for this company.
-                  </div>
-                </div>
-                <div className={styles.formatDurationContainer3}>
-                  <Button variant="outline" onClick={() => setInstallPluginDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    disabled={!pluginManifestDraft.trim() || isActionPending("plugin:install-from-json")}
-                    onClick={() =>
-                      runCrudAction(
-                        async () => {
-                          await apiPost("/plugins/install-from-json", companyId!, {
-                            manifestJson: pluginManifestDraft,
-                            install: true
-                          });
-                          setInstallPluginDialogOpen(false);
-                        },
-                        "Failed to save plugin manifest JSON.",
-                        "plugin:install-from-json"
-                      )
-                    }
-                  >
-                    Save
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-            <Dialog
-              open={Boolean(selectedPlugin)}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setSelectedPluginPreviewId(null);
-                }
-              }}
-            >
-              <DialogContent size="xl">
-                <DialogHeader>
-                  <DialogTitle>{selectedPlugin?.name ?? "Plugin"}</DialogTitle>
-                  <DialogDescription>
-                    {selectedPlugin?.description?.trim() || "No plugin description provided."}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1 text-sm">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-md border bg-muted/20 p-3">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Identifier</div>
-                      <div className="font-medium">{selectedPlugin?.id ?? "-"}</div>
-                    </div>
-                    <div className="rounded-md border bg-muted/20 p-3">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Version</div>
-                      <div className="font-medium">{selectedPlugin?.version ?? "-"}</div>
-                    </div>
-                    <div className="rounded-md border bg-muted/20 p-3">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Kind</div>
-                      <div className="font-medium">{selectedPlugin?.kind ?? "-"}</div>
-                    </div>
-                    <div className="rounded-md border bg-muted/20 p-3">
-                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Status</div>
-                      {selectedPlugin?.companyConfig ? (
-                        selectedPlugin.companyConfig.enabled ? (
-                          <Badge>Active</Badge>
-                        ) : (
-                          <Badge variant="secondary">Installed</Badge>
-                        )
-                      ) : (
-                        <Badge variant="outline">Not installed</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-md border bg-muted/20 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Runtime</div>
-                    <div className="mt-1 font-medium">
-                      {selectedPlugin?.runtimeType ?? "-"} - {selectedPlugin?.runtimeEntrypoint ?? "-"}
-                    </div>
-                  </div>
-                  <div className="rounded-md border bg-muted/20 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Hooks</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedPlugin?.hooks?.length ? (
-                        selectedPlugin.hooks.map((hook) => (
-                          <Badge key={`hook-${hook}`} variant="outline">
-                            {hook}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground">No hooks declared.</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-md border bg-muted/20 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Capabilities</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedPlugin?.capabilities?.length ? (
-                        selectedPlugin.capabilities.map((capability) => (
-                          <Badge key={`cap-${capability}`} variant="outline">
-                            {capability}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground">No capabilities declared.</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-md border bg-muted/20 p-3">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Granted Capabilities</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedPlugin?.companyConfig?.grantedCapabilities?.length ? (
-                        selectedPlugin.companyConfig.grantedCapabilities.map((capability) => (
-                          <Badge key={`grant-${capability}`}>{capability}</Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground">No company grants configured.</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <form
+                  className="space-y-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void runCrudAction(
+                      async () => {
+                        await apiPost("/plugins/install-from-json", companyId!, {
+                          manifestJson: pluginBuilderManifestJson,
+                          install: pluginBuilderMode === "create"
+                        });
+                        setInstallPluginDialogOpen(false);
+                      },
+                      "Failed to save plugin manifest JSON.",
+                      "plugin:install-from-json"
+                    );
+                  }}
+                >
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="plugin-builder-id">Plugin ID</FieldLabel>
+                      <Input
+                        id="plugin-builder-id"
+                        value={pluginBuilderId}
+                        onChange={(event) => setPluginBuilderId(event.target.value)}
+                        placeholder="plugin-id"
+                      />
+                      <FieldDescription>Stable identifier used for file path and plugin registration.</FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="plugin-builder-title">Title</FieldLabel>
+                      <Input
+                        id="plugin-builder-title"
+                        value={pluginBuilderName}
+                        onChange={(event) => setPluginBuilderName(event.target.value)}
+                        placeholder="Plugin title"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="plugin-builder-description">Description</FieldLabel>
+                      <Textarea
+                        id="plugin-builder-description"
+                        value={pluginBuilderDescription}
+                        onChange={(event) => setPluginBuilderDescription(event.target.value)}
+                        className="min-h-[96px]"
+                        placeholder="What this plugin does"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>Run hook</FieldLabel>
+                      <Select value={pluginBuilderHook} onValueChange={(value) => setPluginBuilderHook(value as (typeof pluginBuilderHooks)[number])}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Hook" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pluginBuilderHooks.map((hook) => (
+                            <SelectItem key={hook} value={hook}>
+                              {hook}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="plugin-builder-capabilities">Capabilities</FieldLabel>
+                      <Input
+                        id="plugin-builder-capabilities"
+                        value={pluginBuilderCapabilities}
+                        onChange={(event) => setPluginBuilderCapabilities(event.target.value)}
+                        placeholder="emit_audit,network"
+                      />
+                      <FieldDescription>Comma-separated capabilities the plugin declares.</FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="plugin-builder-template">Prompt template</FieldLabel>
+                      <Textarea
+                        id="plugin-builder-template"
+                        value={pluginBuilderPromptTemplate}
+                        onChange={(event) => setPluginBuilderPromptTemplate(event.target.value)}
+                        className="min-h-[140px] font-mono text-xs"
+                        placeholder="Example: Inject relevant knowledge for this run. Company={{companyId}} Agent={{agentId}}"
+                      />
+                      <FieldDescription>
+                        Supports placeholders like {"{{companyId}}"}, {"{{agentId}}"}, {"{{runId}}"}, and {"{{pluginConfig}}"}.
+                      </FieldDescription>
+                    </Field>
+                  </FieldGroup>
+                  <DialogFooter showCloseButton>
+                    <Button
+                      type="submit"
+                      disabled={Boolean(pluginBuilderValidationError) || isActionPending("plugin:install-from-json")}
+                    >
+                      {pluginBuilderMode === "edit" ? "Save changes" : "Save"}
+                    </Button>
+                  </DialogFooter>
+                </form>
               </DialogContent>
             </Dialog>
           </>

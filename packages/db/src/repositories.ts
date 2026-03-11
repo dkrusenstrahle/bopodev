@@ -1160,6 +1160,22 @@ export async function updatePluginConfig(
     });
 }
 
+export async function deletePluginConfig(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+  }
+) {
+  await db
+    .delete(pluginConfigs)
+    .where(and(eq(pluginConfigs.companyId, input.companyId), eq(pluginConfigs.pluginId, input.pluginId)));
+}
+
+export async function deletePluginById(db: BopoDb, pluginId: string) {
+  await db.delete(plugins).where(eq(plugins.id, pluginId));
+}
+
 export async function listCompanyPluginConfigs(db: BopoDb, companyId: string) {
   return db
     .select({
@@ -1175,7 +1191,8 @@ export async function listCompanyPluginConfigs(db: BopoDb, companyId: string) {
       runtimeType: plugins.runtimeType,
       runtimeEntrypoint: plugins.runtimeEntrypoint,
       hooksJson: plugins.hooksJson,
-      capabilitiesJson: plugins.capabilitiesJson
+      capabilitiesJson: plugins.capabilitiesJson,
+      manifestJson: plugins.manifestJson
     })
     .from(pluginConfigs)
     .innerJoin(plugins, eq(pluginConfigs.pluginId, plugins.id))

@@ -37,7 +37,7 @@ Shared schemas live in `packages/contracts/src/index.ts`.
   - classification: `kind` (`lifecycle` | `tool` | `integration`)
   - routing: `hooks` (heartbeat hook list)
   - security: `capabilities`
-  - runtime: `runtime.type` (`builtin` | `stdio` | `http`), `entrypoint`, `timeoutMs`, `retryCount`
+  - runtime: `runtime.type` (`builtin` | `stdio` | `http` | `prompt`), `entrypoint`, `timeoutMs`, `retryCount`
 - `PluginInvocationResultSchema`
   - `status`: `ok` | `skipped` | `failed` | `blocked`
   - `summary`
@@ -70,7 +70,7 @@ When enabled:
 
 1. Company plugin configs are loaded and filtered by hook + enabled state.
 2. High-risk capabilities are checked against granted capabilities.
-3. Plugin executes (built-in executors in MVP).
+3. Plugin executes (built-in executors and prompt-runtime plugins).
 4. Result is validated against `PluginInvocationResultSchema`.
 5. A plugin run row is written (`ok`, `skipped`, `failed`, or `blocked`).
 6. Failures are aggregated into audit events (`plugin.hook.failures`).
@@ -136,6 +136,38 @@ Notes:
 - Manifests are validated with `PluginManifestSchema`.
 - Invalid files are skipped (startup continues, warning logged).
 - File-based manifest registration does not bypass company install/enable/governance controls.
+
+## Prompt Runtime Plugins (V1)
+
+Prompt plugins are defined with `runtime.type: "prompt"` and optional `runtime.promptTemplate`.
+
+- Hook execution can append prompt context before adapter execution.
+- Plugin config can include:
+  - `webhookRequests`: host-executed webhook calls (requires network/queue capabilities + grants)
+  - `traceEvents`: custom audit events (requires `emit_audit`)
+- Prompt template variables supported:
+  - `{{pluginId}}`, `{{companyId}}`, `{{agentId}}`, `{{runId}}`, `{{hook}}`, `{{summary}}`, `{{providerType}}`, `{{pluginConfig}}`
+
+Example prompt plugin manifest:
+
+```json
+{
+  "id": "knowledge-context-plugin",
+  "version": "0.1.0",
+  "displayName": "Knowledge Context Plugin",
+  "description": "Inject external knowledge summary before adapter execution.",
+  "kind": "lifecycle",
+  "hooks": ["beforeAdapterExecute"],
+  "capabilities": ["emit_audit", "network"],
+  "runtime": {
+    "type": "prompt",
+    "entrypoint": "prompt:inline",
+    "timeoutMs": 5000,
+    "retryCount": 0,
+    "promptTemplate": "Knowledge context for this run: company={{companyId}} agent={{agentId}}"
+  }
+}
+```
 
 ## Data Model
 

@@ -1190,10 +1190,7 @@
 }
 
 .run-detail-pane {
-  @apply space-y-4;
-  .ui-card {
-    @apply h-[calc(100dvh-8rem)];
-  }
+  @apply space-y-4 h-[calc(100dvh-2rem)];
 }
 
 .run-detail-header {
@@ -1229,7 +1226,7 @@
 }
 
 .run-transcript-outer {
-  @apply rounded border bg-muted/10 h-[calc(100dvh-15rem)];
+  @apply rounded border bg-muted/10 h-[calc(100dvh-11.5rem)];
 }
 
 .run-transcript-col-header {
@@ -1237,7 +1234,7 @@
 }
 
 .run-transcript-scroll {
-  @apply w-full h-[calc(100dvh-17.5rem)] space-y-1 overflow-y-auto p-3 font-mono text-xs;
+  @apply w-full h-[calc(100dvh-14rem)] space-y-1 overflow-y-auto p-3 font-mono text-xs;
 }
 
 .run-transcript-row {

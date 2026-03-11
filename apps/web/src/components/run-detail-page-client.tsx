@@ -225,82 +225,78 @@ export function RunDetailPageClient({
               </AlertDescription>
             </Alert>
           ) : null}
-          <Card>
-            <CardContent className="run-transcript-card-content">
-              <div className="run-transcript-filters">
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search text, payload, action, or label..."
-                  className="run-transcript-filters-search"
-                />
-                <Select value={kindFilter} onValueChange={(value) => setKindFilter(value as typeof kindFilter)}>
-                  <SelectTrigger className="run-transcript-filters-select">
-                    <SelectValue placeholder="Kind" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All kinds</SelectItem>
-                    <SelectItem value="assistant">assistant</SelectItem>
-                    <SelectItem value="tool_call">tool_call</SelectItem>
-                    <SelectItem value="tool_result">tool_result</SelectItem>
-                    <SelectItem value="result">result</SelectItem>
-                    <SelectItem value="thinking">thinking</SelectItem>
-                    <SelectItem value="system">system</SelectItem>
-                    <SelectItem value="stderr">stderr</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={signalFilter} onValueChange={(value) => setSignalFilter(value as typeof signalFilter)}>
-                  <SelectTrigger className="run-transcript-filters-select">
-                    <SelectValue placeholder="Signal" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All signal levels</SelectItem>
-                    <SelectItem value="high">high</SelectItem>
-                    <SelectItem value="medium">medium</SelectItem>
-                    <SelectItem value="low">low</SelectItem>
-                    <SelectItem value="noise">noise</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sourceFilter} onValueChange={(value) => setSourceFilter(value as typeof sourceFilter)}>
-                  <SelectTrigger className="run-transcript-filters-select">
-                    <SelectValue placeholder="Source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All sources</SelectItem>
-                    {availableSources.map((source) => (
-                      <SelectItem key={source} value={source}>
-                        {source}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <div className="run-transcript-filters">
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search text, payload, action, or label..."
+              className="run-transcript-filters-search"
+            />
+            <Select value={kindFilter} onValueChange={(value) => setKindFilter(value as typeof kindFilter)}>
+              <SelectTrigger className="run-transcript-filters-select">
+                <SelectValue placeholder="Kind" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All kinds</SelectItem>
+                <SelectItem value="assistant">assistant</SelectItem>
+                <SelectItem value="tool_call">tool_call</SelectItem>
+                <SelectItem value="tool_result">tool_result</SelectItem>
+                <SelectItem value="result">result</SelectItem>
+                <SelectItem value="thinking">thinking</SelectItem>
+                <SelectItem value="system">system</SelectItem>
+                <SelectItem value="stderr">stderr</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={signalFilter} onValueChange={(value) => setSignalFilter(value as typeof signalFilter)}>
+              <SelectTrigger className="run-transcript-filters-select">
+                <SelectValue placeholder="Signal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All signal levels</SelectItem>
+                <SelectItem value="high">high</SelectItem>
+                <SelectItem value="medium">medium</SelectItem>
+                <SelectItem value="low">low</SelectItem>
+                <SelectItem value="noise">noise</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sourceFilter} onValueChange={(value) => setSourceFilter(value as typeof sourceFilter)}>
+              <SelectTrigger className="run-transcript-filters-select">
+                <SelectValue placeholder="Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                {availableSources.map((source) => (
+                  <SelectItem key={source} value={source}>
+                    {source}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {transcriptRows.length === 0 ? (
+            <p className="run-transcript-empty">No transcript messages yet.</p>
+          ) : filteredTranscriptRows.length === 0 ? (
+            <p className="run-transcript-empty">No transcript messages match the current filters.</p>
+          ) : (
+            <div className="run-transcript-outer">
+              <div className="run-transcript-col-header">
+                <span>Timestamp</span>
+                <span>Action</span>
+                <span>Result</span>
               </div>
-              {transcriptRows.length === 0 ? (
-                <p className="run-transcript-empty">No transcript messages yet.</p>
-              ) : filteredTranscriptRows.length === 0 ? (
-                <p className="run-transcript-empty">No transcript messages match the current filters.</p>
-              ) : (
-                <div className="run-transcript-outer">
-                  <div className="run-transcript-col-header">
-                    <span>Timestamp</span>
-                    <span>Action</span>
-                    <span>Result</span>
+              <div className="run-transcript-scroll" ref={transcriptScrollRef}>
+                {filteredTranscriptRows.map((row) => (
+                  <div key={row.id} className="run-transcript-row">
+                    <span className="run-transcript-time">{row.time}</span>
+                    <span className={row.kindClass}>{row.kindLabel}</span>
+                    <div className={row.isToolBlock ? "run-transcript-body-tool" : "run-transcript-body"}>
+                      {row.body}
+                    </div>
                   </div>
-                  <div className="run-transcript-scroll" ref={transcriptScrollRef}>
-                    {filteredTranscriptRows.map((row) => (
-                      <div key={row.id} className="run-transcript-row">
-                        <span className="run-transcript-time">{row.time}</span>
-                        <span className={row.kindClass}>{row.kindLabel}</span>
-                        <div className={row.isToolBlock ? "run-transcript-body-tool" : "run-transcript-body"}>
-                          {row.body}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       }
     />

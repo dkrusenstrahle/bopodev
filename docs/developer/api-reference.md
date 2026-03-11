@@ -105,6 +105,7 @@ Adapter and runtime support:
 
 - `GET /plugins`
 - `POST /plugins/:pluginId/install`
+- `POST /plugins/install-from-json`
 - `PUT /plugins/:pluginId`
 - `GET /plugins/runs`
 

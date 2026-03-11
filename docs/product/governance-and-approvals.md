@@ -33,6 +33,7 @@ Current action types:
 - `override_budget`
 - `pause_agent`
 - `terminate_agent`
+- `promote_memory_fact`
 
 ## Governance Surfaces
 
@@ -64,5 +65,5 @@ Always verify post-resolution state in related views:
 - Product overview: [`overview.md`](./overview.md)
 - Daily workflows: [`daily-workflows.md`](./daily-workflows.md)
 - API details: [`../developer/api-reference.md`](../developer/api-reference.md)
+- Agent memory workflow: [`agent-memory-workflow.md`](./agent-memory-workflow.md)
 - Domain terms: [`../developer/domain-model.md`](../developer/domain-model.md)
-

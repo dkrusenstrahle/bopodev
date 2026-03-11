@@ -119,6 +119,9 @@ Adapter and runtime support:
 - `GET /observability/memory` (supports `agentId` and `limit` query filters)
 - `GET /observability/memory/:agentId/file?path=...`
 
+For endpoint usage patterns and memory semantics, see
+[`../product/agent-memory-workflow.md`](../product/agent-memory-workflow.md).
+
 ## Realtime
 
 - Websocket endpoint: `/realtime`
@@ -135,4 +138,3 @@ Adapter and runtime support:
 - Domain model: [`domain-model.md`](./domain-model.md)
 - Product workflows: [`../product/daily-workflows.md`](../product/daily-workflows.md)
 - Troubleshooting: [`../operations/troubleshooting.md`](../operations/troubleshooting.md)
-

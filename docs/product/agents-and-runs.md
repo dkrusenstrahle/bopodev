@@ -51,15 +51,12 @@ Run status values include `started`, `completed`, `failed`, and `skipped`.
 
 ## File Memory
 
-Each heartbeat now reads and writes file-based memory for each agent under a deterministic company-scoped path.
+Agents use file-backed memory that is loaded before each heartbeat and updated after execution.
 
-Memory behavior:
+This includes tacit notes, daily episodic notes, and promoted durable facts.
 
-- appends a daily log entry for each run (`memory/YYYY-MM-DD.md`),
-- loads compact memory context (tacit notes, durable facts, recent daily notes) into prompt context,
-- promotes candidate durable memory facts directly for low-friction learning.
-
-Use observability memory routes to inspect generated memory files without shell access.
+For the full lifecycle, file layout, and observability flow, see
+[`agent-memory-workflow.md`](./agent-memory-workflow.md).
 
 ## Interpreting Results
 

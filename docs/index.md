@@ -17,6 +17,7 @@ This documentation set covers Bopo from two angles:
 - [`product/index.md`](./product/index.md)
 - [`product/daily-workflows.md`](./product/daily-workflows.md)
 - [`product/agents-and-runs.md`](./product/agents-and-runs.md)
+- [`product/agent-memory-workflow.md`](./product/agent-memory-workflow.md)
 - [`product/governance-and-approvals.md`](./product/governance-and-approvals.md)
 - [`product/office-space-and-realtime.md`](./product/office-space-and-realtime.md)
 
@@ -46,4 +47,3 @@ This documentation set covers Bopo from two angles:
 - [`release-process.md`](./release-process.md)
 - [`release-gate-checklist.md`](./release-gate-checklist.md)
 - [`release/versioning-and-changelog.md`](./release/versioning-and-changelog.md)
-

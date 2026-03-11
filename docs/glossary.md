@@ -15,6 +15,10 @@ This glossary defines canonical terms used across product, API, and operations d
 - **Provider type**: adapter/runtime family (`claude_code`, `codex`, `cursor`, `opencode`, `http`, `shell`).
 - **Heartbeat run**: one execution attempt for an agent or sweep, ending as `completed`, `failed`, or `skipped`.
 - **Sweep**: scheduler/manual action that evaluates multiple agents and runs eligible ones.
+- **Tacit memory**: stable guidance stored in `MEMORY.md` and loaded into future runs.
+- **Episodic note**: chronological run note written to `memory/YYYY-MM-DD.md`.
+- **Durable fact**: promoted reusable memory entry stored in `life/items.yaml`.
+- **Memory promotion**: conversion of candidate run insight into a durable fact for reuse.
 
 ## Governance Terms
 
@@ -33,4 +37,3 @@ This glossary defines canonical terms used across product, API, and operations d
 - **Realtime channel**: websocket stream namespace (for example governance and office-space).
 - **Office room**: logical state bucket (`waiting_room`, `work_space`, `security`) for occupancy views.
 - **Snapshot event**: initial channel state sent on connect before incremental updates.
-

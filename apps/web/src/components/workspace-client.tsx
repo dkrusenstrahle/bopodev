@@ -3221,11 +3221,10 @@ export function WorkspaceClient({
               description="Install plugins, activate or deactivate them, and manage installed plugin entries."
               actions={
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="default"
                   onClick={openCreatePluginDialog}
                 >
-                  Install
+                  New plugin
                 </Button>
               }
             />

@@ -10,7 +10,7 @@ import { ensureBuiltinPluginsRegistered } from "../apps/api/src/services/plugin-
 import type { BopoDb } from "../packages/db/src/client";
 import { bootstrapDatabase, createAgent, createCompany, createIssue, createProject } from "../packages/db/src/index";
 
-describe("plugin system", { timeout: 30_000, hookTimeout: 30_000 }, () => {
+describe("plugin system", { timeout: 30_000 }, () => {
   let db: BopoDb;
   let app: ReturnType<typeof createApp>;
   let tempDir: string;
@@ -19,14 +19,18 @@ describe("plugin system", { timeout: 30_000, hookTimeout: 30_000 }, () => {
   let originalEnabledFlag: string | undefined;
   let originalDisabledFlag: string | undefined;
   let originalManifestsDir: string | undefined;
+  let originalWebhookAllowlist: string | undefined;
 
   beforeEach(async () => {
     originalEnabledFlag = process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
     originalDisabledFlag = process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
     originalManifestsDir = process.env.BOPO_PLUGIN_MANIFESTS_DIR;
+    originalWebhookAllowlist = process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST;
     delete process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
     delete process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
+    delete process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST;
     tempDir = await mkdtemp(join(tmpdir(), "bopodev-plugin-test-"));
+    process.env.BOPO_PLUGIN_MANIFESTS_DIR = join(tempDir, "plugins");
     const boot = await bootstrapDatabase(join(tempDir, "test.db"));
     db = boot.db;
     client = boot.client as { close?: () => Promise<void> };
@@ -34,7 +38,7 @@ describe("plugin system", { timeout: 30_000, hookTimeout: 30_000 }, () => {
     const company = await createCompany(db, { name: "Plugins Co", mission: "Test plugins." });
     companyId = company.id;
     await ensureBuiltinPluginsRegistered(db, [companyId]);
-  });
+  }, 30_000);
 
   afterEach(async () => {
     if (originalEnabledFlag === undefined) {
@@ -52,9 +56,14 @@ describe("plugin system", { timeout: 30_000, hookTimeout: 30_000 }, () => {
     } else {
       process.env.BOPO_PLUGIN_MANIFESTS_DIR = originalManifestsDir;
     }
+    if (originalWebhookAllowlist === undefined) {
+      delete process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST;
+    } else {
+      process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST = originalWebhookAllowlist;
+    }
     await client.close?.();
     await rm(tempDir, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   it("lists plugins and creates approval for risky capability grants", async () => {
     const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
@@ -228,6 +237,101 @@ describe("plugin system", { timeout: 30_000, hookTimeout: 30_000 }, () => {
     expect(createdPlugin).toBeTruthy();
     expect(createdPlugin.companyConfig).toBeTruthy();
     expect(createdPlugin.companyConfig.enabled).toBe(false);
+  });
+
+  it("uninstalls plugins and returns not found for unknown plugin", async () => {
+    const installResponse = await request(app)
+      .post("/plugins/heartbeat-tagger/install")
+      .set("x-company-id", companyId)
+      .send({});
+    expect(installResponse.status).toBe(200);
+
+    const uninstallResponse = await request(app).delete("/plugins/heartbeat-tagger/install").set("x-company-id", companyId);
+    expect(uninstallResponse.status).toBe(200);
+    expect(uninstallResponse.body.data.installed).toBe(false);
+
+    const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
+    expect(listResponse.status).toBe(200);
+    const pluginRow = listResponse.body.data.find((row: { id: string }) => row.id === "heartbeat-tagger");
+    expect(pluginRow).toBeTruthy();
+    expect(pluginRow.companyConfig).toBeNull();
+
+    const missingResponse = await request(app).delete("/plugins/not-a-real-plugin/install").set("x-company-id", companyId);
+    expect(missingResponse.status).toBe(404);
+  });
+
+  it("deletes custom plugins and rejects built-in plugin deletion", async () => {
+    const createResponse = await request(app)
+      .post("/plugins/install-from-json")
+      .set("x-company-id", companyId)
+      .send({
+        manifestJson: JSON.stringify({
+          id: "delete-me-plugin",
+          version: "0.1.0",
+          displayName: "Delete Me Plugin",
+          description: "Temporary plugin for delete route tests.",
+          kind: "lifecycle",
+          hooks: ["afterPersist"],
+          capabilities: ["emit_audit"],
+          runtime: {
+            type: "prompt",
+            entrypoint: "prompt:inline",
+            timeoutMs: 5000,
+            retryCount: 0,
+            promptTemplate: "delete me"
+          }
+        }),
+        install: false
+      });
+    expect(createResponse.status).toBe(200);
+
+    const deleteCustomResponse = await request(app).delete("/plugins/delete-me-plugin").set("x-company-id", companyId);
+    expect(deleteCustomResponse.status).toBe(200);
+    expect(deleteCustomResponse.body.data.deleted).toBe(true);
+
+    const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data.some((row: { id: string }) => row.id === "delete-me-plugin")).toBe(false);
+
+    const deleteBuiltinResponse = await request(app).delete("/plugins/trace-exporter").set("x-company-id", companyId);
+    expect(deleteBuiltinResponse.status).toBe(400);
+  });
+
+  it("validates plugin update and install-from-json payloads", async () => {
+    const invalidUpdateResponse = await request(app)
+      .put("/plugins/trace-exporter")
+      .set("x-company-id", companyId)
+      .send({
+        priority: -1
+      });
+    expect(invalidUpdateResponse.status).toBe(422);
+
+    const unknownPluginResponse = await request(app)
+      .put("/plugins/does-not-exist")
+      .set("x-company-id", companyId)
+      .send({
+        enabled: true,
+        requestApproval: false
+      });
+    expect(unknownPluginResponse.status).toBe(404);
+
+    const malformedJsonResponse = await request(app)
+      .post("/plugins/install-from-json")
+      .set("x-company-id", companyId)
+      .send({
+        manifestJson: "{invalid-json",
+        install: true
+      });
+    expect(malformedJsonResponse.status).toBe(422);
+
+    const invalidManifestResponse = await request(app)
+      .post("/plugins/install-from-json")
+      .set("x-company-id", companyId)
+      .send({
+        manifestJson: JSON.stringify({ id: "invalid-manifest-only-id" }),
+        install: true
+      });
+    expect(invalidManifestResponse.status).toBe(422);
   });
 
   it("applies prompt plugin patch on beforeAdapterExecute", async () => {
@@ -438,5 +542,109 @@ describe("plugin system", { timeout: 30_000, hookTimeout: 30_000 }, () => {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+  });
+
+  it("does not execute plugins when plugin system is globally disabled", async () => {
+    process.env.BOPO_PLUGIN_SYSTEM_DISABLED = "true";
+    const project = await createProject(db, {
+      companyId,
+      name: "Plugin disabled project",
+      workspaceLocalPath: tempDir
+    });
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Worker",
+      name: "Plugin disabled agent",
+      providerType: "shell",
+      heartbeatCron: "* * * * *",
+      monthlyBudgetUsd: "20.0000",
+      runtimeCommand: "echo",
+      runtimeArgsJson: '["{\\"summary\\":\\"plugin-disabled\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
+      runtimeCwd: tempDir
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Execute with plugins disabled",
+      assigneeAgentId: agent.id
+    });
+    const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    const pluginRunsResponse = await request(app)
+      .get(`/observability/plugins/runs?runId=${encodeURIComponent(runId!)}`)
+      .set("x-company-id", companyId);
+    expect(pluginRunsResponse.status).toBe(200);
+    expect(Array.isArray(pluginRunsResponse.body.data)).toBe(true);
+    expect(pluginRunsResponse.body.data.length).toBe(0);
+  });
+
+  it("fails prompt webhook plugins when webhook host is not allowlisted", async () => {
+    process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST = "example.com";
+    await request(app)
+      .post("/plugins/install-from-json")
+      .set("x-company-id", companyId)
+      .send({
+        manifestJson: JSON.stringify({
+          id: "prompt-webhook-allowlist-denied",
+          version: "0.1.0",
+          displayName: "Prompt Webhook Allowlist Denied",
+          description: "Webhook host denied by allowlist should fail plugin run.",
+          kind: "lifecycle",
+          hooks: ["beforeAdapterExecute"],
+          capabilities: ["network"],
+          runtime: {
+            type: "prompt",
+            entrypoint: "prompt:inline",
+            timeoutMs: 5000,
+            retryCount: 0,
+            promptTemplate: "noop"
+          }
+        }),
+        install: true
+      });
+    await request(app)
+      .put("/plugins/prompt-webhook-allowlist-denied")
+      .set("x-company-id", companyId)
+      .send({
+        enabled: true,
+        grantedCapabilities: ["network"],
+        config: {
+          webhookRequests: [{ url: "http://127.0.0.1:9999/blocked", method: "POST", timeoutMs: 100 }]
+        },
+        requestApproval: false
+      });
+
+    const project = await createProject(db, {
+      companyId,
+      name: "Webhook allowlist denied project",
+      workspaceLocalPath: tempDir
+    });
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Worker",
+      name: "Webhook allowlist denied agent",
+      providerType: "shell",
+      heartbeatCron: "* * * * *",
+      monthlyBudgetUsd: "20.0000",
+      runtimeCommand: "echo",
+      runtimeArgsJson: '["{\\"summary\\":\\"webhook-allowlist-denied\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
+      runtimeCwd: tempDir
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Execute webhook allowlist denied plugin",
+      assigneeAgentId: agent.id
+    });
+    await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    const pluginRunsResponse = await request(app)
+      .get("/plugins/runs?pluginId=prompt-webhook-allowlist-denied")
+      .set("x-company-id", companyId);
+    expect(pluginRunsResponse.status).toBe(200);
+    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
+    expect(
+      pluginRunsResponse.body.data.some((row: { error: string | null }) =>
+        String(row.error ?? "").includes("Webhook URL not allowed by BOPO_PLUGIN_WEBHOOK_ALLOWLIST.")
+      )
+    ).toBe(true);
   });
 });

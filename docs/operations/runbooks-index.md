@@ -16,6 +16,8 @@ Provide fast routing from symptom to runbook.
   - [`../codex-connection-debugging.md`](../codex-connection-debugging.md)
 - **General API, scheduler, or realtime failures**
   - [`troubleshooting.md`](./troubleshooting.md)
+- **Plugin workflow failures**
+  - [`plugin-runbook.md`](./plugin-runbook.md)
 - **Release blockers**
   - [`../release-gate-checklist.md`](../release-gate-checklist.md)
 
@@ -24,6 +26,10 @@ Provide fast routing from symptom to runbook.
 - **Agents and heartbeats**
   - [`../product/agents-and-runs.md`](../product/agents-and-runs.md)
   - [`../developer/api-reference.md`](../developer/api-reference.md)
+- **Plugins and integrations**
+  - [`plugin-runbook.md`](./plugin-runbook.md)
+  - [`../product/plugins-and-integrations.md`](../product/plugins-and-integrations.md)
+  - [`../developer/plugin-system.md`](../developer/plugin-system.md)
 - **Governance and inbox**
   - [`../product/governance-and-approvals.md`](../product/governance-and-approvals.md)
 - **Realtime office-space and notifications**
@@ -36,4 +42,3 @@ Provide fast routing from symptom to runbook.
 3. Confirm company scope and actor headers.
 4. Review run details and recent audit/log events.
 5. Apply targeted runbook and document remediation.
-

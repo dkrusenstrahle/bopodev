@@ -245,4 +245,8 @@ The first-class Plugins workspace page lives in `apps/web` and supports:
 - Architecture: [`architecture.md`](./architecture.md)
 - API reference: [`api-reference.md`](./api-reference.md)
 - Configuration: [`configuration-reference.md`](./configuration-reference.md)
+- Authoring guide: [`plugin-authoring.md`](./plugin-authoring.md)
+- Hook reference: [`plugin-hook-reference.md`](./plugin-hook-reference.md)
+- Operator workflow: [`../product/plugins-and-integrations.md`](../product/plugins-and-integrations.md)
+- Plugin runbook: [`../operations/plugin-runbook.md`](../operations/plugin-runbook.md)
 - Governance workflows: [`../product/governance-and-approvals.md`](../product/governance-and-approvals.md)

@@ -17,6 +17,7 @@ This documentation set covers Bopo from two angles:
 - [`product/index.md`](./product/index.md)
 - [`product/daily-workflows.md`](./product/daily-workflows.md)
 - [`product/agents-and-runs.md`](./product/agents-and-runs.md)
+- [`product/plugins-and-integrations.md`](./product/plugins-and-integrations.md)
 - [`product/agent-memory-workflow.md`](./product/agent-memory-workflow.md)
 - [`product/governance-and-approvals.md`](./product/governance-and-approvals.md)
 - [`product/office-space-and-realtime.md`](./product/office-space-and-realtime.md)
@@ -29,6 +30,9 @@ This documentation set covers Bopo from two angles:
 - [`developer/api-reference.md`](./developer/api-reference.md)
 - [`developer/configuration-reference.md`](./developer/configuration-reference.md)
 - [`developer/plugin-system.md`](./developer/plugin-system.md)
+- [`developer/plugin-authoring.md`](./developer/plugin-authoring.md)
+- [`developer/plugin-hook-reference.md`](./developer/plugin-hook-reference.md)
+- [`developer/plugin-samples.md`](./developer/plugin-samples.md)
 - [`developer/contributing.md`](./developer/contributing.md)
 - Adapter docs:
   - [`adapters/overview.md`](./adapters/overview.md)
@@ -40,6 +44,7 @@ This documentation set covers Bopo from two angles:
 - [`operations/deployment.md`](./operations/deployment.md)
 - [`operations/runbooks-index.md`](./operations/runbooks-index.md)
 - [`operations/troubleshooting.md`](./operations/troubleshooting.md)
+- [`operations/plugin-runbook.md`](./operations/plugin-runbook.md)
 - Codex-specific runbook: [`codex-connection-debugging.md`](./codex-connection-debugging.md)
 
 ## Release Docs

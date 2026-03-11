@@ -14,6 +14,9 @@ Use this section to understand internals, APIs, and extension points.
 - [`api-reference.md`](./api-reference.md): route groups, headers, and behavior contracts.
 - [`configuration-reference.md`](./configuration-reference.md): environment variables and defaults.
 - [`plugin-system.md`](./plugin-system.md): plugin architecture, hooks, governance, and APIs.
+- [`plugin-authoring.md`](./plugin-authoring.md): author manifests and safely roll out plugin behavior.
+- [`plugin-hook-reference.md`](./plugin-hook-reference.md): hook-by-hook execution and failure semantics.
+- [`plugin-samples.md`](./plugin-samples.md): reference sample manifests used for plugin validation.
 - [`contributing.md`](./contributing.md): workflow and quality standards.
 
 ## Related
@@ -21,4 +24,3 @@ Use this section to understand internals, APIs, and extension points.
 - Setup guide: [`../getting-started-and-dev.md`](../getting-started-and-dev.md)
 - Adapter overview: [`../adapters/overview.md`](../adapters/overview.md)
 - Adapter authoring: [`../adapter-authoring.md`](../adapter-authoring.md)
-

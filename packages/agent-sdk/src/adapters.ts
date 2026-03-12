@@ -10,7 +10,7 @@ import type {
   HeartbeatContext
 } from "./types";
 import { ExecutionOutcomeSchema, type ExecutionOutcome } from "bopodev-contracts";
-import { checkRuntimeCommandHealth, executeAgentRuntime, executePromptRuntime } from "./runtime-core";
+import { checkRuntimeCommandHealth, containsRateLimitFailure, executeAgentRuntime, executePromptRuntime } from "./runtime-core";
 import {
   executeDirectApiRuntime,
   probeDirectApiEnvironment,
@@ -33,6 +33,10 @@ function issueIdsTouched(context: HeartbeatContext) {
 
 function toOutcome(outcome: ExecutionOutcome): ExecutionOutcome {
   return ExecutionOutcomeSchema.parse(outcome);
+}
+
+function isRateLimitedRuntimeFailure(runtime: { stdout: string; stderr: string }, detail?: string) {
+  return containsRateLimitFailure(`${detail ?? ""}\n${runtime.stderr}\n${runtime.stdout}`);
 }
 
 export class ClaudeCodeAdapter implements AgentAdapter {
@@ -210,6 +214,7 @@ export class GenericHeartbeatAdapter implements AgentAdapter {
 
     const failedUsage = resolveFailedUsage(runtime);
     const failureDetail = resolveRuntimeFailureDetail(runtime);
+    const rateLimitedFailure = isRateLimitedRuntimeFailure(runtime, failureDetail);
     return {
       status: "failed",
       summary: runtime.parsedUsage?.summary ?? `${this.providerType} runtime failed: ${failureDetail}`,
@@ -220,7 +225,13 @@ export class GenericHeartbeatAdapter implements AgentAdapter {
         kind: "failed",
         issueIdsTouched: issueIdsTouched(context),
         actions: [{ type: "runtime.execute", status: "error", detail: failureDetail }],
-        blockers: [{ code: runtime.failureType ?? "runtime_failed", message: failureDetail, retryable: true }],
+        blockers: [
+          {
+            code: runtime.failureType ?? "runtime_failed",
+            message: failureDetail,
+            retryable: !rateLimitedFailure
+          }
+        ],
         artifacts: [],
         nextSuggestedState: "blocked"
       }),
@@ -583,6 +594,8 @@ export async function runDirectApiWork(
     };
   }
   const failureDetail = runtime.error ?? "direct API request failed";
+  const rateLimitedFailure =
+    runtime.failureType === "rate_limit" || containsRateLimitFailure(`${failureDetail}\n${runtime.responsePreview ?? ""}`);
   return {
     status: "failed",
     summary: `${provider} runtime failed: ${failureDetail}`,
@@ -598,7 +611,7 @@ export async function runDirectApiWork(
         blockers: [{
           code: runtime.failureType ?? "runtime_failed",
           message: failureDetail,
-          retryable: runtime.failureType !== "auth" && runtime.failureType !== "bad_response"
+          retryable: runtime.failureType !== "auth" && runtime.failureType !== "bad_response" && !rateLimitedFailure
         }],
       artifacts: [],
       nextSuggestedState: "blocked"
@@ -814,6 +827,7 @@ export async function runProviderWork(
   }
   const failedUsage = resolveFailedUsage(runtime);
   const failureDetail = resolveRuntimeFailureDetail(runtime);
+  const rateLimitedFailure = isRateLimitedRuntimeFailure(runtime, failureDetail);
   return {
     status: "failed",
     summary: runtime.parsedUsage?.summary ?? `${provider} runtime failed: ${failureDetail}`,
@@ -826,7 +840,13 @@ export async function runProviderWork(
       kind: "failed",
       issueIdsTouched: issueIdsTouched(context),
       actions: [{ type: "runtime.execute", status: "error", detail: failureDetail }],
-      blockers: [{ code: runtime.failureType ?? "runtime_failed", message: failureDetail, retryable: true }],
+      blockers: [
+        {
+          code: runtime.failureType ?? "runtime_failed",
+          message: failureDetail,
+          retryable: !rateLimitedFailure
+        }
+      ],
       artifacts: [],
       nextSuggestedState: "blocked"
     }),
@@ -887,7 +907,12 @@ export async function runCursorWork(context: HeartbeatContext): Promise<AdapterE
     runtime,
     resumeState.resumeAttempted ? context.state.cursorSession?.sessionId ?? context.state.sessionId ?? null : null
   );
-  if (!runtime.ok && resumeState.resumeSessionId && isUnknownSessionError(runtime.stderr, runtime.stdout)) {
+  if (
+    !runtime.ok &&
+    resumeState.resumeSessionId &&
+    !isRateLimitedRuntimeFailure(runtime) &&
+    isUnknownSessionError(runtime.stderr, runtime.stdout)
+  ) {
     const retry = await executePromptRuntime(
       cursorLaunch.command,
       prompt,
@@ -993,7 +1018,7 @@ export async function runOpenCodeWork(context: HeartbeatContext): Promise<Adapte
     { provider: "opencode" }
   );
   const parsed = parseOpenCodeOutput(runtime.stdout);
-  if (!runtime.ok && resumeSessionId && isUnknownSessionError(runtime.stderr, runtime.stdout)) {
+  if (!runtime.ok && resumeSessionId && !isRateLimitedRuntimeFailure(runtime) && isUnknownSessionError(runtime.stderr, runtime.stdout)) {
     const retry = await executePromptRuntime(
       context.runtime?.command ?? "opencode",
       prompt,
@@ -1078,7 +1103,12 @@ export async function runGeminiCliWork(context: HeartbeatContext): Promise<Adapt
 
   const parsed = parseGeminiOutput(runtime.stdout);
 
-  if (!runtime.ok && resumeState.resumeSessionId && isGeminiUnknownSessionError(runtime.stdout, runtime.stderr)) {
+  if (
+    !runtime.ok &&
+    resumeState.resumeSessionId &&
+    !isRateLimitedRuntimeFailure(runtime) &&
+    isGeminiUnknownSessionError(runtime.stdout, runtime.stderr)
+  ) {
     const retry = await executePromptRuntime(
       command,
       prompt,
@@ -1315,6 +1345,7 @@ export function toProviderResult(
   }
   const failedUsage = resolveFailedUsage(runtime);
   const failureDetail = resolveRuntimeFailureDetail(runtime);
+  const rateLimitedFailure = isRateLimitedRuntimeFailure(runtime, failureDetail);
   return {
     status: "failed",
     summary: runtime.parsedUsage?.summary ?? `${provider} runtime failed: ${failureDetail}`,
@@ -1327,7 +1358,13 @@ export function toProviderResult(
       kind: "failed",
       issueIdsTouched: issueIdsTouched(context),
       actions: [{ type: "runtime.execute", status: "error", detail: failureDetail }],
-      blockers: [{ code: runtime.failureType ?? "runtime_failed", message: failureDetail, retryable: true }],
+      blockers: [
+        {
+          code: runtime.failureType ?? "runtime_failed",
+          message: failureDetail,
+          retryable: !rateLimitedFailure
+        }
+      ],
       artifacts: [],
       nextSuggestedState: "blocked"
     }),
@@ -1957,6 +1994,7 @@ export function createPrompt(context: HeartbeatContext) {
     "- Prefer heredoc/stdin payloads (for example `curl --data-binary @- <<'JSON' ... JSON`) so cleanup is not blocked by runtime policy.",
     "- If payload files are required, write under `agents/<agent-id>/tmp/` (or OS temp via `mktemp`) and do not treat cleanup command failures as task blockers.",
     "- If control-plane API connectivity fails, report the exact failing command/error once and stop retry loops for the same endpoint.",
+    "- For write_todos status values, only use: todo, in_progress, blocked, in_review, done, canceled (US spelling, not cancelled).",
     "- If any command fails, avoid further exploratory commands and still return the required final JSON summary.",
     "- Do not stop after planning. You must execute concrete steps for assigned issues in this run (file edits, API calls, or other verifiable actions).",
     "- If you cannot complete concrete execution, set summary to include the blocker explicitly instead of claiming success.",

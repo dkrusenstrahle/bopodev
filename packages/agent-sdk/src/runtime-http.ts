@@ -378,7 +378,7 @@ function isRetryableFailure(
   failureType: NonNullable<DirectApiExecutionOutput["failureType"]>,
   statusCode: number
 ) {
-  if (failureType === "timeout" || failureType === "network" || failureType === "rate_limit") {
+  if (failureType === "timeout" || failureType === "network") {
     return true;
   }
   if (failureType === "http_error" && statusCode >= 500) {

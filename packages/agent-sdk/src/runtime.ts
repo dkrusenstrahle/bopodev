@@ -401,6 +401,7 @@ export async function executePromptRuntime(
         };
       }
 
+      const rateLimitedOutput = containsRateLimitFailure(`${attemptResult.stdout}\n${normalizedStderr}`);
       const retryableSpawnError = Boolean(
         attemptResult.spawnErrorCode && TRANSIENT_SPAWN_ERROR_CODES.has(attemptResult.spawnErrorCode)
       );
@@ -409,8 +410,9 @@ export async function executePromptRuntime(
         !attemptResult.timedOut &&
         !attemptResult.spawnErrorCode &&
         attemptResult.code !== 0 &&
-        !containsCodexAuthFailure(`${attemptResult.stdout}\n${normalizedStderr}`);
-      const retryable = retryableSpawnError || retryableCodexNonZero;
+        !containsCodexAuthFailure(`${attemptResult.stdout}\n${normalizedStderr}`) &&
+        !rateLimitedOutput;
+      const retryable = (retryableSpawnError || retryableCodexNonZero) && !rateLimitedOutput;
       if (!retryable || attempt >= maxAttempts) {
         break;
       }
@@ -1242,6 +1244,19 @@ function containsCodexAuthFailure(text: string) {
   return normalized.includes("missing bearer") || normalized.includes("authentication");
 }
 
+export function containsRateLimitFailure(text: string) {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes("rate limit") ||
+    normalized.includes("too many requests") ||
+    normalized.includes("resource_exhausted") ||
+    normalized.includes("resource exhausted") ||
+    normalized.includes("quota exceeded") ||
+    normalized.includes("exhausted your capacity") ||
+    /\b429\b/.test(normalized)
+  );
+}
+
 export async function checkRuntimeCommandHealth(
   command: string,
   options?: { cwd?: string; timeoutMs?: number }
@@ -2057,17 +2072,80 @@ function parseGeminiStreamingTranscriptLine(line: string): RuntimeTranscriptEven
     if (message && typeof message === "object" && !Array.isArray(message)) {
       const content = (message as Record<string, unknown>).content;
       if (Array.isArray(content)) {
-        const texts: string[] = [];
+        const events: RuntimeTranscriptEvent[] = [];
         for (const entry of content) {
           if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
           const block = entry as Record<string, unknown>;
+          const blockType = (typeof block.type === "string" ? block.type : "").trim().toLowerCase();
           const text = typeof block.text === "string" ? block.text.trim() : "";
-          if (text) texts.push(text);
+          if ((blockType === "text" || blockType === "output_text" || !blockType) && text) {
+            events.push({ kind: "assistant", text: clipText(text, 1200) });
+            continue;
+          }
+          if (blockType === "thinking" && text) {
+            events.push({ kind: "thinking", text: clipText(text, 600) });
+            continue;
+          }
+          if (blockType === "tool_call" || blockType === "tool_use") {
+            const label = firstNonEmptyString(block.name, block.tool, block.tool_name) ?? "tool";
+            const payload = safeJson(block.input ?? block.arguments ?? block.args ?? block.tool_call);
+            events.push({
+              kind: "tool_call",
+              label: clipText(label, 120),
+              text: clipText(`${label} call`, 320),
+              ...(payload ? { payload: clipText(payload, 2000) } : {})
+            });
+            continue;
+          }
+          if (blockType === "tool_result" || blockType === "tool_response") {
+            const label = firstNonEmptyString(block.tool_use_id, block.call_id, block.id, block.name, "tool_result");
+            const contentText =
+              firstNonEmptyString(
+                typeof block.output === "string" ? block.output : undefined,
+                typeof block.result === "string" ? block.result : undefined,
+                typeof block.content === "string" ? block.content : undefined,
+                typeof block.text === "string" ? block.text : undefined
+              ) ?? "tool result";
+            const payload = safeJson(block.output ?? block.result ?? block.content);
+            events.push({
+              kind: "tool_result",
+              label: clipText(label ?? "tool_result", 120),
+              text: clipText(contentText, 1600),
+              ...(payload ? { payload: clipText(payload, 2000) } : {})
+            });
+          }
         }
-        if (texts.length > 0) return [{ kind: "assistant", text: clipText(texts.join("\n"), 1200) }];
+        if (events.length > 0) return events;
       }
     }
     return [];
+  }
+  if (type === "tool_call") {
+    const label = firstNonEmptyString(parsed.name, parsed.tool, parsed.tool_name, "tool");
+    const payload = safeJson(parsed.input ?? parsed.arguments ?? parsed.args ?? parsed.tool_call);
+    return [{
+      kind: "tool_call",
+      label: clipText(label ?? "tool", 120),
+      text: clipText(`${label ?? "tool"} call`, 320),
+      ...(payload ? { payload: clipText(payload, 2000) } : {})
+    }];
+  }
+  if (type === "tool_result" || type === "tool_response") {
+    const label = firstNonEmptyString(parsed.tool_use_id, parsed.call_id, parsed.id, parsed.name, "tool_result");
+    const contentText =
+      firstNonEmptyString(
+        typeof parsed.output === "string" ? parsed.output : undefined,
+        typeof parsed.result === "string" ? parsed.result : undefined,
+        typeof parsed.content === "string" ? parsed.content : undefined,
+        typeof parsed.text === "string" ? parsed.text : undefined
+      ) ?? "tool result";
+    const payload = safeJson(parsed.output ?? parsed.result ?? parsed.content);
+    return [{
+      kind: "tool_result",
+      label: clipText(label ?? "tool_result", 120),
+      text: clipText(contentText, 1600),
+      ...(payload ? { payload: clipText(payload, 2000) } : {})
+    }];
   }
   if (type === "result") {
     const resultText =
@@ -2136,8 +2214,44 @@ function parseGeminiTranscript(stdout: string, stderr: string): RuntimeTranscrip
           for (const entry of content) {
             if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
             const block = entry as Record<string, unknown>;
+            const blockType = (typeof block.type === "string" ? block.type : "").trim().toLowerCase();
             const text = typeof block.text === "string" ? block.text.trim() : "";
-            if (text) events.push({ kind: "assistant", text: clipText(text, 1200) });
+            if ((blockType === "text" || blockType === "output_text" || !blockType) && text) {
+              events.push({ kind: "assistant", text: clipText(text, 1200) });
+              continue;
+            }
+            if (blockType === "thinking" && text) {
+              events.push({ kind: "thinking", text: clipText(text, 600) });
+              continue;
+            }
+            if (blockType === "tool_call" || blockType === "tool_use") {
+              const label = firstNonEmptyString(block.name, block.tool, block.tool_name) ?? "tool";
+              const payload = safeJson(block.input ?? block.arguments ?? block.args ?? block.tool_call);
+              events.push({
+                kind: "tool_call",
+                label: clipText(label, 120),
+                text: clipText(`${label} call`, 320),
+                ...(payload ? { payload: clipText(payload, 2000) } : {})
+              });
+              continue;
+            }
+            if (blockType === "tool_result" || blockType === "tool_response") {
+              const label = firstNonEmptyString(block.tool_use_id, block.call_id, block.id, block.name, "tool_result");
+              const contentText =
+                firstNonEmptyString(
+                  typeof block.output === "string" ? block.output : undefined,
+                  typeof block.result === "string" ? block.result : undefined,
+                  typeof block.content === "string" ? block.content : undefined,
+                  typeof block.text === "string" ? block.text : undefined
+                ) ?? "tool result";
+              const payload = safeJson(block.output ?? block.result ?? block.content);
+              events.push({
+                kind: "tool_result",
+                label: clipText(label ?? "tool_result", 120),
+                text: clipText(contentText, 1600),
+                ...(payload ? { payload: clipText(payload, 2000) } : {})
+              });
+            }
           }
         }
       }
@@ -2145,6 +2259,35 @@ function parseGeminiTranscript(stdout: string, stderr: string): RuntimeTranscrip
       if (resultText && events.filter((e) => e.kind === "assistant").length === 0) {
         events.push({ kind: "assistant", text: clipText(resultText, 1200) });
       }
+      continue;
+    }
+    if (type === "tool_call") {
+      const label = firstNonEmptyString(parsed.name, parsed.tool, parsed.tool_name, "tool");
+      const payload = safeJson(parsed.input ?? parsed.arguments ?? parsed.args ?? parsed.tool_call);
+      events.push({
+        kind: "tool_call",
+        label: clipText(label ?? "tool", 120),
+        text: clipText(`${label ?? "tool"} call`, 320),
+        ...(payload ? { payload: clipText(payload, 2000) } : {})
+      });
+      continue;
+    }
+    if (type === "tool_result" || type === "tool_response") {
+      const label = firstNonEmptyString(parsed.tool_use_id, parsed.call_id, parsed.id, parsed.name, "tool_result");
+      const contentText =
+        firstNonEmptyString(
+          typeof parsed.output === "string" ? parsed.output : undefined,
+          typeof parsed.result === "string" ? parsed.result : undefined,
+          typeof parsed.content === "string" ? parsed.content : undefined,
+          typeof parsed.text === "string" ? parsed.text : undefined
+        ) ?? "tool result";
+      const payload = safeJson(parsed.output ?? parsed.result ?? parsed.content);
+      events.push({
+        kind: "tool_result",
+        label: clipText(label ?? "tool_result", 120),
+        text: clipText(contentText, 1600),
+        ...(payload ? { payload: clipText(payload, 2000) } : {})
+      });
       continue;
     }
     if (type === "result") {

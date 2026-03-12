@@ -2207,7 +2207,8 @@ export function createPrompt(context: HeartbeatContext) {
       ? `- Use BOPODEV_API_BASE_URL (or BOPODEV_API_URL) for API calls. Current value: ${controlPlaneApiBaseUrl}`
       : "- BOPODEV_API_BASE_URL is missing. Report this as blocker instead of guessing URLs.",
     "- Never guess fallback URLs such as localhost:3000.",
-    "- Include actor headers via BOPODEV_REQUEST_HEADERS_JSON for curl requests.",
+    "- For curl requests, pass control-plane headers directly from env vars (`BOPODEV_COMPANY_ID`, `BOPODEV_ACTOR_TYPE`, `BOPODEV_ACTOR_ID`, `BOPODEV_ACTOR_COMPANIES`, `BOPODEV_ACTOR_PERMISSIONS`).",
+    "- Use BOPODEV_REQUEST_HEADERS_JSON only as a compatibility fallback when direct vars are unavailable.",
     hasControlPlaneHeaders
       ? "- BOPODEV_REQUEST_HEADERS_JSON is present in env."
       : "- BOPODEV_REQUEST_HEADERS_JSON is missing. Report this as blocker."

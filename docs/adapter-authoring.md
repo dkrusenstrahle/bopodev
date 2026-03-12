@@ -62,6 +62,8 @@ Examples of logic that belongs here:
 - provider-specific session resume behavior
 - provider-specific output parsing
 - provider-specific preflight checks
+- provider-specific pricing identity (`pricingProviderType`, `pricingModelId`)
+- provider-specific blocked outcome semantics for precondition/config failures
 
 ## UI module responsibilities
 
@@ -103,6 +105,12 @@ At minimum, implement:
 - optional `server.listModels(runtime)`
 - optional `server.testEnvironment(runtime)`
 - `metadata` and `agentConfigurationDoc`
+
+Authoring guidance:
+
+- `server.execute` should keep provider policy local (args, retry/resume, parsing, pricing identity).
+- `server.testEnvironment` should return stable contract envelopes with provider-matching `providerType` and `info|warn|error` checks.
+- use shared helpers for mechanics only; keep provider decision logic in adapter package files.
 
 ## 3. Register in adapter registry
 

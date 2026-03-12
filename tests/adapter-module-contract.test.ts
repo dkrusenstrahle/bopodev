@@ -19,6 +19,12 @@ describe("adapter module contracts", () => {
       expect(module.server.type).toBe(entry.providerType);
       expect(module.metadata.providerType).toBe(entry.providerType);
       expect(typeof module.server.execute).toBe("function");
+      if (entry.supportsModelSelection) {
+        expect(typeof module.server.listModels).toBe("function");
+      }
+      if (entry.supportsEnvironmentTest) {
+        expect(typeof module.server.testEnvironment).toBe("function");
+      }
     }
   });
 
@@ -27,6 +33,7 @@ describe("adapter module contracts", () => {
       "codex",
       "claude-code",
       "cursor",
+      "gemini-cli",
       "opencode",
       "openai-api",
       "anthropic-api",
@@ -56,10 +63,13 @@ describe("adapter module contracts", () => {
 
   it("keeps environment test contract stable for providers", async () => {
     const metadata = getAdapterMetadata();
+    const modules = getRegisteredAdapterModules();
     for (const entry of metadata) {
       if (!entry.supportsEnvironmentTest) {
         continue;
       }
+      const module = modules[entry.providerType];
+      expect(typeof module.server.testEnvironment).toBe("function");
       const result = await runAdapterEnvironmentTest(entry.providerType, {
         command: process.execPath,
         args: ["-e", "console.log('ok')"],
@@ -69,6 +79,29 @@ describe("adapter module contracts", () => {
       expect(result.providerType).toBe(entry.providerType);
       expect(["pass", "warn", "fail"]).toContain(result.status);
       expect(Array.isArray(result.checks)).toBe(true);
+      expect(result.checks.every((check) => ["info", "warn", "error"].includes(check.level))).toBe(true);
+    }
+  });
+
+  it("keeps listModels contract stable for providers with model selection", async () => {
+    const metadata = getAdapterMetadata();
+    const modules = getRegisteredAdapterModules();
+    for (const entry of metadata) {
+      if (!entry.supportsModelSelection) {
+        continue;
+      }
+      const listModels = modules[entry.providerType].server.listModels;
+      expect(typeof listModels).toBe("function");
+      const models = await listModels?.({
+        command: process.execPath,
+        args: ["-e", "console.log('ok')"],
+        cwd: process.cwd(),
+        timeoutMs: 2_000
+      });
+      expect(Array.isArray(models)).toBe(true);
+      if (models && models.length > 0) {
+        expect(models.every((model) => Boolean(model.id) && Boolean(model.label))).toBe(true);
+      }
     }
   });
 

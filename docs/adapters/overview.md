@@ -62,6 +62,7 @@ Each package should provide:
 Provider-specific execution logic belongs in `server/execute.ts`.
 Provider-specific stdout/stderr parsing belongs in `server/parse.ts`.
 Provider-specific preflight checks belong in `server/test.ts`.
+Provider-specific pricing identity mapping (`pricingProviderType`, `pricingModelId`) should be resolved by the adapter execute path rather than central SDK switch logic.
 
 ### UI module
 
@@ -105,6 +106,11 @@ Each adapter module should provide:
 - optional UI helpers (`ui.parseStdoutLine`, `ui.buildAdapterConfig`)
 - optional CLI helpers (`cli.formatStdoutEvent`)
 
+`server.execute` should also preserve structured outcome semantics:
+
+- return blocked outcomes (`kind: "blocked"`) for validation/config failures that do not represent completed work
+- preserve adapter-specific observability fields (session, structured source, retries) in traces
+
 ## Design rule
 
 When adding or changing an adapter:
@@ -112,6 +118,7 @@ When adding or changing an adapter:
 - put adapter-specific code in that adapter's package
 - keep central registry/orchestration code generic
 - use shared runtime helpers only for cross-adapter primitives such as process spawning, retries, transcript normalization, or common environment handling
+- prefer adapter-local `listModels` and `testEnvironment`; registry fallback behavior is compatibility-only, not the primary extension point
 
 If a new behavior only applies to one runtime, it should live in that runtime's package, not in a central switch statement.
 

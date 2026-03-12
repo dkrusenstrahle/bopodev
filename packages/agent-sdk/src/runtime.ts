@@ -363,7 +363,7 @@ export async function executePromptRuntime(
       if (attemptResult.ok) {
         const claudeStream = provider === "claude_code" ? parseClaudeStreamOutput(stdout) : undefined;
         const cursorStream = provider === "cursor" ? parseCursorStreamOutput(stdout) : undefined;
-        const geminiStream = provider === "gemini_cli" ? parseGeminiStreamOutput(stdout) : undefined;
+        const geminiStream = provider === "gemini_cli" ? parseGeminiStreamOutput(stdout, stderr) : undefined;
         const stdoutUsage = cursorStream?.usage ?? claudeStream?.usage ?? geminiStream?.usage ?? parseStructuredUsage(stdout);
         const stderrUsage = parseStructuredUsage(stderr);
         return {
@@ -419,7 +419,7 @@ export async function executePromptRuntime(
 
     const claudeStream = provider === "claude_code" ? parseClaudeStreamOutput(stdout) : undefined;
     const cursorStream = provider === "cursor" ? parseCursorStreamOutput(stdout) : undefined;
-    const geminiStream = provider === "gemini_cli" ? parseGeminiStreamOutput(stdout) : undefined;
+    const geminiStream = provider === "gemini_cli" ? parseGeminiStreamOutput(stdout, stderr) : undefined;
     const stdoutUsage = cursorStream?.usage ?? claudeStream?.usage ?? geminiStream?.usage ?? parseStructuredUsage(stdout);
     const stderrUsage = parseStructuredUsage(stderr);
     return {
@@ -690,6 +690,11 @@ async function prepareSkillInjection(
         warning: `[bopodev] skills injection failed for opencode: ${String(error)}`
       };
     }
+  }
+
+  if (provider === "gemini_cli") {
+    // Gemini CLI does not support Claude-style --add-dir skill mounting.
+    return noSkillInjection();
   }
 
   try {
@@ -1786,7 +1791,10 @@ export function parseCursorStreamOutput(stdout: string): CursorParsedStream | un
   };
 }
 
-export function parseGeminiStreamOutput(stdout: string): { usage: ParsedUsageRecord; sessionId?: string } | undefined {
+export function parseGeminiStreamOutput(
+  stdout: string,
+  stderr?: string
+): { usage: ParsedUsageRecord; sessionId?: string } | undefined {
   let sessionId: string | undefined;
   let tokenInput = 0;
   let tokenOutput = 0;
@@ -1810,16 +1818,71 @@ export function parseGeminiStreamOutput(stdout: string): { usage: ParsedUsageRec
     const meta = (u.usageMetadata && typeof u.usageMetadata === "object" && !Array.isArray(u.usageMetadata)
       ? u.usageMetadata
       : u) as Record<string, unknown>;
-    tokenInput += toNumber(meta.input_tokens) ?? toNumber(meta.inputTokens) ?? toNumber(meta.promptTokenCount) ?? 0;
-    tokenInput += toNumber(meta.cached_input_tokens) ?? toNumber(meta.cachedInputTokens) ?? toNumber(meta.cachedContentTokenCount) ?? 0;
-    tokenOutput += toNumber(meta.output_tokens) ?? toNumber(meta.outputTokens) ?? toNumber(meta.candidatesTokenCount) ?? 0;
+    tokenInput +=
+      toNumber(meta.input_tokens) ??
+      toNumber(meta.inputTokens) ??
+      toNumber(meta.promptTokenCount) ??
+      toNumber(meta.prompt_tokens) ??
+      toNumber(meta.promptTokens) ??
+      0;
+    tokenInput +=
+      toNumber(meta.cached_input_tokens) ??
+      toNumber(meta.cachedInputTokens) ??
+      toNumber(meta.cachedContentTokenCount) ??
+      toNumber(meta.cache_read_input_tokens) ??
+      0;
+    tokenOutput +=
+      toNumber(meta.output_tokens) ??
+      toNumber(meta.outputTokens) ??
+      toNumber(meta.candidatesTokenCount) ??
+      toNumber(meta.completion_tokens) ??
+      toNumber(meta.completionTokens) ??
+      0;
+    if (
+      tokenOutput === 0 &&
+      (toNumber(meta.totalTokenCount) ?? 0) > 0 &&
+      (toNumber(meta.promptTokenCount) ?? 0) > 0
+    ) {
+      tokenOutput += Math.max(0, (toNumber(meta.totalTokenCount) ?? 0) - (toNumber(meta.promptTokenCount) ?? 0));
+    }
     usdCost += toNumber(u.total_cost_usd) ?? toNumber(u.cost_usd) ?? toNumber(u.cost) ?? 0;
     sawUsage = true;
   }
 
-  for (const rawLine of stdout.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line.startsWith("{") || !line.endsWith("}")) continue;
+  function accumulateNestedUsage(raw: unknown) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
+    const record = raw as Record<string, unknown>;
+    if (record.usage) {
+      accumulateUsage(record.usage);
+    }
+    if (record.stats) {
+      accumulateUsage(record.stats);
+    }
+    if (record.usageMetadata) {
+      accumulateUsage(record.usageMetadata);
+    }
+    if (record.response && typeof record.response === "object" && !Array.isArray(record.response)) {
+      accumulateNestedUsage(record.response);
+    }
+    if (record.result && typeof record.result === "object" && !Array.isArray(record.result)) {
+      accumulateNestedUsage(record.result);
+    }
+    if (record.message && typeof record.message === "object" && !Array.isArray(record.message)) {
+      accumulateNestedUsage(record.message);
+    }
+    if (record.data && typeof record.data === "object" && !Array.isArray(record.data)) {
+      accumulateNestedUsage(record.data);
+    }
+    if (record.payload && typeof record.payload === "object" && !Array.isArray(record.payload)) {
+      accumulateNestedUsage(record.payload);
+    }
+  }
+
+  const rawBlocks = [
+    ...extractJsonObjectBlocks(stdout),
+    ...extractJsonObjectBlocks(stderr ?? "")
+  ];
+  for (const line of rawBlocks) {
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(line) as Record<string, unknown>;
@@ -1828,10 +1891,8 @@ export function parseGeminiStreamOutput(stdout: string): { usage: ParsedUsageRec
     }
     readSessionId(parsed);
     const type = (typeof parsed.type === "string" ? parsed.type : "").trim().toLowerCase();
-    if (parsed.usage) accumulateUsage(parsed.usage);
-    if (parsed.usageMetadata) accumulateUsage(parsed.usageMetadata);
+    accumulateNestedUsage(parsed);
     if (type === "result") {
-      accumulateUsage(parsed.usage ?? parsed.usageMetadata);
       usdCost += toNumber(parsed.total_cost_usd) ?? toNumber(parsed.cost_usd) ?? toNumber(parsed.cost) ?? 0;
       const resultText =
         (typeof parsed.result === "string" && parsed.result.trim()) ||
@@ -1839,7 +1900,6 @@ export function parseGeminiStreamOutput(stdout: string): { usage: ParsedUsageRec
         (typeof parsed.response === "string" && parsed.response.trim());
       if (resultText) summary = resultText;
     }
-    if (type === "step_finish" && parsed.usage) accumulateUsage(parsed.usage);
   }
 
   if (!sawUsage && usdCost <= 0 && !summary && !sessionId) return undefined;
@@ -2015,14 +2075,24 @@ function parseGeminiStreamingTranscriptLine(line: string): RuntimeTranscriptEven
       (typeof parsed.text === "string" && parsed.text.trim()) ||
       "";
     const usage = parsed.usage as Record<string, unknown> | undefined;
-    const inT = usage && typeof usage === "object" ? toNumber(usage.input_tokens ?? usage.inputTokens) ?? 0 : 0;
-    const outT = usage && typeof usage === "object" ? toNumber(usage.output_tokens ?? usage.outputTokens) ?? 0 : 0;
+    const stats = parsed.stats as Record<string, unknown> | undefined;
+    const inT =
+      (usage && typeof usage === "object" ? toNumber(usage.input_tokens ?? usage.inputTokens) : undefined) ??
+      (stats && typeof stats === "object" ? toNumber(stats.input_tokens ?? stats.inputTokens ?? stats.input) : undefined) ??
+      0;
+    const outT =
+      (usage && typeof usage === "object" ? toNumber(usage.output_tokens ?? usage.outputTokens) : undefined) ??
+      (stats && typeof stats === "object" ? toNumber(stats.output_tokens ?? stats.outputTokens ?? stats.output) : undefined) ??
+      0;
     const cost = toNumber(parsed.total_cost_usd ?? parsed.cost_usd ?? parsed.cost) ?? 0;
+    const usageSuffix = inT > 0 || outT > 0 || cost > 0
+      ? `tokens in=${inT} out=${outT} cost=$${cost.toFixed(6)}`
+      : "";
     return [
       {
         kind: "result",
         text: clipText(
-          [resultText, `tokens in=${inT} out=${outT} cost=$${cost.toFixed(6)}`].filter(Boolean).join("\n"),
+          [resultText, usageSuffix].filter(Boolean).join("\n"),
           1200
         )
       }
@@ -2083,13 +2153,23 @@ function parseGeminiTranscript(stdout: string, stderr: string): RuntimeTranscrip
         (typeof parsed.text === "string" && parsed.text.trim()) ||
         "";
       const usage = parsed.usage as Record<string, unknown> | undefined;
-      const inT = usage && typeof usage === "object" ? toNumber(usage.input_tokens ?? usage.inputTokens) ?? 0 : 0;
-      const outT = usage && typeof usage === "object" ? toNumber(usage.output_tokens ?? usage.outputTokens) ?? 0 : 0;
+      const stats = parsed.stats as Record<string, unknown> | undefined;
+      const inT =
+        (usage && typeof usage === "object" ? toNumber(usage.input_tokens ?? usage.inputTokens) : undefined) ??
+        (stats && typeof stats === "object" ? toNumber(stats.input_tokens ?? stats.inputTokens ?? stats.input) : undefined) ??
+        0;
+      const outT =
+        (usage && typeof usage === "object" ? toNumber(usage.output_tokens ?? usage.outputTokens) : undefined) ??
+        (stats && typeof stats === "object" ? toNumber(stats.output_tokens ?? stats.outputTokens ?? stats.output) : undefined) ??
+        0;
       const cost = toNumber(parsed.total_cost_usd ?? parsed.cost_usd ?? parsed.cost) ?? 0;
+      const usageSuffix = inT > 0 || outT > 0 || cost > 0
+        ? `tokens in=${inT} out=${outT} cost=$${cost.toFixed(6)}`
+        : "";
       events.push({
         kind: "result",
         text: clipText(
-          [resultText, `tokens in=${inT} out=${outT} cost=$${cost.toFixed(6)}`].filter(Boolean).join("\n"),
+          [resultText, usageSuffix].filter(Boolean).join("\n"),
           1200
         )
       });

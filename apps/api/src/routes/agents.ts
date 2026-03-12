@@ -22,6 +22,7 @@ import { sendError, sendOk } from "../http";
 import {
   normalizeRuntimeConfig,
   parseRuntimeConfigFromAgentRow,
+  resolveRuntimeModelForProvider,
   requiresRuntimeCwd,
   runtimeConfigToDb,
   runtimeConfigToStateBlobPatch
@@ -278,6 +279,7 @@ export function createAgentsRouter(ctx: AppContext) {
       defaultRuntimeCwd
     });
     runtimeConfig.runtimeModel = await resolveOpencodeRuntimeModel(parsed.data.providerType, runtimeConfig);
+    runtimeConfig.runtimeModel = resolveRuntimeModelForProvider(parsed.data.providerType, runtimeConfig.runtimeModel);
     if (!ensureNamedRuntimeModel(parsed.data.providerType, runtimeConfig.runtimeModel)) {
       return sendError(res, "A named runtime model is required for this provider.", 422);
     }
@@ -413,6 +415,7 @@ export function createAgentsRouter(ctx: AppContext) {
         : {})
     };
     nextRuntime.runtimeModel = await resolveOpencodeRuntimeModel(effectiveProviderType, nextRuntime);
+    nextRuntime.runtimeModel = resolveRuntimeModelForProvider(effectiveProviderType, nextRuntime.runtimeModel);
     if (!ensureNamedRuntimeModel(effectiveProviderType, nextRuntime.runtimeModel)) {
       return sendError(res, "A named runtime model is required for this provider.", 422);
     }

@@ -168,9 +168,19 @@ export async function calculateModelPricedUsdCost(input: {
       pricingModelId: normalizedModelId
     };
   }
+  const normalizedTokenInput = Math.max(0, input.tokenInput);
+  const normalizedTokenOutput = Math.max(0, input.tokenOutput);
+  if (normalizedTokenInput === 0 && normalizedTokenOutput === 0) {
+    return {
+      usdCost: 0,
+      pricingSource: "missing" as const,
+      pricingProviderType: canonicalPricingProviderType,
+      pricingModelId: normalizedModelId
+    };
+  }
   const computedUsd =
-    (Math.max(0, input.tokenInput) / 1_000_000) * inputUsdPer1M +
-    (Math.max(0, input.tokenOutput) / 1_000_000) * outputUsdPer1M;
+    (normalizedTokenInput / 1_000_000) * inputUsdPer1M +
+    (normalizedTokenOutput / 1_000_000) * outputUsdPer1M;
   return {
     usdCost: Number.isFinite(computedUsd) ? computedUsd : 0,
     pricingSource: Number.isFinite(computedUsd) ? ("exact" as const) : ("missing" as const),

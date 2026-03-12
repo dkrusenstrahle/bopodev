@@ -22,6 +22,10 @@ export type ModelOption = {
   label: string;
 };
 
+const MODEL_LABEL_OVERRIDES: Record<string, string> = {
+  "opencode/big-pickle": "Big Pickle"
+};
+
 export function resolveCanonicalPricingProviderForRuntime(
   providerType: RuntimeProviderType
 ): CanonicalPricingProvider | null {
@@ -89,6 +93,14 @@ export function getAllowedModelIdsForProvider(providerType: RuntimeProviderType)
   return ALLOWED_MODEL_IDS_BY_PROVIDER[providerType] ?? [];
 }
 
+function normalizeModelIdForRuntimeProvider(providerType: RuntimeProviderType, modelId: string): string {
+  const normalized = modelId.trim();
+  if (providerType === "opencode" && normalized === "big-pickle") {
+    return "opencode/big-pickle";
+  }
+  return normalized;
+}
+
 export function getRegistryModelValuesForRuntimeProvider(
   rows: ModelRegistryRow[],
   providerType: RuntimeProviderType
@@ -99,7 +111,7 @@ export function getRegistryModelValuesForRuntimeProvider(
   }
   const discovered = rows
     .filter((row) => row.providerType === canonical)
-    .map((row) => row.modelId.trim())
+    .map((row) => normalizeModelIdForRuntimeProvider(providerType, row.modelId))
     .filter((value) => value.length > 0);
   if (discovered.length > 0) {
     return Array.from(new Set(discovered));
@@ -129,7 +141,7 @@ export function buildRegistryModelOptions(input: {
       if (row.providerType !== canonical) {
         continue;
       }
-      const modelId = row.modelId.trim();
+      const modelId = normalizeModelIdForRuntimeProvider(input.providerType, row.modelId);
       if (!modelId) {
         continue;
       }
@@ -137,9 +149,14 @@ export function buildRegistryModelOptions(input: {
     }
   }
   for (const modelId of Array.from(new Set(values)).sort()) {
-    options.push({ value: modelId, label: labelByModelId.get(modelId) ?? modelId });
+    options.push({
+      value: modelId,
+      label: labelByModelId.get(modelId) ?? MODEL_LABEL_OVERRIDES[modelId] ?? modelId
+    });
   }
-  const currentModel = input.currentModel?.trim();
+  const currentModel = input.currentModel
+    ? normalizeModelIdForRuntimeProvider(input.providerType, input.currentModel)
+    : undefined;
   if (currentModel && !options.some((entry) => entry.value === currentModel)) {
     options.push({ value: currentModel, label: `${currentModel} (current)` });
   }

@@ -375,6 +375,8 @@ export async function runHeartbeatForAgent(
   let memoryContext: HeartbeatContext["memoryContext"] | undefined;
   let stateParseError: string | null = null;
   let runtimeLaunchSummary: ReturnType<typeof summarizeRuntimeLaunch> | null = null;
+  let primaryIssueId: string | null = null;
+  let primaryProjectId: string | null = null;
   let transcriptSequence = 0;
   let transcriptWriteQueue = Promise.resolve();
   let transcriptLiveCount = 0;
@@ -501,6 +503,8 @@ export async function runHeartbeatForAgent(
     });
     const workItems = await claimIssuesForAgent(db, companyId, agentId, runId);
     issueIds = workItems.map((item) => item.id);
+    primaryIssueId = workItems[0]?.id ?? null;
+    primaryProjectId = workItems[0]?.project_id ?? null;
     await runPluginHook(db, {
       hook: "afterClaim",
       context: {
@@ -795,16 +799,21 @@ export async function runHeartbeatForAgent(
     });
     const effectivePricingProviderType = execution.pricingProviderType ?? agent.providerType;
     const effectivePricingModelId = execution.pricingModelId ?? runtimeModelId;
-    const pricingDecision = await calculateModelPricedUsdCost({
+    const costDecision = await appendFinishedRunCostEntry({
       db,
       companyId,
       providerType: agent.providerType,
+      runtimeModelId: effectivePricingModelId ?? runtimeModelId,
       pricingProviderType: effectivePricingProviderType,
-      modelId: effectivePricingModelId,
+      pricingModelId: effectivePricingModelId,
       tokenInput: execution.tokenInput,
-      tokenOutput: execution.tokenOutput
+      tokenOutput: execution.tokenOutput,
+      issueId: primaryIssueId,
+      projectId: primaryProjectId,
+      agentId,
+      status: execution.status
     });
-    const executionUsdCost = pricingDecision.usdCost;
+    const executionUsdCost = costDecision.usdCost;
     const parsedOutcome = ExecutionOutcomeSchema.safeParse(execution.outcome);
     executionOutcome = parsedOutcome.success ? parsedOutcome.data : null;
     const persistedMemory = await persistHeartbeatMemory({
@@ -853,23 +862,6 @@ export async function runHeartbeatForAgent(
       }
     }
 
-    if (execution.tokenInput > 0 || execution.tokenOutput > 0 || executionUsdCost > 0) {
-      await appendCost(db, {
-        companyId,
-        providerType: agent.providerType,
-        runtimeModelId: effectivePricingModelId ?? runtimeModelId,
-        pricingProviderType: pricingDecision.pricingProviderType,
-        pricingModelId: pricingDecision.pricingModelId,
-        pricingSource: pricingDecision.pricingSource,
-        tokenInput: execution.tokenInput,
-        tokenOutput: execution.tokenOutput,
-        usdCost: executionUsdCost.toFixed(6),
-        issueId: workItems[0]?.id ?? null,
-        projectId: workItems[0]?.project_id ?? null,
-        agentId
-      });
-    }
-
     if (
       execution.nextState ||
       executionUsdCost > 0 ||
@@ -881,6 +873,7 @@ export async function runHeartbeatForAgent(
         .update(agents)
         .set({
           stateBlob: JSON.stringify(execution.nextState ?? state),
+          runtimeModel: effectivePricingModelId ?? persistedRuntime.runtimeModel ?? null,
           usedBudgetUsd: sql`${agents.usedBudgetUsd} + ${executionUsdCost}`,
           tokenUsage: sql`${agents.tokenUsage} + ${execution.tokenInput + execution.tokenOutput}`,
           updatedAt: new Date()
@@ -1131,6 +1124,24 @@ export async function runHeartbeatForAgent(
         cwd: runtimeLaunchSummary.cwd ?? null
       };
     }
+    const runtimeModelId = resolveRuntimeModelId({
+      runtimeModel: persistedRuntime.runtimeModel,
+      stateBlob: agent.stateBlob
+    });
+    await appendFinishedRunCostEntry({
+      db,
+      companyId,
+      providerType: agent.providerType,
+      runtimeModelId,
+      pricingProviderType: agent.providerType,
+      pricingModelId: runtimeModelId,
+      tokenInput: 0,
+      tokenOutput: 0,
+      issueId: primaryIssueId,
+      projectId: primaryProjectId,
+      agentId,
+      status: "failed"
+    });
     await db
       .update(heartbeatRuns)
       .set({
@@ -2144,6 +2155,7 @@ function buildHeartbeatRuntimeEnv(input: {
     BOPODEV_RUN_ID: input.heartbeatRunId,
     BOPODEV_FORCE_MANAGED_CODEX_HOME: "false",
     BOPODEV_API_BASE_URL: apiBaseUrl,
+    BOPODEV_API_URL: apiBaseUrl,
     BOPODEV_ACTOR_TYPE: "agent",
     BOPODEV_ACTOR_ID: input.agentId,
     BOPODEV_ACTOR_COMPANIES: input.companyId,
@@ -2157,7 +2169,9 @@ function buildHeartbeatRuntimeEnv(input: {
 }
 
 function resolveControlPlaneApiBaseUrl() {
-  const configured = resolveControlPlaneProcessEnv("API_BASE_URL") ?? process.env.NEXT_PUBLIC_API_URL;
+  // Agent runtimes must call the control-plane API directly; do not inherit
+  // browser-facing NEXT_PUBLIC_API_URL (can point to non-runtime endpoints).
+  const configured = resolveControlPlaneProcessEnv("API_BASE_URL");
   return normalizeControlPlaneApiBaseUrl(configured) ?? "http://127.0.0.1:4020";
 }
 
@@ -2270,7 +2284,8 @@ function shouldRequireControlPlanePreflight(
     providerType === "codex" ||
     providerType === "claude_code" ||
     providerType === "cursor" ||
-    providerType === "opencode"
+    providerType === "opencode" ||
+    providerType === "gemini_cli"
   );
 }
 
@@ -2404,6 +2419,51 @@ function resolveRuntimeModelId(input: { runtimeModel?: string; stateBlob?: strin
   } catch {
     return null;
   }
+}
+
+async function appendFinishedRunCostEntry(input: {
+  db: BopoDb;
+  companyId: string;
+  providerType: string;
+  runtimeModelId: string | null;
+  pricingProviderType?: string | null;
+  pricingModelId?: string | null;
+  tokenInput: number;
+  tokenOutput: number;
+  issueId?: string | null;
+  projectId?: string | null;
+  agentId?: string | null;
+  status: "ok" | "failed" | "skipped";
+}) {
+  const pricingDecision = await calculateModelPricedUsdCost({
+    db: input.db,
+    companyId: input.companyId,
+    providerType: input.providerType,
+    pricingProviderType: input.pricingProviderType ?? input.providerType,
+    modelId: input.pricingModelId ?? input.runtimeModelId,
+    tokenInput: input.tokenInput,
+    tokenOutput: input.tokenOutput
+  });
+
+  const shouldPersist = input.status === "ok" || input.status === "failed";
+  if (shouldPersist) {
+    await appendCost(input.db, {
+      companyId: input.companyId,
+      providerType: input.providerType,
+      runtimeModelId: input.runtimeModelId,
+      pricingProviderType: pricingDecision.pricingProviderType,
+      pricingModelId: pricingDecision.pricingModelId,
+      pricingSource: pricingDecision.pricingSource,
+      tokenInput: input.tokenInput,
+      tokenOutput: input.tokenOutput,
+      usdCost: pricingDecision.usdCost.toFixed(6),
+      issueId: input.issueId ?? null,
+      projectId: input.projectId ?? null,
+      agentId: input.agentId ?? null
+    });
+  }
+
+  return pricingDecision;
 }
 
 function isHeartbeatDue(cronExpression: string, lastRunAt: Date | null, now: Date) {

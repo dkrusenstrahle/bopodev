@@ -18,6 +18,7 @@ import {
 } from "bopodev-db";
 import {
   normalizeRuntimeConfig,
+  resolveRuntimeModelForProvider,
   requiresRuntimeCwd,
   runtimeConfigToDb,
   runtimeConfigToStateBlobPatch
@@ -195,6 +196,7 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
       defaultRuntimeCwd
     });
     runtimeConfig.runtimeModel = await resolveOpencodeRuntimeModel(parsed.data.providerType, runtimeConfig);
+    runtimeConfig.runtimeModel = resolveRuntimeModelForProvider(parsed.data.providerType, runtimeConfig.runtimeModel);
     if (providerRequiresNamedModel(parsed.data.providerType) && !hasText(runtimeConfig.runtimeModel)) {
       throw new GovernanceError("Approval payload for agent hiring must include a named runtime model.");
     }

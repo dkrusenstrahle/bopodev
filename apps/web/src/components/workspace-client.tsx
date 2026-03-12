@@ -69,6 +69,54 @@ function resolveModelCatalogProvider(providerType: string) {
   return null;
 }
 
+function normalizeModelIdForCatalog(providerType: string, modelId: string | null | undefined) {
+  const normalizedModel = modelId?.trim();
+  if (!normalizedModel) {
+    return null;
+  }
+  if (providerType === "opencode" && normalizedModel === "big-pickle") {
+    return "opencode/big-pickle";
+  }
+  return normalizedModel;
+}
+
+function resolveRuntimeProviderForModelDefaults(providerType: string) {
+  const normalizedProviderType = providerType.trim();
+  if (
+    normalizedProviderType === "codex" ||
+    normalizedProviderType === "claude_code" ||
+    normalizedProviderType === "opencode" ||
+    normalizedProviderType === "gemini_cli" ||
+    normalizedProviderType === "openai_api" ||
+    normalizedProviderType === "anthropic_api" ||
+    normalizedProviderType === "http" ||
+    normalizedProviderType === "shell"
+  ) {
+    return normalizedProviderType;
+  }
+  if (normalizedProviderType === "gemini_api") {
+    return "gemini_cli";
+  }
+  return null;
+}
+
+function resolveNamedModelForAgent(agent: {
+  providerType: string;
+  runtimeModel?: string | null;
+  stateBlob?: string;
+}) {
+  const configuredModel = agent.runtimeModel?.trim() || parseRuntimeModelFromStateBlob(agent.stateBlob);
+  if (configuredModel) {
+    return configuredModel;
+  }
+  const runtimeProvider = resolveRuntimeProviderForModelDefaults(agent.providerType);
+  if (!runtimeProvider) {
+    return null;
+  }
+  const fallback = getSupportedModelOptionsForProvider(runtimeProvider).find((option) => option.value.trim().length > 0);
+  return fallback?.value ?? null;
+}
+
 const AgentRuntimeDefaultsCard = dynamic(
   () => import("@/components/agent-runtime-defaults-card").then((module) => module.AgentRuntimeDefaultsCard),
   {
@@ -1450,9 +1498,10 @@ export function WorkspaceClient({
     for (const agent of agents) {
       const provider = resolveModelCatalogProvider(agent.providerType?.trim() ?? "");
       if (!provider) continue;
-      const model =
+      const rawModel =
         agent.runtimeModel?.trim() ||
         parseRuntimeModelFromStateBlob(agent.stateBlob);
+      const model = normalizeModelIdForCatalog(provider, rawModel);
       if (!model) continue;
       pairs.push({ providerType: provider, modelId: model });
     }
@@ -1469,13 +1518,37 @@ export function WorkspaceClient({
 
   const mergedModelPricing = useMemo<ModelPricingRow[]>(() => {
     const byKey = new Map<string, ModelPricingRow>();
+    // Seed catalog defaults so the models page always lists known provider models.
+    for (const providerType of MODELS_PROVIDER_FALLBACKS) {
+      const sourceProvider =
+        providerType === "opencode" ? "opencode" : providerType === "gemini_api" ? "gemini_cli" : providerType;
+      const defaults = getSupportedModelOptionsForProvider(sourceProvider).filter((option) => option.value.trim().length > 0);
+      for (const option of defaults) {
+        const modelId = normalizeModelIdForCatalog(providerType, option.value);
+        if (!modelId) continue;
+        const key = `${providerType}::${modelId}`;
+        if (byKey.has(key)) continue;
+        byKey.set(key, {
+          providerType,
+          modelId,
+          displayName: option.label,
+          inputUsdPer1M: 0,
+          outputUsdPer1M: 0,
+          currency: "USD",
+          updatedAt: null,
+          updatedBy: null
+        });
+      }
+    }
     // Start with derived entries from agent models.
     for (const pair of agentModelPairs) {
-      const key = `${pair.providerType}::${pair.modelId}`;
+      const normalizedModel = normalizeModelIdForCatalog(pair.providerType, pair.modelId);
+      if (!normalizedModel) continue;
+      const key = `${pair.providerType}::${normalizedModel}`;
       if (byKey.has(key)) continue;
       byKey.set(key, {
         providerType: pair.providerType,
-        modelId: pair.modelId,
+        modelId: normalizedModel,
         displayName: null,
         inputUsdPer1M: 0,
         outputUsdPer1M: 0,
@@ -1486,8 +1559,15 @@ export function WorkspaceClient({
     }
     // Overlay persisted pricing from API.
     for (const row of modelPricing) {
-      const key = `${row.providerType}::${row.modelId}`;
-      byKey.set(key, row);
+      const providerType = row.providerType.trim();
+      const normalizedModel = normalizeModelIdForCatalog(providerType, row.modelId);
+      if (!normalizedModel) continue;
+      const key = `${providerType}::${normalizedModel}`;
+      byKey.set(key, {
+        ...row,
+        providerType,
+        modelId: normalizedModel
+      });
     }
     return Array.from(byKey.values()).sort((a, b) => {
       if (a.providerType === b.providerType) {
@@ -1498,7 +1578,16 @@ export function WorkspaceClient({
   }, [agentModelPairs, modelPricing]);
 
   const configuredModelPricingKeys = useMemo(() => {
-    return new Set(modelPricing.map((row) => `${row.providerType.trim()}::${row.modelId.trim()}`));
+    return new Set(
+      modelPricing
+        .map((row) => {
+          const providerType = row.providerType.trim();
+          const modelId = normalizeModelIdForCatalog(providerType, row.modelId);
+          if (!modelId) return null;
+          return `${providerType}::${modelId}`;
+        })
+        .filter((entry): entry is string => Boolean(entry))
+    );
   }, [modelPricing]);
 
   const missingModelPricingPairs = useMemo(() => {
@@ -1513,7 +1602,7 @@ export function WorkspaceClient({
     const modelsByProvider = new Map<string, Set<string>>();
     const addModel = (providerType: string, modelId: string | null | undefined) => {
       const provider = resolveModelCatalogProvider(providerType);
-      const model = modelId?.trim();
+      const model = normalizeModelIdForCatalog(provider ?? providerType, modelId);
       if (!provider || !model) {
         return;
       }
@@ -1931,6 +2020,15 @@ export function WorkspaceClient({
         cell: ({ row }) => <Badge variant="outline">{row.original.providerType}</Badge>
       },
       {
+        id: "runtimeModel",
+        accessorFn: (row) => resolveNamedModelForAgent(row) ?? "",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Model" />,
+        cell: ({ row }) => {
+          const model = resolveNamedModelForAgent(row.original);
+          return <div className={styles.formatDurationContainer1}>{model ?? "-"}</div>;
+        }
+      },
+      {
         accessorKey: "status",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
         cell: ({ row }) => (
@@ -2299,6 +2397,14 @@ export function WorkspaceClient({
         cell: ({ row }) => <div className={styles.formatDurationContainer1}>{row.original.providerType}</div>
       },
       {
+        id: "modelId",
+        accessorFn: (row) => row.runtimeModelId ?? row.pricingModelId ?? "",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Model" />,
+        cell: ({ row }) => (
+          <div className={styles.formatDurationContainer1}>{row.original.runtimeModelId ?? row.original.pricingModelId ?? "-"}</div>
+        )
+      },
+      {
         accessorKey: "tokenInput",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Input tokens" />,
         cell: ({ row }) => <div className={styles.formatDurationContainer5}>{row.original.tokenInput.toLocaleString()}</div>
@@ -2312,14 +2418,6 @@ export function WorkspaceClient({
         accessorKey: "usdCost",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />,
         cell: ({ row }) => <div className={styles.formatDurationContainer5}>{formatUsdCost(row.original.usdCost)}</div>
-      },
-      {
-        accessorKey: "pricingSource",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Pricing" />,
-        cell: ({ row }) => {
-          const source = row.original.pricingSource ?? "missing";
-          return <Badge variant="outline">{source === "exact" ? "exact" : "missing"}</Badge>;
-        }
       },
       {
         id: "scope",

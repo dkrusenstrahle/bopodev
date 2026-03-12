@@ -44,6 +44,34 @@ export function requiresRuntimeCwd(providerType: string) {
   );
 }
 
+export function resolveDefaultRuntimeModelForProvider(providerType: string | undefined) {
+  const normalizedProviderType = providerType?.trim() ?? "";
+  if (normalizedProviderType === "claude_code") {
+    return "claude-sonnet-4-6";
+  }
+  if (normalizedProviderType === "codex") {
+    return "gpt-5.3-codex";
+  }
+  if (normalizedProviderType === "opencode") {
+    return "opencode/big-pickle";
+  }
+  if (normalizedProviderType === "gemini_cli") {
+    return "gemini-2.5-pro";
+  }
+  return undefined;
+}
+
+export function resolveRuntimeModelForProvider(
+  providerType: string | undefined,
+  runtimeModel: string | undefined
+) {
+  const normalizedRuntimeModel = runtimeModel?.trim() || undefined;
+  if (normalizedRuntimeModel) {
+    return normalizedRuntimeModel;
+  }
+  return resolveDefaultRuntimeModelForProvider(providerType);
+}
+
 export function normalizeRuntimeConfig(input: {
   runtimeConfig?: Partial<AgentRuntimeConfig>;
   legacy?: LegacyRuntimeFields;
@@ -117,12 +145,15 @@ export function parseRuntimeConfigFromAgentRow(agent: Record<string, unknown>): 
       ? timeoutSecFromColumn
       : (toSeconds(fallback.timeoutMs) ?? 0);
 
+  const providerType = toText(agent.providerType);
+  const runtimeModel = resolveRuntimeModelForProvider(providerType, toText(agent.runtimeModel) ?? fallback.model);
+
   return {
     runtimeCommand: toText(agent.runtimeCommand) ?? fallback.command,
     runtimeArgs,
     runtimeCwd: toText(agent.runtimeCwd) ?? fallback.cwd,
     runtimeEnv,
-    runtimeModel: toText(agent.runtimeModel),
+    runtimeModel,
     runtimeThinkingEffort: parseThinkingEffort(agent.runtimeThinkingEffort),
     bootstrapPrompt: toText(agent.bootstrapPrompt),
     runtimeTimeoutSec: Math.max(0, timeoutSec),
@@ -166,6 +197,7 @@ function parseRuntimeFromStateBlob(raw: unknown) {
       args?: string[];
       cwd?: string;
       env?: Record<string, string>;
+      model?: string;
       timeoutMs?: number;
     };
   }
@@ -176,6 +208,7 @@ function parseRuntimeFromStateBlob(raw: unknown) {
         args?: unknown;
         cwd?: unknown;
         env?: unknown;
+        model?: unknown;
         timeoutMs?: unknown;
       };
     };
@@ -185,6 +218,7 @@ function parseRuntimeFromStateBlob(raw: unknown) {
       args: Array.isArray(runtime.args) ? runtime.args.map((entry) => String(entry)) : undefined,
       cwd: typeof runtime.cwd === "string" ? runtime.cwd : undefined,
       env: toRecord(runtime.env),
+      model: typeof runtime.model === "string" && runtime.model.trim().length > 0 ? runtime.model.trim() : undefined,
       timeoutMs: toNumber(runtime.timeoutMs)
     };
   } catch {

@@ -1017,18 +1017,26 @@ export async function runOpenCodeWork(context: HeartbeatContext): Promise<Adapte
   }, pricingIdentity);
 }
 
-function resolveGeminiResumeState(state: HeartbeatContext["state"], cwd: string): {
+function resolveGeminiResumeState(state: HeartbeatContext["state"], cwd: string, model: string | null): {
   resumeSessionId: string | null;
   resumeAttempted: boolean;
   resumeSkippedReason: string | null;
 } {
   const savedSessionId = state.sessionId?.trim() || null;
   const savedCwd = state.cwd?.trim() || null;
+  const savedModel =
+    (typeof (state as { runtime?: { model?: unknown } }).runtime?.model === "string"
+      ? ((state as { runtime?: { model?: string } }).runtime?.model ?? "").trim()
+      : "") || null;
+  const normalizedModel = model?.trim() || null;
   if (!savedSessionId) {
     return { resumeSessionId: null, resumeAttempted: false, resumeSkippedReason: null };
   }
   if (savedCwd && resolve(savedCwd) !== resolve(cwd)) {
     return { resumeSessionId: null, resumeAttempted: false, resumeSkippedReason: "cwd_mismatch" };
+  }
+  if (savedModel && normalizedModel && savedModel !== normalizedModel) {
+    return { resumeSessionId: null, resumeAttempted: false, resumeSkippedReason: "model_mismatch" };
   }
   return { resumeSessionId: savedSessionId, resumeAttempted: true, resumeSkippedReason: null };
 }
@@ -1039,7 +1047,7 @@ export async function runGeminiCliWork(context: HeartbeatContext): Promise<Adapt
   const command = context.runtime?.command?.trim() || "gemini";
   const model = context.runtime?.model?.trim() || "";
   const pricingIdentity = resolveGeminiPricingIdentity(model || null);
-  const resumeState = resolveGeminiResumeState(context.state, cwd);
+  const resumeState = resolveGeminiResumeState(context.state, cwd, model || null);
   const runtimeTimeoutMs =
     context.runtime?.timeoutMs && context.runtime.timeoutMs > 0 ? context.runtime.timeoutMs : 15 * 60 * 1000;
 
@@ -1922,6 +1930,20 @@ export function createPrompt(context: HeartbeatContext) {
     memoryContext?.dailyNotes && memoryContext.dailyNotes.length > 0
       ? memoryContext.dailyNotes.map((note) => `- ${note}`).join("\n")
       : "- No recent daily notes.";
+  const controlPlaneApiBaseUrl =
+    context.runtime?.env?.BOPODEV_API_BASE_URL?.trim() || context.runtime?.env?.BOPODEV_API_URL?.trim() || "";
+  const hasControlPlaneHeaders = Boolean(context.runtime?.env?.BOPODEV_REQUEST_HEADERS_JSON?.trim());
+  const controlPlaneDirectives = [
+    "Control-plane API directives:",
+    controlPlaneApiBaseUrl
+      ? `- Use BOPODEV_API_BASE_URL (or BOPODEV_API_URL) for API calls. Current value: ${controlPlaneApiBaseUrl}`
+      : "- BOPODEV_API_BASE_URL is missing. Report this as blocker instead of guessing URLs.",
+    "- Never guess fallback URLs such as localhost:3000.",
+    "- Include actor headers via BOPODEV_REQUEST_HEADERS_JSON for curl requests.",
+    hasControlPlaneHeaders
+      ? "- BOPODEV_REQUEST_HEADERS_JSON is present in env."
+      : "- BOPODEV_REQUEST_HEADERS_JSON is missing. Report this as blocker."
+  ].join("\n");
 
   const executionDirectives = [
     "Execution directives:",
@@ -1972,6 +1994,8 @@ ${memoryDurableFacts}
 ${memoryDailyNotes}
 
 ${executionDirectives}
+
+${controlPlaneDirectives}
 
 At the end of your response, output exactly one JSON object on a single line and nothing else:
 {"summary":"brief outcome and any blocker"}

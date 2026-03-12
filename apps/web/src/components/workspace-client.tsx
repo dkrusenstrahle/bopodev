@@ -2015,11 +2015,6 @@ export function WorkspaceClient({
         }
       },
       {
-        accessorKey: "providerType",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Provider" />,
-        cell: ({ row }) => <Badge variant="outline">{row.original.providerType}</Badge>
-      },
-      {
         id: "runtimeModel",
         accessorFn: (row) => resolveNamedModelForAgent(row) ?? "",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Model" />,

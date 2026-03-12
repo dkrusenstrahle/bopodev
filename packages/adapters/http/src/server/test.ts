@@ -1,6 +1,10 @@
 import type { AgentRuntimeConfig, AdapterEnvironmentResult } from "../../../../agent-sdk/src/types";
-import { listAdapterModels, testAdapterEnvironment, testDirectApiEnvironment } from "../../../../agent-sdk/src/adapters";
 
 export async function testEnvironment(runtime?: AgentRuntimeConfig): Promise<AdapterEnvironmentResult> {
-  return testAdapterEnvironment("http", runtime);
+  return {
+    providerType: "http",
+    status: "pass",
+    testedAt: new Date().toISOString(),
+    checks: [{ code: "http_adapter_ready", level: "info", message: "HTTP adapter does not require local CLI checks." }]
+  };
 }

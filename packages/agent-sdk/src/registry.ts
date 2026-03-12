@@ -1,4 +1,3 @@
-import { listAdapterModels, testAdapterEnvironment } from "./adapters";
 import type {
   AdapterEnvironmentResult,
   AdapterMetadata,
@@ -85,7 +84,7 @@ export async function getAdapterModels(
   if (fromModule) {
     return fromModule;
   }
-  return adapterModules[providerType].models ? [...adapterModules[providerType].models] : listAdapterModels(providerType, runtime);
+  return adapterModules[providerType].models ? [...adapterModules[providerType].models] : [];
 }
 
 export function getAdapterMetadata(): AdapterMetadata[] {
@@ -100,5 +99,10 @@ export async function runAdapterEnvironmentTest(
   if (testEnvironment) {
     return testEnvironment(runtime);
   }
-  return testAdapterEnvironment(providerType, runtime);
+  return {
+    providerType,
+    status: "warn",
+    testedAt: new Date().toISOString(),
+    checks: [{ code: "test_environment_unavailable", level: "warn", message: "Adapter does not expose testEnvironment." }]
+  };
 }

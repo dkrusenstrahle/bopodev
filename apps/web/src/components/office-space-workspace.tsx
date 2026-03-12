@@ -149,50 +149,49 @@ function OfficeSpaceCanvas({
           {roomDefinitions.map((room) => {
             const roomOccupants = occupantsByRoom.get(room.id) ?? [];
             return (
-              <section
+              <Card
                 key={room.id}
                 className={cn(
-                  styles.roomCard,
-                  styles[`roomCard${toPascalCase(room.id)}`],
                   styles[`roomArea${toPascalCase(room.id)}`]
-                )}
-              >
-                <div className={styles.roomHeader}>
-                  <h2 className={styles.roomTitle}>{room.title}</h2>
-                  <span className={styles.roomCount}>{roomOccupants.length}</span>
-                </div>
-                <div
-                  className={cn(
-                    styles.roomFloor,
-                    room.columns === 2 ? styles.roomFloorCompact : styles.roomFloorWide
-                  )}
-                >
-                  {roomOccupants.map((occupant) => (
-                    <button
-                      key={occupant.id}
-                      type="button"
+                )}>
+                  <CardHeader>
+                    <CardTitle>{room.title}</CardTitle>
+                    <CardDescription>{roomOccupants.length} occupants</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div
                       className={cn(
-                        styles.occupantToken,
-                        styles[`occupantToken${toPascalCase(occupant.status)}`],
-                        selectedOccupantId === occupant.id ? styles.occupantTokenSelected : null
+                        styles.roomFloor,
+                        room.columns === 2 ? styles.roomFloorCompact : styles.roomFloorWide
                       )}
-                      onClick={() => onSelectOccupant(occupant.id)}
                     >
-                      {occupant.status === "working" && occupant.taskLabel ? (
-                        <span className={styles.taskLabel}>{occupant.taskLabel}</span>
-                      ) : null}
-                      <AgentAvatar
-                        seed={agentAvatarSeed(occupant.id, occupant.displayName, occupant.avatarSeed)}
-                        name={occupant.displayName}
-                        className={styles.avatarBadge}
-                        size={96}
-                      />
-                      <span className={styles.occupantName}>{occupant.displayName}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            );
+                      {roomOccupants.map((occupant) => (
+                        <button
+                          key={occupant.id}
+                          type="button"
+                          className={cn(
+                            styles.occupantToken,
+                            styles[`occupantToken${toPascalCase(occupant.status)}`],
+                            selectedOccupantId === occupant.id ? styles.occupantTokenSelected : null
+                          )}
+                          onClick={() => onSelectOccupant(occupant.id)}
+                        >
+                          {occupant.status === "working" && occupant.taskLabel ? (
+                            <span className={styles.taskLabel}>{occupant.taskLabel}</span>
+                          ) : null}
+                          <AgentAvatar
+                            seed={agentAvatarSeed(occupant.id, occupant.displayName, occupant.avatarSeed)}
+                            name={occupant.displayName}
+                            className={styles.avatarBadge}
+                            size={96}
+                          />
+                          <span className={styles.occupantName}>{occupant.displayName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
           })}
 
           {!hasSnapshot ? (

@@ -42,9 +42,46 @@ test.describe("workspace smoke journeys", () => {
 
     await page.goto(`/governance?companyId=${companyId}`);
 
-    await expect(page.getByRole("heading", { name: "Governance" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
     await expect(page.getByText("hire_agent")).toBeVisible();
     await expect(page.getByText("Needs Approval · Engineer")).toBeVisible();
+  });
+
+  test("dashboard highlights pending approvals and attention actions", async ({ page, request }) => {
+    const companyId = await createCompany(request, "E2E Dashboard Company");
+    const projectId = await createProject(request, companyId, "E2E Dashboard Project");
+    const issueId = await createIssue(request, companyId, projectId, "Blocked dashboard issue");
+    await updateIssue(request, companyId, issueId, { status: "blocked" });
+
+    await apiPost(request, "/agents", companyId, {
+      role: "Engineer",
+      name: "Dashboard Approver",
+      providerType: "shell",
+      heartbeatCron: "*/5 * * * *",
+      monthlyBudgetUsd: 25,
+      canHireAgents: false,
+      requestApproval: true,
+      runtimeCommand: "echo",
+      runtimeCwd: "/tmp",
+      runtimeArgs: ['{"summary":"noop","tokenInput":0,"tokenOutput":0,"usdCost":0}']
+    });
+
+    await page.goto(`/dashboard?companyId=${companyId}`);
+
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+    await expect(page.getByText("Needs your approval")).toBeVisible();
+    await expect(page.getByText("Pending approval mix")).toBeVisible();
+    await expect(page.getByText("Needs attention")).toBeVisible();
+    await expect(page.getByText("hire agent").first()).toBeVisible();
+    await expect(page.getByText("requested by system")).toBeVisible();
+    await expect(page.locator("div", { hasText: "Blocked issues" }).first()).toContainText("1");
+
+    await page.getByRole("link", { name: "Open inbox" }).click();
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+
+    await page.goto(`/dashboard?companyId=${companyId}`);
+    await page.getByRole("link", { name: "Review approvals" }).click();
+    await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
   });
 });
 
@@ -74,6 +111,23 @@ async function createIssue(
   title: string
 ) {
   const response = await apiPost(request, "/issues", companyId, { projectId, title, priority: "medium" });
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { data: { id: string } };
+  return body.data.id;
+}
+
+async function updateIssue(
+  request: APIRequestContext,
+  companyId: string,
+  issueId: string,
+  payload: { status?: string; assigneeAgentId?: string | null }
+) {
+  const response = await request.put(`${apiUrl}/issues/${issueId}`, {
+    headers: {
+      "x-company-id": companyId
+    },
+    data: payload
+  });
   expect(response.ok()).toBeTruthy();
 }
 

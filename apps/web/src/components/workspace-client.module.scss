@@ -205,6 +205,66 @@
   @apply grid gap-6 xl:grid-cols-3;
 }
 
+.dashboardActionGrid {
+  @apply grid gap-6 xl:grid-cols-2;
+}
+
+.dashboardActionQueueContent {
+  @apply space-y-4;
+}
+
+.dashboardActionQueueStats {
+  @apply max-w-xs;
+}
+
+.dashboardApprovalPreviewList {
+  @apply space-y-3;
+}
+
+.dashboardApprovalPreviewItem {
+  @apply rounded-md border bg-muted/20 p-3;
+}
+
+.dashboardApprovalPreviewTitle {
+  @apply flex items-center justify-between gap-2 text-sm font-medium;
+}
+
+.dashboardApprovalPreviewMeta {
+  @apply mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground;
+}
+
+.dashboardActionQueueEmpty {
+  @apply rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground;
+}
+
+.dashboardActionQueueActions {
+  @apply flex flex-wrap gap-2;
+}
+
+.dashboardApprovalBreakdownContent {
+  @apply space-y-3;
+}
+
+.dashboardApprovalBreakdownList {
+  @apply space-y-2;
+}
+
+.dashboardApprovalBreakdownItem {
+  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm;
+}
+
+.dashboardAttentionGrid {
+  @apply grid gap-6;
+}
+
+.dashboardAttentionContent {
+  @apply space-y-3;
+}
+
+.dashboardAttentionRow {
+  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm;
+}
+
 .dashboardChartContainer {
   @apply h-52 w-full;
 }

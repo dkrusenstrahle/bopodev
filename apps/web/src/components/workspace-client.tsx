@@ -397,6 +397,28 @@ function formatRunTypeLabel(runType: HeartbeatRunRow["runType"] | "all" | "exclu
   return runType.replaceAll("_", " ");
 }
 
+function formatApprovalActionLabel(action: string) {
+  return action.replaceAll("_", " ");
+}
+
+function formatRelativeAgeCompact(timestamp: string | null) {
+  if (!timestamp) {
+    return "n/a";
+  }
+  const ageMs = Date.now() - new Date(timestamp).getTime();
+  if (!Number.isFinite(ageMs)) {
+    return "n/a";
+  }
+  const ageHours = ageMs / (1000 * 60 * 60);
+  if (ageHours < 1) {
+    return `${Math.max(Math.round(ageHours * 60), 1)}m`;
+  }
+  if (ageHours < 24) {
+    return `${ageHours.toFixed(1)}h`;
+  }
+  return `${(ageHours / 24).toFixed(1)}d`;
+}
+
 function monthKeyFromDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -1434,20 +1456,70 @@ export function WorkspaceClient({
     if (!isDashboardNav) {
       return "none";
     }
-    const pending = approvals.filter((approval) => approval.status === "pending");
-    if (pending.length === 0) {
+    if (pendingApprovals.length === 0) {
       return "none";
     }
-    const oldest = Math.min(...pending.map((approval) => new Date(approval.createdAt).getTime()));
-    const ageHours = (Date.now() - oldest) / (1000 * 60 * 60);
-    if (ageHours < 1) {
-      return `${Math.max(Math.round(ageHours * 60), 1)}m`;
+    const oldest = Math.min(...pendingApprovals.map((approval) => new Date(approval.createdAt).getTime()));
+    return formatRelativeAgeCompact(new Date(oldest).toISOString());
+  }, [isDashboardNav, pendingApprovals]);
+  const dashboardPendingApprovalsByAction = useMemo(() => {
+    if (!isDashboardNav) {
+      return [];
     }
-    if (ageHours < 24) {
-      return `${ageHours.toFixed(1)}h`;
+    const counts = new Map<string, number>();
+    for (const approval of pendingApprovals) {
+      counts.set(approval.action, (counts.get(approval.action) ?? 0) + 1);
     }
-    return `${(ageHours / 24).toFixed(1)}d`;
-  }, [approvals, isDashboardNav]);
+    return Array.from(counts.entries())
+      .map(([action, total]) => ({
+        action,
+        label: formatApprovalActionLabel(action),
+        total
+      }))
+      .sort((a, b) => (b.total === a.total ? a.label.localeCompare(b.label) : b.total - a.total));
+  }, [isDashboardNav, pendingApprovals]);
+  const dashboardPendingApprovalPreview = useMemo(() => {
+    if (!isDashboardNav) {
+      return [];
+    }
+    const inboxByApprovalId = new Map(governanceInbox.map((entry) => [entry.approval.id, entry]));
+    return pendingApprovals
+      .map((approval) => {
+        const inboxItem = inboxByApprovalId.get(approval.id);
+        const requestedById = inboxItem?.approval.requestedByAgentId ?? null;
+        const requestedBy =
+          requestedById && requestedById.trim().length > 0
+            ? (agentNameById.get(requestedById) ?? shortId(requestedById))
+            : "system";
+        return {
+          id: approval.id,
+          actionLabel: formatApprovalActionLabel(approval.action),
+          payloadSummary: describeApprovalPayload(approval.payload),
+          requestedBy,
+          createdAt: approval.createdAt,
+          ageLabel: formatRelativeAgeCompact(approval.createdAt)
+        };
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .slice(0, 3);
+  }, [agentNameById, governanceInbox, isDashboardNav, pendingApprovals]);
+  const dashboardNeedsAttention = useMemo(() => {
+    if (!isDashboardNav) {
+      return { staleOpenIssues: 0, blockedIssues: 0, failedRuns24h: 0, failedRuns7d: 0 };
+    }
+    const now = Date.now();
+    const last24hMs = 24 * 60 * 60 * 1000;
+    const last7dMs = 7 * 24 * 60 * 60 * 1000;
+    const blockedIssues = issues.filter((issue) => issue.status === "blocked").length;
+    const failedRuns24h = heartbeatRuns.filter((run) => run.status === "failed" && now - new Date(run.startedAt).getTime() <= last24hMs).length;
+    const failedRuns7d = heartbeatRuns.filter((run) => run.status === "failed" && now - new Date(run.startedAt).getTime() <= last7dMs).length;
+    return {
+      staleOpenIssues: staleIssueCount,
+      blockedIssues,
+      failedRuns24h,
+      failedRuns7d
+    };
+  }, [heartbeatRuns, isDashboardNav, issues, staleIssueCount]);
   const topCostAgent = useMemo(() => {
     if (!isDashboardNav) {
       return "No agent spend yet";
@@ -2304,15 +2376,108 @@ export function WorkspaceClient({
       case "Dashboard":
         return (
           <>
-          <SectionHeading
+            <SectionHeading
               title="Dashboard"
               description="Dashboard of the company's current status."
             />
+            <div className={styles.dashboardActionGrid}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Needs your approval</CardTitle>
+                  <CardDescription>Outstanding requests that are waiting for your decision.</CardDescription>
+                </CardHeader>
+                <CardContent className={styles.dashboardActionQueueContent}>
+                  <div className={styles.dashboardActionQueueStats}>
+                    <MetricCard label="Awaiting approval" value={pendingApprovals.length} hint={`Oldest pending: ${oldestPendingApprovalAge}`} />
+                  </div>
+                  {dashboardPendingApprovalPreview.length > 0 ? (
+                    <ul className={styles.dashboardApprovalPreviewList}>
+                      {dashboardPendingApprovalPreview.map((item) => (
+                        <li key={item.id} className={styles.dashboardApprovalPreviewItem}>
+                          <div className={styles.dashboardApprovalPreviewTitle}>
+                            <span>{item.actionLabel}</span>
+                            <span>{item.ageLabel} ago</span>
+                          </div>
+                          <div className={styles.dashboardApprovalPreviewMeta}>
+                            <span>{item.payloadSummary}</span>
+                            <span>requested by {item.requestedBy}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className={styles.dashboardActionQueueEmpty}>No pending approvals right now.</div>
+                  )}
+                  <div className={styles.dashboardActionQueueActions}>
+                    <Button asChild size="sm">
+                      <Link href={{ pathname: "/governance", query: { companyId: companyId! } }}>Review approvals</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={{ pathname: "/inbox", query: { companyId: companyId! } }}>Open inbox</Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pending approval mix</CardTitle>
+                  <CardDescription>What kinds of decisions are waiting right now.</CardDescription>
+                </CardHeader>
+                <CardContent className={styles.dashboardApprovalBreakdownContent}>
+                  {dashboardPendingApprovalsByAction.length > 0 ? (
+                    <ul className={styles.dashboardApprovalBreakdownList}>
+                      {dashboardPendingApprovalsByAction.map((entry) => (
+                        <li key={entry.action} className={styles.dashboardApprovalBreakdownItem}>
+                          <span>{entry.label}</span>
+                          <Badge variant="outline">{entry.total}</Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className={styles.dashboardActionQueueEmpty}>No pending approvals to break down.</div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
             <div className="ui-stats">
               <MetricCard label="Open Issues" value={issues.filter((issue) => issue.status !== "done" && issue.status !== "canceled").length} />
               <MetricCard label="Active Agents" value={agents.filter((agent) => agent.status !== "terminated").length} />
-              <MetricCard label="Pending Approvals" value={approvals.filter((approval) => approval.status === "pending").length} />
+              <MetricCard label="Pending Approvals" value={pendingApprovals.length} />
               <MetricCard label="Recent Heartbeats" value={heartbeatRuns.length} />
+            </div>
+            <div className={styles.dashboardAttentionGrid}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Needs attention</CardTitle>
+                  <CardDescription>Signals that can slow down delivery if left unresolved.</CardDescription>
+                </CardHeader>
+                <CardContent className={styles.dashboardAttentionContent}>
+                  <div className={styles.dashboardAttentionRow}>
+                    <span>Stale open issues (&gt;7d)</span>
+                    <Badge variant="outline">{dashboardNeedsAttention.staleOpenIssues}</Badge>
+                  </div>
+                  <div className={styles.dashboardAttentionRow}>
+                    <span>Blocked issues</span>
+                    <Badge variant="outline">{dashboardNeedsAttention.blockedIssues}</Badge>
+                  </div>
+                  <div className={styles.dashboardAttentionRow}>
+                    <span>Failed runs (24h)</span>
+                    <Badge variant="outline">{dashboardNeedsAttention.failedRuns24h}</Badge>
+                  </div>
+                  <div className={styles.dashboardAttentionRow}>
+                    <span>Failed runs (7d)</span>
+                    <Badge variant="outline">{dashboardNeedsAttention.failedRuns7d}</Badge>
+                  </div>
+                  <div className={styles.dashboardActionQueueActions}>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={{ pathname: "/issues", query: { companyId: companyId! } }}>View issues</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={{ pathname: "/runs", query: { companyId: companyId! } }}>View runs</Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
             <div className={styles.dashboardChartsGrid}>
               <Card>

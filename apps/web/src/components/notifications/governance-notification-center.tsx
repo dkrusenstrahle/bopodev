@@ -181,7 +181,7 @@ export function GovernanceNotificationCenter({ companyId }: { companyId: string 
       const content = getGovernanceToastContent(approval, companyId);
       toast.custom(
         () => (
-          <div className="pointer-events-auto w-88 rounded-md border bg-background p-4 text-foreground shadow-lg">
+          <div className="pointer-events-auto w-88 rounded-md border bg-background p-4 text-foreground">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-2">
                 <div className="text-sm font-semibold leading-5">{content.title}</div>

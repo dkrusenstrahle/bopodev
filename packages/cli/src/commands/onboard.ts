@@ -51,6 +51,8 @@ interface OnboardDeps {
     preferredProvider?: AgentProvider | null;
   }) => Promise<AgentProvider>;
   promptForAgentModel: (input: { provider: AgentProvider; preferredModel?: string | null }) => Promise<string | undefined>;
+  promptForTemplateUsage?: (input: { currentTemplateId?: string | null }) => Promise<boolean>;
+  promptForTemplateSelection?: (input: { currentTemplateId?: string | null }) => Promise<string | undefined>;
 }
 
 interface EnsureEnvResult {
@@ -72,6 +74,11 @@ const CLI_ONBOARD_VISIBLE_PROVIDERS: Array<{ value: AgentProvider; label: string
   { value: "gemini_cli", label: "Gemini" },
   { value: "opencode", label: "OpenCode" }
 ];
+const CLI_ONBOARD_TEMPLATES = [
+  { value: "founder-startup-basic", label: "Founder Startup Basic" },
+  { value: "marketing-content-engine", label: "Marketing Content Engine" },
+  { value: "__custom__", label: "Custom template id/slug" }
+] as const;
 
 const defaultDeps: OnboardDeps = {
   installDependencies: async (workspaceRoot) => {
@@ -165,6 +172,40 @@ const defaultDeps: OnboardDeps = {
       return undefined;
     }
     return selected.length > 0 ? selected : undefined;
+  },
+  promptForTemplateUsage: async ({ currentTemplateId }) => {
+    const answer = await confirm({
+      message: "Do you want to use a template?",
+      initialValue: Boolean(currentTemplateId)
+    });
+    if (isCancel(answer)) {
+      throw new Error("Onboarding cancelled.");
+    }
+    return Boolean(answer);
+  },
+  promptForTemplateSelection: async ({ currentTemplateId }) => {
+    const matchingDefault = CLI_ONBOARD_TEMPLATES.find((entry) => entry.value === currentTemplateId)?.value;
+    const answer = await select({
+      message: "Select template",
+      initialValue: matchingDefault ?? "founder-startup-basic",
+      options: CLI_ONBOARD_TEMPLATES.map((entry) => ({ value: entry.value, label: entry.label }))
+    });
+    if (isCancel(answer)) {
+      throw new Error("Onboarding cancelled.");
+    }
+    const selected = typeof answer === "string" ? answer.trim() : "";
+    if (selected === "__custom__") {
+      const custom = await text({
+        message: "Template id or slug",
+        placeholder: "founder-startup-basic",
+        validate: (value) => (value.trim().length > 0 ? undefined : "Template id/slug is required.")
+      });
+      if (isCancel(custom)) {
+        throw new Error("Onboarding cancelled.");
+      }
+      return custom.trim();
+    }
+    return selected.length > 0 ? selected : undefined;
   }
 };
 
@@ -248,9 +289,30 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
         preferredModel
       });
   printCheck("ok", "Default model", selectedAgentModel ?? "Provider default");
-  const requestedTemplateId = options.template?.trim() || normalizeOptionalEnvValue(preEnvValues[DEFAULT_TEMPLATE_ENV]);
+  const explicitTemplateId = normalizeOptionalEnvValue(options.template);
+  const envTemplateId = normalizeOptionalEnvValue(preEnvValues[DEFAULT_TEMPLATE_ENV]);
+  let requestedTemplateId = explicitTemplateId ?? envTemplateId;
+  if (!options.yes && !explicitTemplateId) {
+    const promptForTemplateUsage = deps.promptForTemplateUsage ?? defaultDeps.promptForTemplateUsage;
+    const promptForTemplateSelection = deps.promptForTemplateSelection ?? defaultDeps.promptForTemplateSelection;
+    if (!promptForTemplateUsage || !promptForTemplateSelection) {
+      throw new Error("Template onboarding prompts are not configured.");
+    }
+    const wantsTemplate = await promptForTemplateUsage({
+      currentTemplateId: envTemplateId ?? null
+    });
+    if (wantsTemplate) {
+      requestedTemplateId = (await promptForTemplateSelection({
+        currentTemplateId: requestedTemplateId ?? null
+      })) ?? undefined;
+    } else {
+      requestedTemplateId = undefined;
+    }
+  }
   if (requestedTemplateId) {
     printCheck("ok", "Template", requestedTemplateId);
+  } else {
+    printCheck("ok", "Template", "Skipped");
   }
 
   const envSpin = spinner();
@@ -264,6 +326,9 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
     ...(requestedTemplateId ? { [DEFAULT_TEMPLATE_ENV]: requestedTemplateId } : {}),
     ...(selectedAgentModel ? { [DEFAULT_AGENT_MODEL_ENV]: selectedAgentModel } : {})
   });
+  if (!requestedTemplateId) {
+    await removeEnvKeys(envPath, [DEFAULT_TEMPLATE_ENV]);
+  }
   dotenv.config({ path: envPath, quiet: true });
   const envValues = await readEnvValues(envPath);
   const configuredDbPath = normalizeOptionalEnvValue(envValues.BOPO_DB_PATH);
@@ -277,6 +342,8 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
   process.env[DEFAULT_AGENT_PROVIDER_ENV] = agentProvider ?? "codex";
   if (requestedTemplateId) {
     process.env[DEFAULT_TEMPLATE_ENV] = requestedTemplateId;
+  } else {
+    delete process.env[DEFAULT_TEMPLATE_ENV];
   }
   if (selectedAgentModel) {
     process.env[DEFAULT_AGENT_MODEL_ENV] = selectedAgentModel;
@@ -325,6 +392,8 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
   }
   if (seedResult.templateId) {
     process.env[DEFAULT_TEMPLATE_ENV] = seedResult.templateId;
+  } else if (!requestedTemplateId) {
+    delete process.env[DEFAULT_TEMPLATE_ENV];
   }
   printCheck("ok", "Configured company", `${seedResult.companyName}${seedResult.companyCreated ? " (created)" : ""}`);
   printCheck(
@@ -438,6 +507,18 @@ async function sanitizeBlankDbPathEnvEntry(envPath: string) {
   if (!changed) {
     return;
   }
+  const nextContent = nextLines.join("\n");
+  await writeFile(envPath, nextContent.endsWith("\n") ? nextContent : `${nextContent}\n`, "utf8");
+}
+
+async function removeEnvKeys(envPath: string, keys: string[]) {
+  if (keys.length === 0) {
+    return;
+  }
+  const existingContent = await readFile(envPath, "utf8");
+  const nextLines = existingContent
+    .split(/\r?\n/)
+    .filter((line) => !keys.some((key) => line.startsWith(`${key}=`)));
   const nextContent = nextLines.join("\n");
   await writeFile(envPath, nextContent.endsWith("\n") ? nextContent : `${nextContent}\n`, "utf8");
 }

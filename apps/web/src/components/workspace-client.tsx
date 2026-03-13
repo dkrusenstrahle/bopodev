@@ -615,6 +615,10 @@ export function WorkspaceClient({
   const [pluginsStatusFilter, setPluginsStatusFilter] = useState<"all" | "active" | "installed" | "not_installed">("all");
   const [pluginsKindFilter, setPluginsKindFilter] = useState<string>("all");
   const [templatesQuery, setTemplatesQuery] = useState("");
+  const [templatesStatusFilter, setTemplatesStatusFilter] = useState<"all" | TemplateRow["status"]>("all");
+  const [templatesVisibilityFilter, setTemplatesVisibilityFilter] = useState<"all" | TemplateRow["visibility"]>("all");
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateRow | null>(null);
+  const [templateDetailsOpen, setTemplateDetailsOpen] = useState(false);
   const [installPluginDialogOpen, setInstallPluginDialogOpen] = useState(false);
   const [pluginBuilderMode, setPluginBuilderMode] = useState<"create" | "edit">("create");
   const [pluginBuilderId, setPluginBuilderId] = useState("");
@@ -793,6 +797,11 @@ export function WorkspaceClient({
         variables: {}
       });
     }, "Failed to apply template.", `template:${templateId}:apply`);
+  }
+
+  function openTemplateDetails(template: TemplateRow) {
+    setSelectedTemplate(template);
+    setTemplateDetailsOpen(true);
   }
 
   function openCreatePluginDialog() {
@@ -1494,6 +1503,12 @@ export function WorkspaceClient({
     }
     const normalizedQuery = templatesQuery.trim().toLowerCase();
     return templates.filter((template) => {
+      if (templatesStatusFilter !== "all" && template.status !== templatesStatusFilter) {
+        return false;
+      }
+      if (templatesVisibilityFilter !== "all" && template.visibility !== templatesVisibilityFilter) {
+        return false;
+      }
       if (!normalizedQuery) {
         return true;
       }
@@ -1504,7 +1519,7 @@ export function WorkspaceClient({
         template.status.toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [isTemplatesNav, templates, templatesQuery]);
+  }, [isTemplatesNav, templates, templatesQuery, templatesStatusFilter, templatesVisibilityFilter]);
   const pluginBuilderManifestJson = useMemo(() => {
     const capabilities = pluginBuilderCapabilities
       .split(",")
@@ -2760,7 +2775,6 @@ export function WorkspaceClient({
           return (
             <div className={styles.workspaceSectionCellStack}>
               <div className={styles.workspaceSectionCellPrimary}>{template.name}</div>
-              <div className={styles.workspaceSectionCellMeta}>{template.slug}</div>
             </div>
           );
         }
@@ -2786,27 +2800,26 @@ export function WorkspaceClient({
         cell: ({ row }) => {
           const template = row.original;
           const applyActionKey = `template:${template.id}:apply`;
+          const applyPending = isActionPending(applyActionKey);
           return (
             <div className={styles.formatDurationContainer3}>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={isActionPending(applyActionKey)}
+                disabled={applyPending}
                 onClick={() => applyTemplate(template.id)}
               >
-                Apply
+                {applyPending ? "Applying..." : "Apply"}
               </Button>
-              <Button asChild variant="ghost" size="sm">
-                <Link href={{ pathname: "/templates", query: { companyId: companyId ?? "" } }}>
-                  View
-                </Link>
+              <Button variant="outline" size="sm" onClick={() => openTemplateDetails(template)}>
+                View
               </Button>
             </div>
           );
         }
       }
     ],
-    [applyTemplate, companyId, isActionPending]
+    [applyTemplate, isActionPending]
   );
 
   function renderSectionActions(section: SectionLabel) {
@@ -4104,9 +4117,78 @@ export function WorkspaceClient({
                     placeholder="Search template name, slug, version..."
                     className={styles.governanceFiltersInput}
                   />
+                  <Select value={templatesStatusFilter} onValueChange={(value) => setTemplatesStatusFilter(value as "all" | TemplateRow["status"])}>
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="published">Published</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={templatesVisibilityFilter}
+                    onValueChange={(value) => setTemplatesVisibilityFilter(value as "all" | TemplateRow["visibility"])}
+                  >
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Visibility" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All visibility</SelectItem>
+                      <SelectItem value="company">Company</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               }
             />
+            <Dialog open={templateDetailsOpen} onOpenChange={setTemplateDetailsOpen}>
+              <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>{selectedTemplate?.name ?? "Template details"}</DialogTitle>
+                  <DialogDescription>
+                    {selectedTemplate?.description?.trim() || "Portable org template details and manifest."}
+                  </DialogDescription>
+                </DialogHeader>
+                {selectedTemplate ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-2 text-sm sm:grid-cols-3">
+                      <div>
+                        <div className="text-muted-foreground">Slug</div>
+                        <div className="font-mono">{selectedTemplate.slug}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Version</div>
+                        <div className="font-mono">{selectedTemplate.currentVersion}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Status</div>
+                        <div>{selectedTemplate.status}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-sm text-muted-foreground">Variables</div>
+                      <pre className="rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-all">
+                        {JSON.stringify(selectedTemplate.variables ?? [], null, 2)}
+                      </pre>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-sm text-muted-foreground">Manifest</div>
+                      <pre className="rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-all">
+                        {JSON.stringify(selectedTemplate.manifest ?? {}, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                ) : null}
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setTemplateDetailsOpen(false)}>
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </>
         );
       case "Models":

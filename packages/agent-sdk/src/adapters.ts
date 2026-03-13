@@ -902,10 +902,20 @@ export async function runProviderWork(
     options?.usageResolver ?? (provider === "claude_code" ? resolveClaudeDefaultRuntimeUsage : resolveCodexDefaultRuntimeUsage);
   const pricingProviderType = resolveCanonicalPricingProviderKey(provider);
   const prompt = createPrompt(context);
-  const runtime = withResolvedRuntimeUsage(
-    await executeAgentRuntime(provider, prompt, context.runtime),
-    usageResolver
+  const hasCodexResume = provider === "codex" && hasCodexResumeArgs(context.runtime?.args ?? []);
+  let runtimeOutput = await executeAgentRuntime(
+    provider,
+    prompt,
+    hasCodexResume ? { ...context.runtime, retryCount: 0 } : context.runtime
   );
+  if (provider === "codex" && !runtimeOutput.ok && hasCodexResume) {
+    runtimeOutput = await executeAgentRuntime(provider, prompt, {
+      ...context.runtime,
+      retryCount: 0,
+      args: stripCodexResumeArgs(context.runtime?.args ?? [])
+    });
+  }
+  const runtime = withResolvedRuntimeUsage(runtimeOutput, usageResolver);
   const pricingModelId = resolvePricingModelId(context.runtime?.model, runtime);
   if (runtime.ok) {
     if (!runtime.parsedUsage) {
@@ -1766,6 +1776,40 @@ export function isUnknownSessionError(stderr: string, stdout: string) {
     haystack.includes("session not found") ||
     haystack.includes("could not resume")
   );
+}
+
+function hasCodexResumeArgs(args: string[]) {
+  for (let index = 0; index < args.length; index += 1) {
+    const current = (args[index] ?? "").trim().toLowerCase();
+    if (current === "--resume" || current.startsWith("--resume=")) {
+      return true;
+    }
+    if (current === "resume") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function stripCodexResumeArgs(args: string[]) {
+  const next: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const current = (args[index] ?? "").trim();
+    const lowered = current.toLowerCase();
+    if (lowered === "--resume") {
+      index += 1;
+      continue;
+    }
+    if (lowered.startsWith("--resume=")) {
+      continue;
+    }
+    if (lowered === "resume") {
+      index += 1;
+      continue;
+    }
+    next.push(args[index] ?? "");
+  }
+  return next;
 }
 
 export function hasTrustFlag(args: string[]) {

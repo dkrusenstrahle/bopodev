@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, cp, lstat, mkdir, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeConfig } from "./types";
 
@@ -208,7 +208,11 @@ export async function executeAgentRuntime(
   prompt: string,
   config?: AgentRuntimeConfig
 ): Promise<RuntimeExecutionOutput> {
-  const command = resolveProviderCommand(provider, config?.command);
+  const mergedEnv = {
+    ...process.env,
+    ...(config?.env ?? {})
+  };
+  const command = await resolveProviderCommand(provider, config?.command, mergedEnv);
   const commandOverride = Boolean(config?.command && config.command.trim().length > 0);
   const effectiveRetryCount = config?.retryCount ?? (provider === "codex" ? 1 : 0);
   const candidateArgs = [
@@ -547,14 +551,62 @@ function inspectClaudeOutputContract(command: string, args: string[], commandOve
   };
 }
 
-function resolveProviderCommand(provider: "claude_code" | "codex", configuredCommand: string | undefined) {
+function isBareCommandToken(command: string) {
+  return command.length > 0 && !command.includes("/") && !command.includes("\\");
+}
+
+function splitPathEntries(pathValue: string | undefined) {
+  return (pathValue ?? "")
+    .split(delimiter)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+async function pathExists(path: string) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveClaudeBinaryCommand(env: NodeJS.ProcessEnv) {
+  const binaryName = process.platform === "win32" ? "claude.exe" : "claude";
+  const candidates = new Set<string>();
+  for (const entry of splitPathEntries(env.PATH)) {
+    candidates.add(join(entry, binaryName));
+  }
+  const home = (env.HOME ?? "").trim() || homedir();
+  if (home) {
+    candidates.add(join(home, ".local", "bin", binaryName));
+  }
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+  return "claude";
+}
+
+async function resolveProviderCommand(
+  provider: "claude_code" | "codex",
+  configuredCommand: string | undefined,
+  env: NodeJS.ProcessEnv
+) {
   const trimmed = configuredCommand?.trim();
   if (!trimmed) {
+    if (provider === "claude_code") {
+      return resolveClaudeBinaryCommand(env);
+    }
     return pickDefaultCommand(provider);
   }
   // Normalize accidental provider id aliases used as command strings.
   if (provider === "claude_code" && trimmed === "claude_code") {
-    return "claude";
+    return resolveClaudeBinaryCommand(env);
+  }
+  if (provider === "claude_code" && isBareCommandToken(trimmed) && trimmed.toLowerCase() === "claude") {
+    return resolveClaudeBinaryCommand(env);
   }
   return trimmed;
 }
@@ -1270,13 +1322,22 @@ export function containsRateLimitFailure(text: string) {
 
 export async function checkRuntimeCommandHealth(
   command: string,
-  options?: { cwd?: string; timeoutMs?: number }
+  options?: { cwd?: string; timeoutMs?: number; env?: Record<string, string> }
 ): Promise<RuntimeCommandHealth> {
   const startedAt = Date.now();
+  const mergedEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(options?.env ?? {})
+  };
+  const trimmedCommand = command.trim();
+  const normalizedCommand =
+    trimmedCommand === "claude_code" || trimmedCommand.toLowerCase() === "claude" || trimmedCommand.toLowerCase() === "claude.exe"
+      ? await resolveClaudeBinaryCommand(mergedEnv)
+      : command;
   return new Promise((resolve) => {
-    const child = spawn(command, ["--version"], {
+    const child = spawn(normalizedCommand, ["--version"], {
       cwd: options?.cwd ?? process.cwd(),
-      env: process.env,
+      env: mergedEnv,
       shell: false
     });
 
@@ -1288,7 +1349,7 @@ export async function checkRuntimeCommandHealth(
       resolved = true;
       child.kill("SIGTERM");
       resolve({
-        command,
+        command: normalizedCommand,
         available: false,
         exitCode: null,
         elapsedMs: Date.now() - startedAt,
@@ -1303,7 +1364,7 @@ export async function checkRuntimeCommandHealth(
       resolved = true;
       clearTimeout(timeout);
       resolve({
-        command,
+        command: normalizedCommand,
         available: true,
         exitCode: code,
         elapsedMs: Date.now() - startedAt
@@ -1317,7 +1378,7 @@ export async function checkRuntimeCommandHealth(
       resolved = true;
       clearTimeout(timeout);
       resolve({
-        command,
+        command: normalizedCommand,
         available: false,
         exitCode: null,
         elapsedMs: Date.now() - startedAt,

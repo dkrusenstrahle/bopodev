@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtemp } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { executeAgentRuntime, executePromptRuntime } from "../packages/agent-sdk/src/runtime";
+import { checkRuntimeCommandHealth, executeAgentRuntime, executePromptRuntime } from "../packages/agent-sdk/src/runtime";
 
 describe("agent runtime skill injection", () => {
   it("injects skills into CODEX_HOME/skills without overwriting existing entries", async () => {
@@ -134,6 +134,54 @@ describe("agent runtime skill injection", () => {
     expect(run.structuredOutputDiagnostics?.claudeContract?.commandLooksClaude).toBe(true);
 
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("resolves default claude command from HOME .local/bin when PATH is missing", async () => {
+    const fakeHome = await mkdtemp(join(tmpdir(), "bopodev-claude-home-"));
+    const localBin = join(fakeHome, ".local", "bin");
+    await mkdir(localBin, { recursive: true });
+    const claudeShim = join(localBin, "claude");
+    await writeFile(
+      claudeShim,
+      `#!/bin/sh\nexec "${process.execPath}" -e "console.log('{\\"summary\\":\\"home-bin-ok\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.00001}')" "$@"\n`,
+      "utf8"
+    );
+    await chmod(claudeShim, 0o755);
+
+    const run = await executeAgentRuntime("claude_code", "shim prompt", {
+      env: {
+        HOME: fakeHome,
+        PATH: ""
+      }
+    });
+
+    expect(run.ok).toBe(true);
+    expect(run.parsedUsage?.summary).toBe("home-bin-ok");
+    expect(run.commandUsed).toBe(claudeShim);
+
+    await rm(fakeHome, { recursive: true, force: true });
+  });
+
+  it("resolves claude health checks from HOME .local/bin when PATH is missing", async () => {
+    const fakeHome = await mkdtemp(join(tmpdir(), "bopodev-claude-health-home-"));
+    const localBin = join(fakeHome, ".local", "bin");
+    await mkdir(localBin, { recursive: true });
+    const claudeShim = join(localBin, "claude");
+    await writeFile(claudeShim, "#!/bin/sh\necho 'claude 9.9.9'\n", "utf8");
+    await chmod(claudeShim, 0o755);
+
+    const health = await checkRuntimeCommandHealth("claude", {
+      timeoutMs: 2_000,
+      env: {
+        HOME: fakeHome,
+        PATH: ""
+      }
+    });
+
+    expect(health.available).toBe(true);
+    expect(health.command).toBe(claudeShim);
+
+    await rm(fakeHome, { recursive: true, force: true });
   });
 
   it("does not inject skills when provider-specific execution is not used", async () => {

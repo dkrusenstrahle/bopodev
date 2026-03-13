@@ -582,6 +582,50 @@ describe("adapter platform contracts", () => {
     expect(result.pricingModelId).toBe("gemini-2.5-pro");
   });
 
+  it("retries codex without stale resume args after unknown-session failure", async () => {
+    const captureDir = await mkdtemp(join(tmpdir(), "bopodev-codex-retry-"));
+    const capturePath = join(captureDir, "capture.json");
+    const { command, cleanup } = await createCliShim(
+      "codex",
+      [
+        "const fs = require('node:fs');",
+        "const argv = process.argv.slice(2);",
+        "const capturePath = process.env.CODEX_CAPTURE_PATH;",
+        "const existing = capturePath && fs.existsSync(capturePath) ? JSON.parse(fs.readFileSync(capturePath, 'utf8')) : { calls: [] };",
+        "existing.calls.push(argv);",
+        "if (capturePath) { fs.writeFileSync(capturePath, JSON.stringify(existing), 'utf8'); }",
+        "if (argv.includes('--resume')) {",
+        "  process.stderr.write('unknown session id stale-session');",
+        "  process.exit(1);",
+        "}",
+        "console.log(JSON.stringify({ summary: 'codex-retry-ok', tokenInput: 2, tokenOutput: 1, usdCost: 0.00001 }));"
+      ].join("\n")
+    );
+    const adapter = resolveAdapter("codex");
+    const result = await adapter.execute({
+      companyId: "demo-company",
+      agentId: "agent-1",
+      providerType: "codex",
+      heartbeatRunId: "run-1",
+      company: { name: "Demo Co", mission: null },
+      agent: { name: "Demo Agent", role: "Engineer", managerAgentId: null },
+      workItems: [{ issueId: "issue-1", projectId: "project-1", title: "Do work" }],
+      state: {},
+      runtime: {
+        command,
+        env: { CODEX_CAPTURE_PATH: capturePath },
+        args: ["--resume", "stale-session"]
+      }
+    });
+    const capture = JSON.parse(await readFile(capturePath, "utf8")) as { calls: string[][] };
+    await cleanup();
+    await rm(captureDir, { recursive: true, force: true });
+    expect(capture.calls.length).toBe(2);
+    expect(capture.calls[0]).toContain("--resume");
+    expect(capture.calls[1]).not.toContain("--resume");
+    expect(result.status).toBe("ok");
+  });
+
   it("includes opencode session argument and maps upstream pricing identity", async () => {
     const captureDir = await mkdtemp(join(tmpdir(), "bopodev-opencode-retry-"));
     const capturePath = join(captureDir, "capture.json");

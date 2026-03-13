@@ -505,7 +505,8 @@ export function IssueDetailPageClient({
             />
             <ConfirmActionModal
               triggerLabel="Delete issue"
-              triggerVariant="ghost"
+              triggerVariant="outline"
+              triggerSize="sm"
               title="Delete issue?"
               description={`Delete "${issue.title}".`}
               confirmLabel="Delete"

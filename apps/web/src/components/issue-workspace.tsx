@@ -281,6 +281,8 @@ export function IssueWorkspace({
               />
               <ConfirmActionModal
                 triggerLabel="Delete"
+                triggerVariant="outline"
+                triggerSize="sm"
                 title="Delete issue?"
                 description={`Delete "${issue.title}".`}
                 confirmLabel="Delete"

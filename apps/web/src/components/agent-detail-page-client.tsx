@@ -536,6 +536,7 @@ export function AgentDetailPageClient({
             <ConfirmActionModal
               triggerLabel="Resume"
               triggerVariant="primary"
+              triggerSize="sm"
               title="Resume agent?"
               description={`Resume "${agent.name}" so heartbeats can run again.`}
               confirmLabel="Resume"
@@ -545,7 +546,8 @@ export function AgentDetailPageClient({
           ) : (
             <ConfirmActionModal
               triggerLabel="Pause"
-              triggerVariant="ghost"
+              triggerVariant="outline"
+              triggerSize="sm"
               title="Pause agent?"
               description={`Pause "${agent.name}" and block new heartbeat runs.`}
               confirmLabel="Pause"
@@ -556,7 +558,8 @@ export function AgentDetailPageClient({
           {agent.status !== "terminated" ? (
             <ConfirmActionModal
               triggerLabel="Terminate"
-              triggerVariant="ghost"
+              triggerVariant="outline"
+              triggerSize="sm"
               title="Terminate agent?"
               description={`Terminate "${agent.name}". This blocks all future runs.`}
               confirmLabel="Terminate"
@@ -602,7 +605,8 @@ export function AgentDetailPageClient({
           />
           <ConfirmActionModal
             triggerLabel="Delete"
-            triggerVariant="ghost"
+              triggerVariant="outline"
+              triggerSize="sm"
             title="Delete agent?"
             description={`Delete "${agent.name}".`}
             confirmLabel="Delete"

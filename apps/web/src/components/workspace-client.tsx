@@ -1889,6 +1889,8 @@ export function WorkspaceClient({
               />
               <ConfirmActionModal
                 triggerLabel="Delete"
+                triggerVariant="outline"
+                triggerSize="sm"
                 title="Delete project?"
                 description={`Delete "${project.name}" and all linked issues.`}
                 confirmLabel="Delete"
@@ -1954,6 +1956,8 @@ export function WorkspaceClient({
               />
               <ConfirmActionModal
                 triggerLabel="Delete"
+                triggerVariant="outline"
+                triggerSize="sm"
                 title="Delete goal?"
                 description={`Delete "${goal.title}".`}
                 confirmLabel="Delete"
@@ -2080,6 +2084,8 @@ export function WorkspaceClient({
               />
               <ConfirmActionModal
                 triggerLabel="Delete"
+                triggerVariant="outline"
+                triggerSize="sm"
                 title="Delete agent?"
                 description={`Delete "${agent.name}".`}
                 confirmLabel="Delete"

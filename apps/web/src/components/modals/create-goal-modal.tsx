@@ -126,7 +126,7 @@ export function CreateGoalModal({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit goal" : "Create goal"}</DialogTitle>
-          <DialogDescription>Use one full goal dialog for both create and edit workflows.</DialogDescription>
+          <DialogDescription>Create a goal with status, start timing, and workspace hints.</DialogDescription>
         </DialogHeader>
         <form className={styles.createGoalModalForm} onSubmit={onSubmit}>
           <FieldGroup>
@@ -174,8 +174,7 @@ export function CreateGoalModal({
                   onCheckedChange={(checked) => setActivateNow(Boolean(checked))}
                 />
                 <FieldContent>
-                  <FieldLabel htmlFor="goal-activate-now">Request activation approval immediately</FieldLabel>
-                  <FieldDescription>Send the goal into governance as soon as it is created.</FieldDescription>
+                  <FieldLabel htmlFor="goal-activate-now">Request activation approval</FieldLabel>
                 </FieldContent>
               </Field>
             )}

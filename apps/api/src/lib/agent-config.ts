@@ -1,4 +1,5 @@
 import { AgentRuntimeConfigSchema, type AgentRuntimeConfig, type ThinkingEffort } from "bopodev-contracts";
+import { normalizeAbsolutePath } from "./instance-paths";
 
 export type LegacyRuntimeFields = {
   runtimeCommand?: string;
@@ -120,7 +121,7 @@ export function normalizeRuntimeConfig(input: {
   return {
     runtimeCommand: parsed.runtimeCommand?.trim() || undefined,
     runtimeArgs: parsed.runtimeArgs ?? [],
-    runtimeCwd: parsed.runtimeCwd?.trim() || input.defaultRuntimeCwd || undefined,
+    runtimeCwd: normalizeRuntimeCwd(parsed.runtimeCwd, input.defaultRuntimeCwd),
     runtimeEnv: parsed.runtimeEnv ?? {},
     runtimeModel: parsed.runtimeModel?.trim() || undefined,
     runtimeThinkingEffort: parsed.runtimeThinkingEffort ?? "auto",
@@ -132,6 +133,14 @@ export function normalizeRuntimeConfig(input: {
       allowWebSearch: parsed.runPolicy?.allowWebSearch ?? false
     }
   };
+}
+
+function normalizeRuntimeCwd(runtimeCwd: string | undefined, defaultRuntimeCwd: string | undefined) {
+  const selected = runtimeCwd?.trim() || defaultRuntimeCwd || undefined;
+  if (!selected) {
+    return undefined;
+  }
+  return normalizeAbsolutePath(selected, { requireAbsoluteInput: true });
 }
 
 export function parseRuntimeConfigFromAgentRow(agent: Record<string, unknown>): NormalizedRuntimeConfig {

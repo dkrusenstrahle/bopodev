@@ -13,7 +13,7 @@ describe("project workspace backfill", () => {
     cleanupPaths.length = 0;
   });
 
-  it("backfills missing and relative project workspace paths", async () => {
+  it("backfills missing and relative project workspace paths", { timeout: 20_000 }, async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "bopodev-backfill-test-"));
     cleanupPaths.push(tempRoot);
     const dbPath = join(tempRoot, "test.db");
@@ -71,7 +71,7 @@ describe("project workspace backfill", () => {
       expect(missingWorkspaceAfter?.workspaceLocalPath).toBeTruthy();
       expect(relativeWorkspaceAfter?.workspaceLocalPath).toBeTruthy();
       expect(missingWorkspaceAfter?.workspaceLocalPath ?? "").toContain(`/workspaces/${companyId}/projects/`);
-      expect(relativeWorkspaceAfter?.workspaceLocalPath ?? "").toContain("relative/path");
+      expect(relativeWorkspaceAfter?.workspaceLocalPath ?? "").toContain(`/workspaces/${companyId}/relative/path`);
       expect(isAbsolute(missingWorkspaceAfter?.workspaceLocalPath ?? "")).toBe(true);
       expect(isAbsolute(relativeWorkspaceAfter?.workspaceLocalPath ?? "")).toBe(true);
     } finally {

@@ -2,7 +2,9 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { BopoDb } from "bopodev-db";
 import { projectWorkspaces, projects } from "bopodev-db";
 import {
+  assertPathInsideCompanyWorkspaceRoot,
   isInsidePath,
+  normalizeCompanyWorkspacePath,
   normalizeAbsolutePath,
   resolveAgentFallbackWorkspacePath,
   resolveAgentMemoryRootPath,
@@ -57,7 +59,7 @@ export async function inferSingleWorkspaceLocalPath(db: BopoDb, companyId: strin
     )
   );
   const singlePath = paths.length === 1 ? paths[0] : null;
-  return singlePath ? normalizeAbsolutePath(singlePath) : null;
+  return singlePath ? normalizeCompanyWorkspacePath(companyId, singlePath) : null;
 }
 
 export async function resolveDefaultRuntimeCwdForCompany(db: BopoDb, companyId: string) {
@@ -109,7 +111,9 @@ export async function getProjectWorkspaceContextMap(db: BopoDb, companyId: strin
     .from(projects)
     .where(and(eq(projects.companyId, companyId), inArray(projects.id, projectIds)));
 
-  const workspaceMap = new Map(workspaceRows.map((row) => [row.projectId, row.cwd ? normalizeAbsolutePath(row.cwd) : null]));
+  const workspaceMap = new Map(
+    workspaceRows.map((row) => [row.projectId, row.cwd ? normalizeCompanyWorkspacePath(companyId, row.cwd) : null])
+  );
   const workspaceByProject = new Map(workspaceRows.map((row) => [row.projectId, row]));
   const policyMap = new Map(projectRows.map((row) => [row.id, parseProjectExecutionWorkspacePolicy(row.executionWorkspacePolicy)]));
   const result = new Map<
@@ -211,4 +215,9 @@ export function parseProjectExecutionWorkspacePolicy(
     allowRemotes,
     allowBranchPrefixes
   };
+}
+
+export function assertRuntimeCwdForCompany(companyId: string, runtimeCwd: string, label = "runtimeCwd") {
+  const normalized = normalizeAbsolutePath(runtimeCwd, { requireAbsoluteInput: true });
+  return assertPathInsideCompanyWorkspaceRoot(companyId, normalized, label);
 }

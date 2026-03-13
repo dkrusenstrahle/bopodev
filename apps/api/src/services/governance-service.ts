@@ -27,8 +27,12 @@ import {
   runtimeConfigToStateBlobPatch
 } from "../lib/agent-config";
 import { resolveOpencodeRuntimeModel } from "../lib/opencode-model";
-import { resolveAgentFallbackWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
-import { hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
+import {
+  normalizeCompanyWorkspacePath,
+  resolveAgentFallbackWorkspacePath,
+  resolveProjectWorkspacePath
+} from "../lib/instance-paths";
+import { assertRuntimeCwdForCompany, hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { appendDurableFact } from "./memory-file-service";
 
 const approvalGatedActions = new Set([
@@ -199,6 +203,9 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
       },
       defaultRuntimeCwd
     });
+    if (runtimeConfig.runtimeCwd) {
+      runtimeConfig.runtimeCwd = assertRuntimeCwdForCompany(companyId, runtimeConfig.runtimeCwd, "runtimeCwd");
+    }
     runtimeConfig.runtimeModel = await resolveOpencodeRuntimeModel(parsed.data.providerType, runtimeConfig);
     runtimeConfig.runtimeModel = resolveRuntimeModelForProvider(parsed.data.providerType, runtimeConfig.runtimeModel);
     if (providerRequiresNamedModel(parsed.data.providerType) && !hasText(runtimeConfig.runtimeModel)) {
@@ -394,7 +401,8 @@ async function ensureProjectPrimaryWorkspace(db: BopoDb, companyId: string, proj
   const existingPrimary = existingWorkspaces.find((workspace) => workspace.isPrimary);
   if (existingPrimary) {
     if (existingPrimary.cwd) {
-      await mkdir(existingPrimary.cwd, { recursive: true });
+      const normalized = normalizeCompanyWorkspacePath(companyId, existingPrimary.cwd);
+      await mkdir(normalized, { recursive: true });
     }
     return existingPrimary;
   }
@@ -402,7 +410,9 @@ async function ensureProjectPrimaryWorkspace(db: BopoDb, companyId: string, proj
   await mkdir(defaultWorkspaceCwd, { recursive: true });
   const fallbackWorkspace = existingWorkspaces[0];
   if (fallbackWorkspace) {
-    const normalizedCwd = fallbackWorkspace.cwd?.trim() ? fallbackWorkspace.cwd : defaultWorkspaceCwd;
+    const normalizedCwd = fallbackWorkspace.cwd?.trim()
+      ? normalizeCompanyWorkspacePath(companyId, fallbackWorkspace.cwd)
+      : defaultWorkspaceCwd;
     if (normalizedCwd) {
       await mkdir(normalizedCwd, { recursive: true });
     }

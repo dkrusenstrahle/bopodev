@@ -16,7 +16,7 @@ import {
 } from "bopodev-db";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
-import { normalizeAbsolutePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
+import { normalizeCompanyWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
 
@@ -146,7 +146,12 @@ export function createProjectsRouter(ctx: AppContext) {
       return sendError(res, "Project creation failed.", 500);
     }
     if (parsed.data.workspace) {
-      const normalizedWorkspace = normalizeWorkspaceInput(parsed.data.workspace);
+      let normalizedWorkspace: ReturnType<typeof normalizeWorkspaceInput>;
+      try {
+        normalizedWorkspace = normalizeWorkspaceInput(req.companyId!, parsed.data.workspace);
+      } catch (error) {
+        return sendError(res, String(error), 422);
+      }
       if (!normalizedWorkspace.cwd && !normalizedWorkspace.repoUrl) {
         return sendError(res, "Workspace must include at least one of cwd or repoUrl.", 422);
       }
@@ -260,7 +265,12 @@ export function createProjectsRouter(ctx: AppContext) {
     if (!project) {
       return sendError(res, "Project not found.", 404);
     }
-    const workspaceInput = normalizeWorkspaceInput(parsed.data);
+    let workspaceInput: ReturnType<typeof normalizeWorkspaceInput>;
+    try {
+      workspaceInput = normalizeWorkspaceInput(req.companyId!, parsed.data);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
     if (!workspaceInput.cwd && !workspaceInput.repoUrl) {
       return sendError(res, "Workspace must include at least one of cwd or repoUrl.", 422);
     }
@@ -299,7 +309,12 @@ export function createProjectsRouter(ctx: AppContext) {
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
-    const workspaceInput = normalizeWorkspaceInput(parsed.data);
+    let workspaceInput: ReturnType<typeof normalizeWorkspaceInput>;
+    try {
+      workspaceInput = normalizeWorkspaceInput(req.companyId!, parsed.data);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
     if (parsed.data.cwd !== undefined || parsed.data.repoUrl !== undefined) {
       const hasCwd = workspaceInput.cwd !== null && workspaceInput.cwd !== undefined && workspaceInput.cwd.length > 0;
       const hasRepo = workspaceInput.repoUrl !== null && workspaceInput.repoUrl !== undefined && workspaceInput.repoUrl.length > 0;
@@ -384,6 +399,7 @@ export function createProjectsRouter(ctx: AppContext) {
 }
 
 function normalizeWorkspaceInput(
+  companyId: string,
   value:
     | {
         name?: string;
@@ -403,7 +419,10 @@ function normalizeWorkspaceInput(
       isPrimary: false
     };
   }
-  const cwd = value.cwd && value.cwd.trim().length > 0 ? normalizeAbsolutePath(value.cwd) : null;
+  const cwd =
+    value.cwd && value.cwd.trim().length > 0
+      ? normalizeCompanyWorkspacePath(companyId, value.cwd, { requireAbsoluteInput: true })
+      : null;
   const repoUrl = value.repoUrl && value.repoUrl.trim().length > 0 ? value.repoUrl.trim() : null;
   const repoRef = value.repoRef && value.repoRef.trim().length > 0 ? value.repoRef.trim() : null;
   const name = value.name && value.name.trim().length > 0 ? value.name.trim() : inferWorkspaceName(cwd, repoUrl);

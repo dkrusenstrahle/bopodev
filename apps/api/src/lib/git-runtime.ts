@@ -2,6 +2,9 @@ import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import {
+  assertPathInsideCompanyWorkspaceRoot,
+  assertPathInsidePath,
+  isInsidePath,
   normalizeAbsolutePath,
   resolveAgentProjectWorktreeRootPath,
   resolveProjectWorkspacePath
@@ -67,6 +70,7 @@ export async function bootstrapRepositoryWorkspace(input: {
   const targetCwd = normalizeAbsolutePath(
     input.cwd?.trim() || resolveProjectWorkspacePath(input.companyId, input.projectId)
   );
+  assertPathInsideCompanyWorkspaceRoot(input.companyId, targetCwd, "project workspace cwd");
   await mkdir(targetCwd, { recursive: true });
   const auth = resolveGitAuth({
     policy: input.policy,
@@ -121,6 +125,8 @@ export async function ensureIsolatedGitWorktree(input: {
   timeoutMs?: number;
 }) {
   const timeoutMs = sanitizeTimeoutMs(input.timeoutMs);
+  const normalizedRepoCwd = normalizeAbsolutePath(input.repoCwd, { requireAbsoluteInput: true });
+  assertPathInsideCompanyWorkspaceRoot(input.companyId, normalizedRepoCwd, "repo workspace cwd");
   const strategy = input.policy?.strategy;
   const branchPrefix = (strategy?.branchPrefix?.trim() || "bopo").replace(/[^a-zA-Z0-9/_-]/g, "-");
   enforceBranchPrefixAllowlist(branchPrefix, input.policy);
@@ -129,16 +135,21 @@ export async function ensureIsolatedGitWorktree(input: {
   const projectPart = input.projectId.replace(/[^a-zA-Z0-9_-]/g, "-");
   const branch = `${branchPrefix}/${projectPart}/${agentPart}/${issuePart}`;
   const rootDir = strategy?.rootDir?.trim()
-    ? normalizeAbsolutePath(strategy.rootDir)
+    ? assertPathInsideCompanyWorkspaceRoot(
+        input.companyId,
+        normalizeAbsolutePath(strategy.rootDir, { requireAbsoluteInput: true }),
+        "execution workspace strategy.rootDir"
+      )
     : resolveAgentProjectWorktreeRootPath(input.companyId, input.agentId, input.projectId);
   await mkdir(rootDir, { recursive: true });
   await cleanupStaleWorktrees({ rootDir, ttlMs: resolveWorktreeTtlMs() });
   const targetPath = join(rootDir, `${projectPart}-${agentPart}-${issuePart}`);
+  assertPathInsidePath(rootDir, targetPath, "isolated worktree path");
   const hasWorktree = await pathExists(targetPath);
   if (!hasWorktree) {
     const baseRef = (input.repoRef ?? "").trim() || "HEAD";
     await runGit(["worktree", "add", "-B", branch, targetPath, baseRef], {
-      cwd: input.repoCwd,
+      cwd: normalizedRepoCwd,
       timeoutMs
     });
   } else {
@@ -156,15 +167,19 @@ export async function cleanupStaleWorktrees(input: { rootDir: string; ttlMs: num
     return { removed: 0 };
   }
   const now = Date.now();
+  const rootDir = normalizeAbsolutePath(input.rootDir, { requireAbsoluteInput: true });
   let removed = 0;
   let entries: string[] = [];
   try {
-    entries = await readdir(input.rootDir);
+    entries = await readdir(rootDir);
   } catch {
     return { removed: 0 };
   }
   for (const entry of entries) {
-    const absolute = join(input.rootDir, entry);
+    const absolute = join(rootDir, entry);
+    if (!isInsidePath(rootDir, absolute)) {
+      continue;
+    }
     try {
       const entryStat = await stat(absolute);
       if (!entryStat.isDirectory()) {
@@ -217,13 +232,12 @@ function enforceRemoteAllowlist(repoUrl: string, policy?: ProjectExecutionWorksp
   if (!allowRemotes || allowRemotes.length === 0) {
     return;
   }
-  const normalizedUrl = repoUrl.toLowerCase();
+  const identity = parseRepositoryIdentity(repoUrl);
+  if (!identity) {
+    throw new GitRuntimeError("invalid_repo_url", `Repository '${repoUrl}' is not a recognized git URL.`);
+  }
   const allowed = allowRemotes.some((candidate) => {
-    const normalizedCandidate = candidate.trim().toLowerCase();
-    if (!normalizedCandidate) {
-      return false;
-    }
-    return normalizedUrl.includes(normalizedCandidate);
+    return matchesAllowRemoteCandidate(identity, candidate);
   });
   if (!allowed) {
     throw new GitRuntimeError("policy_violation", `Repository '${repoUrl}' is not in execution allowRemotes policy.`);
@@ -366,6 +380,61 @@ function isHttpsRepoUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+type RepositoryIdentity = {
+  host: string;
+  path: string;
+};
+
+function parseRepositoryIdentity(repoUrl: string): RepositoryIdentity | null {
+  const trimmed = repoUrl.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const scpLike = trimmed.match(/^(?:[^@]+@)?([^:\/]+):(.+)$/);
+  if (scpLike) {
+    return {
+      host: scpLike[1]!.toLowerCase(),
+      path: normalizeRepoPath(scpLike[2]!)
+    };
+  }
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (!host) {
+      return null;
+    }
+    const path = normalizeRepoPath(parsed.pathname);
+    return { host, path };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRepoPath(path: string) {
+  return path
+    .replace(/^\/+/, "")
+    .replace(/\.git$/i, "")
+    .toLowerCase();
+}
+
+function matchesAllowRemoteCandidate(identity: RepositoryIdentity, candidate: string) {
+  const normalizedCandidate = candidate.trim().toLowerCase();
+  if (!normalizedCandidate) {
+    return false;
+  }
+  const hostPathMatch = normalizedCandidate.match(/^([^/]+)\/(.+)$/);
+  if (hostPathMatch) {
+    const candidateHost = hostPathMatch[1]!;
+    const candidatePath = normalizeRepoPath(hostPathMatch[2]!);
+    return identity.host === candidateHost && (identity.path === candidatePath || identity.path.startsWith(`${candidatePath}/`));
+  }
+  if (normalizedCandidate.includes(".") || normalizedCandidate.includes(":")) {
+    return identity.host === normalizedCandidate;
+  }
+  const candidatePathOnly = normalizeRepoPath(normalizedCandidate);
+  return identity.path === candidatePathOnly || identity.path.startsWith(`${candidatePathOnly}/`);
 }
 
 async function pathExists(path: string) {

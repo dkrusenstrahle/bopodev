@@ -9,7 +9,12 @@ import {
   listProjectWorkspaces,
   updateProjectWorkspace
 } from "bopodev-db";
-import { normalizeAbsolutePath, resolveBopoInstanceRoot, resolveProjectWorkspacePath, resolveStorageRoot } from "../lib/instance-paths";
+import {
+  normalizeCompanyWorkspacePath,
+  resolveBopoInstanceRoot,
+  resolveProjectWorkspacePath,
+  resolveStorageRoot
+} from "../lib/instance-paths";
 
 export interface ProjectWorkspaceBackfillSummary {
   scannedProjects: number;
@@ -74,7 +79,7 @@ export async function backfillProjectWorkspaces(input: { dbPath?: string; dryRun
           }
           relativeWorkspaceCount += 1;
           normalizedWorkspaceCwds += 1;
-          const nextPath = normalizeAbsolutePath(cwd);
+          const nextPath = normalizeCompanyWorkspacePath(company.id, cwd);
           if (!input.dryRun) {
             await mkdir(nextPath, { recursive: true });
             createdDirectories += 1;

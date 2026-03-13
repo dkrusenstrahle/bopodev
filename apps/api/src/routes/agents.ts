@@ -28,7 +28,7 @@ import {
   runtimeConfigToStateBlobPatch
 } from "../lib/agent-config";
 import { resolveOpencodeRuntimeModel } from "../lib/opencode-model";
-import { hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
+import { assertRuntimeCwdForCompany, hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requireBoardRole, requirePermission } from "../middleware/request-actor";
 import { createGovernanceRealtimeEvent, serializeStoredApproval } from "../realtime/governance";
@@ -148,7 +148,13 @@ export function createAgentsRouter(ctx: AppContext) {
   });
 
   router.get("/runtime-default-cwd", async (req, res) => {
-    const runtimeCwd = await resolveDefaultRuntimeCwdForCompany(ctx.db, req.companyId!);
+    let runtimeCwd: string;
+    try {
+      runtimeCwd = await resolveDefaultRuntimeCwdForCompany(ctx.db, req.companyId!);
+      runtimeCwd = assertRuntimeCwdForCompany(req.companyId!, runtimeCwd, "runtimeCwd");
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
     await mkdir(runtimeCwd, { recursive: true });
     return sendOk(res, { runtimeCwd });
   });
@@ -163,10 +169,16 @@ export function createAgentsRouter(ctx: AppContext) {
       return sendError(res, `Unsupported provider type: ${providerType}`, 422);
     }
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(ctx.db, req.companyId!);
-    const runtimeConfig = normalizeRuntimeConfig({
-      runtimeConfig: req.body?.runtimeConfig,
-      defaultRuntimeCwd
-    });
+    let runtimeConfig: ReturnType<typeof normalizeRuntimeConfig>;
+    try {
+      runtimeConfig = normalizeRuntimeConfig({
+        runtimeConfig: req.body?.runtimeConfig,
+        defaultRuntimeCwd
+      });
+      runtimeConfig = enforceRuntimeCwdPolicy(req.companyId!, runtimeConfig);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
     const typedProviderType = providerType as
       | "claude_code"
       | "codex"
@@ -197,23 +209,29 @@ export function createAgentsRouter(ctx: AppContext) {
       return sendError(res, parsed.error.message, 422);
     }
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(ctx.db, req.companyId!);
-    const runtimeConfig = normalizeRuntimeConfig({
-      runtimeConfig: parsed.data.runtimeConfig,
-      legacy: {
-        runtimeCommand: parsed.data.runtimeCommand,
-        runtimeArgs: parsed.data.runtimeArgs,
-        runtimeCwd: parsed.data.runtimeCwd,
-        runtimeTimeoutMs: parsed.data.runtimeTimeoutMs,
-        runtimeModel: parsed.data.runtimeModel,
-        runtimeThinkingEffort: parsed.data.runtimeThinkingEffort,
-        bootstrapPrompt: parsed.data.bootstrapPrompt,
-        runtimeTimeoutSec: parsed.data.runtimeTimeoutSec,
-        interruptGraceSec: parsed.data.interruptGraceSec,
-        runtimeEnv: parsed.data.runtimeEnv,
-        runPolicy: parsed.data.runPolicy
-      },
-      defaultRuntimeCwd
-    });
+    let runtimeConfig: ReturnType<typeof normalizeRuntimeConfig>;
+    try {
+      runtimeConfig = normalizeRuntimeConfig({
+        runtimeConfig: parsed.data.runtimeConfig,
+        legacy: {
+          runtimeCommand: parsed.data.runtimeCommand,
+          runtimeArgs: parsed.data.runtimeArgs,
+          runtimeCwd: parsed.data.runtimeCwd,
+          runtimeTimeoutMs: parsed.data.runtimeTimeoutMs,
+          runtimeModel: parsed.data.runtimeModel,
+          runtimeThinkingEffort: parsed.data.runtimeThinkingEffort,
+          bootstrapPrompt: parsed.data.bootstrapPrompt,
+          runtimeTimeoutSec: parsed.data.runtimeTimeoutSec,
+          interruptGraceSec: parsed.data.interruptGraceSec,
+          runtimeEnv: parsed.data.runtimeEnv,
+          runPolicy: parsed.data.runPolicy
+        },
+        defaultRuntimeCwd
+      });
+      runtimeConfig = enforceRuntimeCwdPolicy(req.companyId!, runtimeConfig);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
 
     if (runtimeConfig.runtimeCwd) {
       await mkdir(runtimeConfig.runtimeCwd, { recursive: true });
@@ -261,23 +279,29 @@ export function createAgentsRouter(ctx: AppContext) {
       return sendError(res, parsed.error.message, 422);
     }
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(ctx.db, req.companyId!);
-    const runtimeConfig = normalizeRuntimeConfig({
-      runtimeConfig: parsed.data.runtimeConfig,
-      legacy: {
-        runtimeCommand: parsed.data.runtimeCommand,
-        runtimeArgs: parsed.data.runtimeArgs,
-        runtimeCwd: parsed.data.runtimeCwd,
-        runtimeTimeoutMs: parsed.data.runtimeTimeoutMs,
-        runtimeModel: parsed.data.runtimeModel,
-        runtimeThinkingEffort: parsed.data.runtimeThinkingEffort,
-        bootstrapPrompt: parsed.data.bootstrapPrompt,
-        runtimeTimeoutSec: parsed.data.runtimeTimeoutSec,
-        interruptGraceSec: parsed.data.interruptGraceSec,
-        runtimeEnv: parsed.data.runtimeEnv,
-        runPolicy: parsed.data.runPolicy
-      },
-      defaultRuntimeCwd
-    });
+    let runtimeConfig: ReturnType<typeof normalizeRuntimeConfig>;
+    try {
+      runtimeConfig = normalizeRuntimeConfig({
+        runtimeConfig: parsed.data.runtimeConfig,
+        legacy: {
+          runtimeCommand: parsed.data.runtimeCommand,
+          runtimeArgs: parsed.data.runtimeArgs,
+          runtimeCwd: parsed.data.runtimeCwd,
+          runtimeTimeoutMs: parsed.data.runtimeTimeoutMs,
+          runtimeModel: parsed.data.runtimeModel,
+          runtimeThinkingEffort: parsed.data.runtimeThinkingEffort,
+          bootstrapPrompt: parsed.data.bootstrapPrompt,
+          runtimeTimeoutSec: parsed.data.runtimeTimeoutSec,
+          interruptGraceSec: parsed.data.interruptGraceSec,
+          runtimeEnv: parsed.data.runtimeEnv,
+          runPolicy: parsed.data.runPolicy
+        },
+        defaultRuntimeCwd
+      });
+      runtimeConfig = enforceRuntimeCwdPolicy(req.companyId!, runtimeConfig);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
     runtimeConfig.runtimeModel = await resolveOpencodeRuntimeModel(parsed.data.providerType, runtimeConfig);
     runtimeConfig.runtimeModel = resolveRuntimeModelForProvider(parsed.data.providerType, runtimeConfig.runtimeModel);
     if (!ensureNamedRuntimeModel(parsed.data.providerType, runtimeConfig.runtimeModel)) {
@@ -390,74 +414,79 @@ export function createAgentsRouter(ctx: AppContext) {
       parsed.data.interruptGraceSec !== undefined ||
       parsed.data.runtimeEnv !== undefined ||
       parsed.data.runPolicy !== undefined;
-    const nextRuntime = {
-      ...existingRuntime,
-      ...(hasRuntimeInput
-        ? normalizeRuntimeConfig({
-            runtimeConfig: {
-              ...existingRuntime,
-              ...(parsed.data.runtimeConfig ?? {})
-            },
-            legacy: {
-              runtimeCommand: parsed.data.runtimeCommand,
-              runtimeArgs: parsed.data.runtimeArgs,
-              runtimeCwd: parsed.data.runtimeCwd,
-              runtimeTimeoutMs: parsed.data.runtimeTimeoutMs,
-              runtimeModel: parsed.data.runtimeModel,
-              runtimeThinkingEffort: parsed.data.runtimeThinkingEffort,
-              bootstrapPrompt: parsed.data.bootstrapPrompt,
-              runtimeTimeoutSec: parsed.data.runtimeTimeoutSec ?? existingRuntime.runtimeTimeoutSec,
-              interruptGraceSec: parsed.data.interruptGraceSec,
-              runtimeEnv: parsed.data.runtimeEnv,
-              runPolicy: parsed.data.runPolicy
-            }
-          })
-        : {})
-    };
-    nextRuntime.runtimeModel = await resolveOpencodeRuntimeModel(effectiveProviderType, nextRuntime);
-    nextRuntime.runtimeModel = resolveRuntimeModelForProvider(effectiveProviderType, nextRuntime.runtimeModel);
-    if (!ensureNamedRuntimeModel(effectiveProviderType, nextRuntime.runtimeModel)) {
-      return sendError(res, "A named runtime model is required for this provider.", 422);
-    }
-    if (!nextRuntime.runtimeCwd && defaultRuntimeCwd) {
-      nextRuntime.runtimeCwd = defaultRuntimeCwd;
-    }
-    const effectiveRuntimeCwd = nextRuntime.runtimeCwd ?? "";
-    if (requiresRuntimeCwd(effectiveProviderType) && !hasText(effectiveRuntimeCwd)) {
-      return sendError(res, "Runtime working directory is required for this runtime provider.", 422);
-    }
-    if (requiresRuntimeCwd(effectiveProviderType) && hasText(effectiveRuntimeCwd)) {
-      await mkdir(effectiveRuntimeCwd, { recursive: true });
-    }
-    const agent = await updateAgent(ctx.db, {
-      companyId: req.companyId!,
-      id: req.params.agentId,
-      managerAgentId: parsed.data.managerAgentId,
-      role: parsed.data.role,
-      name: parsed.data.name,
-      providerType: parsed.data.providerType,
-      status: parsed.data.status,
-      heartbeatCron: parsed.data.heartbeatCron,
-      monthlyBudgetUsd:
-        typeof parsed.data.monthlyBudgetUsd === "number" ? parsed.data.monthlyBudgetUsd.toFixed(4) : undefined,
-      canHireAgents: parsed.data.canHireAgents,
-      ...runtimeConfigToDb(nextRuntime),
-      stateBlob: runtimeConfigToStateBlobPatch(nextRuntime)
-    });
-    if (!agent) {
-      return sendError(res, "Agent not found.", 404);
-    }
+    try {
+      let nextRuntime = {
+        ...existingRuntime,
+        ...(hasRuntimeInput
+          ? normalizeRuntimeConfig({
+              runtimeConfig: {
+                ...existingRuntime,
+                ...(parsed.data.runtimeConfig ?? {})
+              },
+              legacy: {
+                runtimeCommand: parsed.data.runtimeCommand,
+                runtimeArgs: parsed.data.runtimeArgs,
+                runtimeCwd: parsed.data.runtimeCwd,
+                runtimeTimeoutMs: parsed.data.runtimeTimeoutMs,
+                runtimeModel: parsed.data.runtimeModel,
+                runtimeThinkingEffort: parsed.data.runtimeThinkingEffort,
+                bootstrapPrompt: parsed.data.bootstrapPrompt,
+                runtimeTimeoutSec: parsed.data.runtimeTimeoutSec ?? existingRuntime.runtimeTimeoutSec,
+                interruptGraceSec: parsed.data.interruptGraceSec,
+                runtimeEnv: parsed.data.runtimeEnv,
+                runPolicy: parsed.data.runPolicy
+              }
+            })
+          : {})
+      };
+      nextRuntime = enforceRuntimeCwdPolicy(req.companyId!, nextRuntime);
+      nextRuntime.runtimeModel = await resolveOpencodeRuntimeModel(effectiveProviderType, nextRuntime);
+      nextRuntime.runtimeModel = resolveRuntimeModelForProvider(effectiveProviderType, nextRuntime.runtimeModel);
+      if (!ensureNamedRuntimeModel(effectiveProviderType, nextRuntime.runtimeModel)) {
+        return sendError(res, "A named runtime model is required for this provider.", 422);
+      }
+      if (!nextRuntime.runtimeCwd && defaultRuntimeCwd) {
+        nextRuntime.runtimeCwd = assertRuntimeCwdForCompany(req.companyId!, defaultRuntimeCwd, "runtimeCwd");
+      }
+      const effectiveRuntimeCwd = nextRuntime.runtimeCwd ?? "";
+      if (requiresRuntimeCwd(effectiveProviderType) && !hasText(effectiveRuntimeCwd)) {
+        return sendError(res, "Runtime working directory is required for this runtime provider.", 422);
+      }
+      if (requiresRuntimeCwd(effectiveProviderType) && hasText(effectiveRuntimeCwd)) {
+        await mkdir(effectiveRuntimeCwd, { recursive: true });
+      }
+      const agent = await updateAgent(ctx.db, {
+        companyId: req.companyId!,
+        id: req.params.agentId,
+        managerAgentId: parsed.data.managerAgentId,
+        role: parsed.data.role,
+        name: parsed.data.name,
+        providerType: parsed.data.providerType,
+        status: parsed.data.status,
+        heartbeatCron: parsed.data.heartbeatCron,
+        monthlyBudgetUsd:
+          typeof parsed.data.monthlyBudgetUsd === "number" ? parsed.data.monthlyBudgetUsd.toFixed(4) : undefined,
+        canHireAgents: parsed.data.canHireAgents,
+        ...runtimeConfigToDb(nextRuntime),
+        stateBlob: runtimeConfigToStateBlobPatch(nextRuntime)
+      });
+      if (!agent) {
+        return sendError(res, "Agent not found.", 404);
+      }
 
-    await appendAuditEvent(ctx.db, {
-      companyId: req.companyId!,
-      actorType: "human",
-      eventType: "agent.updated",
-      entityType: "agent",
-      entityId: agent.id,
-      payload: agent
-    });
-    await publishOfficeOccupantForAgent(ctx.db, ctx.realtimeHub, req.companyId!, agent.id);
-    return sendOk(res, toAgentResponse(agent as unknown as Record<string, unknown>));
+      await appendAuditEvent(ctx.db, {
+        companyId: req.companyId!,
+        actorType: "human",
+        eventType: "agent.updated",
+        entityType: "agent",
+        entityId: agent.id,
+        payload: agent
+      });
+      await publishOfficeOccupantForAgent(ctx.db, ctx.realtimeHub, req.companyId!, agent.id);
+      return sendOk(res, toAgentResponse(agent as unknown as Record<string, unknown>));
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
   });
 
   router.delete("/:agentId", async (req, res) => {
@@ -577,6 +606,16 @@ function listUnsupportedAgentUpdateKeys(payload: unknown) {
     }
   }
   return unsupported;
+}
+
+function enforceRuntimeCwdPolicy(companyId: string, runtime: ReturnType<typeof normalizeRuntimeConfig>) {
+  if (!runtime.runtimeCwd) {
+    return runtime;
+  }
+  return {
+    ...runtime,
+    runtimeCwd: assertRuntimeCwdForCompany(companyId, runtime.runtimeCwd, "runtimeCwd")
+  };
 }
 
 async function findDuplicateHireRequest(

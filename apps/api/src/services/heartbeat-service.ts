@@ -26,8 +26,8 @@ import {
 import { appendAuditEvent, appendCost } from "bopodev-db";
 import { parseRuntimeConfigFromAgentRow } from "../lib/agent-config";
 import { bootstrapRepositoryWorkspace, ensureIsolatedGitWorktree, GitRuntimeError } from "../lib/git-runtime";
-import { resolveProjectWorkspacePath } from "../lib/instance-paths";
-import { getProjectWorkspaceContextMap, hasText, resolveAgentFallbackWorkspace } from "../lib/workspace-policy";
+import { isInsidePath, normalizeCompanyWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
+import { assertRuntimeCwdForCompany, getProjectWorkspaceContextMap, hasText, resolveAgentFallbackWorkspace } from "../lib/workspace-policy";
 import type { RealtimeHub } from "../realtime/hub";
 import { createHeartbeatRunsRealtimeEvent } from "../realtime/heartbeat-runs";
 import { publishOfficeOccupantForAgent } from "../realtime/office-space";
@@ -1448,6 +1448,9 @@ async function buildHeartbeatContext(
   for (const row of attachmentRows) {
     const projectWorkspace = projectWorkspaceMap.get(row.projectId) ?? resolveProjectWorkspacePath(companyId, row.projectId);
     const absolutePath = resolve(projectWorkspace, row.relativePath);
+    if (!isInsidePath(projectWorkspace, absolutePath)) {
+      continue;
+    }
     const existing = attachmentsByIssue.get(row.issueId) ?? [];
     existing.push({
       id: row.id,
@@ -1809,24 +1812,25 @@ async function resolveRuntimeWorkspaceForWorkItems(
     }
     const mode = projectContext.policy?.mode ?? "project_primary";
     const baseWorkspaceCwd = hasText(projectContext.cwd)
-      ? projectContext.cwd
+      ? normalizeCompanyWorkspacePath(companyId, projectContext.cwd as string)
       : projectContext.repoUrl
         ? resolveProjectWorkspacePath(companyId, projectId)
         : null;
     if (mode === "agent_default" && hasText(normalizedRuntimeCwd)) {
+      const boundedRuntimeCwd = assertRuntimeCwdForCompany(companyId, normalizedRuntimeCwd!, "runtime.cwd");
       return {
         source: "agent_runtime",
         warnings,
         runtime: {
           ...runtime,
-          cwd: normalizedRuntimeCwd
+          cwd: boundedRuntimeCwd
         }
       };
     }
     if (!baseWorkspaceCwd) {
       continue;
     }
-    let selectedWorkspaceCwd = baseWorkspaceCwd;
+    let selectedWorkspaceCwd = normalizeCompanyWorkspacePath(companyId, baseWorkspaceCwd);
     await mkdir(baseWorkspaceCwd, { recursive: true });
     try {
       if (hasText(projectContext.repoUrl)) {
@@ -1839,7 +1843,7 @@ async function resolveRuntimeWorkspaceForWorkItems(
           policy: projectContext.policy,
           runtimeEnv: runtime?.env
         });
-        selectedWorkspaceCwd = bootstrap.cwd;
+        selectedWorkspaceCwd = normalizeCompanyWorkspacePath(companyId, bootstrap.cwd);
       }
       if (
         mode === "isolated" &&
@@ -1856,7 +1860,7 @@ async function resolveRuntimeWorkspaceForWorkItems(
           repoRef: projectContext.repoRef,
           policy: projectContext.policy
         });
-        selectedWorkspaceCwd = worktree.cwd;
+        selectedWorkspaceCwd = normalizeCompanyWorkspacePath(companyId, worktree.cwd);
       } else if (mode === "isolated" && projectContext.policy?.strategy?.type === "git_worktree") {
         warnings.push(
           "Project execution workspace policy mode 'isolated' is configured with git_worktree, but BOPO_ENABLE_GIT_WORKTREE_ISOLATION is disabled. Falling back to primary project workspace."
@@ -1887,17 +1891,18 @@ async function resolveRuntimeWorkspaceForWorkItems(
   }
 
   if (hasText(normalizedRuntimeCwd)) {
+    const boundedRuntimeCwd = assertRuntimeCwdForCompany(companyId, normalizedRuntimeCwd!, "runtime.cwd");
     return {
       source: "agent_runtime",
       warnings,
       runtime: {
         ...runtime,
-        cwd: normalizedRuntimeCwd
+        cwd: boundedRuntimeCwd
       }
     };
   }
 
-  const fallbackWorkspace = resolveAgentFallbackWorkspace(companyId, agentId);
+  const fallbackWorkspace = normalizeCompanyWorkspacePath(companyId, resolveAgentFallbackWorkspace(companyId, agentId));
   await mkdir(fallbackWorkspace, { recursive: true });
   warnings.push(`Runtime cwd was not configured. Falling back to '${fallbackWorkspace}'.`);
   return {

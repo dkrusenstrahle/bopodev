@@ -19,7 +19,12 @@ import {
   updateCompany
 } from "bopodev-db";
 import { normalizeRuntimeConfig, runtimeConfigToDb, runtimeConfigToStateBlobPatch } from "../lib/agent-config";
-import { resolveAgentFallbackWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
+import {
+  normalizeAbsolutePath,
+  normalizeCompanyWorkspacePath,
+  resolveAgentFallbackWorkspacePath,
+  resolveProjectWorkspacePath
+} from "../lib/instance-paths";
 import { resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { ensureCompanyModelPricingDefaults } from "../services/model-pricing";
 
@@ -82,7 +87,7 @@ export async function ensureOnboardingSeed(input: {
     const companyId = companyRow.id;
     const resolvedCompanyName = companyRow.name;
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(db, companyId);
-    await mkdir(defaultRuntimeCwd, { recursive: true });
+    await mkdir(normalizeCompanyWorkspacePath(companyId, defaultRuntimeCwd), { recursive: true });
     const seedRuntimeEnv = resolveSeedRuntimeEnv(agentProvider);
     const defaultRuntimeConfig = normalizeRuntimeConfig({
       defaultRuntimeCwd,
@@ -197,7 +202,7 @@ async function ensureProjectPrimaryWorkspace(
   const existingPrimary = existingWorkspaces.find((workspace) => workspace.isPrimary);
   if (existingPrimary) {
     if (existingPrimary.cwd) {
-      await mkdir(existingPrimary.cwd, { recursive: true });
+      await mkdir(normalizeCompanyWorkspacePath(companyId, existingPrimary.cwd), { recursive: true });
     }
     return existingPrimary;
   }
@@ -205,7 +210,9 @@ async function ensureProjectPrimaryWorkspace(
   await mkdir(defaultWorkspaceCwd, { recursive: true });
   const fallbackWorkspace = existingWorkspaces[0];
   if (fallbackWorkspace) {
-    const normalizedCwd = fallbackWorkspace.cwd?.trim() ? fallbackWorkspace.cwd : defaultWorkspaceCwd;
+    const normalizedCwd = fallbackWorkspace.cwd?.trim()
+      ? normalizeCompanyWorkspacePath(companyId, fallbackWorkspace.cwd)
+      : defaultWorkspaceCwd;
     if (normalizedCwd) {
       await mkdir(normalizedCwd, { recursive: true });
     }
@@ -323,7 +330,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 function normalizeOptionalDbPath(value: string | undefined) {
   const normalized = value?.trim();
-  return normalized && normalized.length > 0 ? normalized : undefined;
+  return normalized && normalized.length > 0 ? normalizeAbsolutePath(normalized, { requireAbsoluteInput: true }) : undefined;
 }
 
 function parseAgentProvider(value: unknown): AgentProvider | null {

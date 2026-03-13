@@ -28,7 +28,7 @@ import {
 import { nanoid } from "nanoid";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
-import { isInsidePath, normalizeAbsolutePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
+import { isInsidePath, normalizeCompanyWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
 
@@ -720,7 +720,7 @@ function toIssueAttachmentResponse(attachment: Record<string, unknown>, issueId:
 
 function resolveWorkspacePath(companyId: string, projectId: string, workspaceCwd: string | null) {
   if (workspaceCwd && workspaceCwd.trim().length > 0) {
-    return normalizeAbsolutePath(workspaceCwd);
+    return normalizeCompanyWorkspacePath(companyId, workspaceCwd);
   }
   return resolveProjectWorkspacePath(companyId, projectId);
 }

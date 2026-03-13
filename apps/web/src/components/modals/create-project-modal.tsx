@@ -293,7 +293,7 @@ export function CreateProjectModal({
                 onClick={() => setWorkspaceMode("local")}
               >
                 <span className="ui-project-workspace-mode-title">A local folder</span>
-                <span className="ui-project-workspace-mode-description">Use a full path on this machine.</span>
+                <span className="ui-project-workspace-mode-description">Use a full path.</span>
               </button>
               <button
                 type="button"
@@ -309,7 +309,7 @@ export function CreateProjectModal({
                 onClick={() => setWorkspaceMode("both")}
               >
                 <span className="ui-project-workspace-mode-title">Both</span>
-                <span className="ui-project-workspace-mode-description">Configure local + repo hints.</span>
+                <span className="ui-project-workspace-mode-description">Configure local + repo.</span>
               </button>
             </div>
             <Field>

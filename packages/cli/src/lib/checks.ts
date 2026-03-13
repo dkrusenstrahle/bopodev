@@ -1,7 +1,9 @@
-import { access, constants, mkdir } from "node:fs/promises";
+import { access, constants, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { commandExists, runCommandCapture } from "./process";
+
+const SAFE_PATH_SEGMENT_RE = /^[a-zA-Z0-9_-]+$/;
 
 export interface DoctorCheck {
   label: string;
@@ -79,26 +81,36 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
         : gemini.error ?? `Command '${geminiCommand}' exited with ${String(gemini.exitCode)}`
   });
 
-  const instanceRoot = resolveInstanceRoot();
-  const storageRoot = join(instanceRoot, "data", "storage");
-  const workspaceRoot = join(instanceRoot, "workspaces");
-  checks.push({
-    label: "Instance root writable",
-    ok: await ensureWritableDirectory(instanceRoot),
-    details: instanceRoot
-  });
-  checks.push({
-    label: "Workspace root writable",
-    ok: await ensureWritableDirectory(workspaceRoot),
-    details: workspaceRoot
-  });
-  checks.push({
-    label: "Storage root writable",
-    ok: await ensureWritableDirectory(storageRoot),
-    details: storageRoot
-  });
+  try {
+    const instanceRoot = resolveInstanceRoot();
+    const storageRoot = join(instanceRoot, "data", "storage");
+    const workspaceRoot = join(instanceRoot, "workspaces");
+    checks.push({
+      label: "Instance root writable",
+      ok: await ensureWritableDirectory(instanceRoot),
+      details: instanceRoot
+    });
+    checks.push({
+      label: "Workspace root writable",
+      ok: await ensureWritableDirectory(workspaceRoot),
+      details: workspaceRoot
+    });
+    checks.push({
+      label: "Storage root writable",
+      ok: await ensureWritableDirectory(storageRoot),
+      details: storageRoot
+    });
+  } catch (error) {
+    checks.push({
+      label: "Instance path configuration",
+      ok: false,
+      details: String(error)
+    });
+  }
 
   if (options?.workspaceRoot) {
+    const driftCheck = await runWorkspacePathDriftCheck(options.workspaceRoot);
+    checks.push(driftCheck);
     const backfillCheck = await runWorkspaceBackfillDryRunCheck(options.workspaceRoot);
     checks.push(backfillCheck);
   }
@@ -125,7 +137,6 @@ export async function detectPnpmVersion(): Promise<string | null> {
 
 async function ensureWritableDirectory(path: string) {
   try {
-    await mkdir(path, { recursive: true });
     await access(path, constants.W_OK);
     return true;
   } catch {
@@ -140,6 +151,9 @@ function resolveInstanceRoot() {
   }
   const home = process.env.BOPO_HOME?.trim() ? expandHomePrefix(process.env.BOPO_HOME.trim()) : join(homedir(), ".bopodev");
   const instanceId = process.env.BOPO_INSTANCE_ID?.trim() || "default";
+  if (!SAFE_PATH_SEGMENT_RE.test(instanceId)) {
+    throw new Error(`Invalid BOPO_INSTANCE_ID '${instanceId}'.`);
+  }
   return resolve(home, "instances", instanceId);
 }
 
@@ -203,5 +217,46 @@ async function runWorkspaceBackfillDryRunCheck(workspaceRoot: string): Promise<D
       ok: false,
       details: "Workspace coverage check returned invalid JSON."
     };
+  }
+}
+
+async function runWorkspacePathDriftCheck(workspaceRoot: string): Promise<DoctorCheck> {
+  const instanceRoot = resolveInstanceRoot();
+  const suspiciousEntries = await detectSuspiciousWorkspaceDirectories(workspaceRoot);
+  if (suspiciousEntries.length === 0) {
+    return {
+      label: "Workspace path drift",
+      ok: true,
+      details: "No suspicious workspace-like directories found outside managed root."
+    };
+  }
+  return {
+    label: "Workspace path drift",
+    ok: false,
+    details: `Found suspicious directories outside '${instanceRoot}': ${suspiciousEntries.join(", ")}`
+  };
+}
+
+export async function detectSuspiciousWorkspaceDirectories(workspaceRoot: string) {
+  const candidates = [
+    join(workspaceRoot, "relative"),
+    join(workspaceRoot, "workspaces"),
+    join(workspaceRoot, "workspace")
+  ];
+  const hits: string[] = [];
+  for (const candidate of candidates) {
+    if (await isDirectory(candidate)) {
+      hits.push(candidate);
+    }
+  }
+  return hits;
+}
+
+async function isDirectory(path: string) {
+  try {
+    const entry = await stat(path);
+    return entry.isDirectory();
+  } catch {
+    return false;
   }
 }

@@ -15,6 +15,7 @@ import { createIssuesRouter } from "./routes/issues";
 import { createObservabilityRouter } from "./routes/observability";
 import { createProjectsRouter } from "./routes/projects";
 import { createPluginsRouter } from "./routes/plugins";
+import { createTemplatesRouter } from "./routes/templates";
 import { sendError } from "./http";
 import { attachRequestActor } from "./middleware/request-actor";
 import { resolveAllowedOrigins, resolveDeploymentMode } from "./security/deployment-mode";
@@ -114,6 +115,7 @@ export function createApp(ctx: AppContext) {
   app.use("/heartbeats", createHeartbeatRouter(ctx));
   app.use("/observability", createObservabilityRouter(ctx));
   app.use("/plugins", createPluginsRouter(ctx));
+  app.use("/templates", createTemplatesRouter(ctx));
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof RepositoryValidationError) {

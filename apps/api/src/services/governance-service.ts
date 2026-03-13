@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { mkdir } from "node:fs/promises";
 import { z } from "zod";
-import { AgentCreateRequestSchema } from "bopodev-contracts";
+import { AgentCreateRequestSchema, TemplateManifestDefault, TemplateManifestSchema } from "bopodev-contracts";
 import type { BopoDb } from "bopodev-db";
 import {
   approvalRequests,
@@ -10,6 +10,8 @@ import {
   createIssue,
   createProject,
   createProjectWorkspace,
+  getCurrentTemplateVersion,
+  getTemplate,
   goals,
   listAgents,
   listIssues,
@@ -34,6 +36,7 @@ import {
 } from "../lib/instance-paths";
 import { assertRuntimeCwdForCompany, hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { appendDurableFact } from "./memory-file-service";
+import { applyTemplateManifest } from "./template-apply-service";
 
 const approvalGatedActions = new Set([
   "hire_agent",
@@ -42,7 +45,8 @@ const approvalGatedActions = new Set([
   "pause_agent",
   "terminate_agent",
   "promote_memory_fact",
-  "grant_plugin_capabilities"
+  "grant_plugin_capabilities",
+  "apply_template"
 ]);
 
 const hireAgentPayloadSchema = AgentCreateRequestSchema.extend({
@@ -82,6 +86,11 @@ const grantPluginCapabilitiesPayloadSchema = z.object({
   priority: z.number().int().min(0).max(1000).optional(),
   grantedCapabilities: z.array(z.string().min(1)).default([]),
   config: z.record(z.string(), z.unknown()).default({})
+});
+const applyTemplatePayloadSchema = z.object({
+  templateId: z.string().min(1),
+  templateVersion: z.string().min(1),
+  variables: z.record(z.string(), z.unknown()).default({})
 });
 const AGENT_STARTUP_PROJECT_NAME = "Agent Onboarding";
 const AGENT_STARTUP_TASK_MARKER = "[bopodev:onboarding:agent-startup:v1]";
@@ -129,7 +138,7 @@ export async function resolveApproval(
     let execution:
       | {
           applied: boolean;
-          entityType?: "agent" | "goal" | "memory";
+          entityType?: "agent" | "goal" | "memory" | "template";
           entityId?: string;
           entity?: Record<string, unknown>;
         }
@@ -354,13 +363,52 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
     });
     return {
       applied: true,
-      entityType: "memory" as const,
+      entityType: "template" as const,
       entityId: parsed.data.pluginId,
       entity: {
         pluginId: parsed.data.pluginId,
         enabled: parsed.data.enabled ?? null,
         priority: parsed.data.priority ?? null,
         grantedCapabilities: parsed.data.grantedCapabilities
+      }
+    };
+  }
+  if (action === "apply_template") {
+    const parsed = applyTemplatePayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new GovernanceError("Approval payload for template apply is invalid.");
+    }
+    const template = await getTemplate(db, companyId, parsed.data.templateId);
+    if (!template) {
+      throw new GovernanceError("Template not found for apply request.");
+    }
+    const version =
+      (await getCurrentTemplateVersion(db, companyId, parsed.data.templateId)) ??
+      null;
+    if (!version) {
+      throw new GovernanceError("Template version not found for apply request.");
+    }
+    const manifest = parsePayload(version.manifestJson);
+    const parsedManifest = TemplateManifestSchema.safeParse(manifest);
+    const normalizedManifest = parsedManifest.success
+      ? parsedManifest.data
+      : TemplateManifestSchema.parse(TemplateManifestDefault);
+    const applied = await applyTemplateManifest(db, {
+      companyId,
+      templateId: template.id,
+      templateVersion: version.version,
+      templateVersionId: version.id,
+      manifest: normalizedManifest,
+      variables: parsed.data.variables
+    });
+    return {
+      applied: applied.applied,
+      entityType: "template" as const,
+      entityId: template.id,
+      entity: {
+        id: template.id,
+        installId: applied.installId ?? null,
+        summary: applied.summary
       }
     };
   }

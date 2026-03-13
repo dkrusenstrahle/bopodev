@@ -147,6 +147,28 @@ export interface WorkspaceData {
       updatedAt: string;
     } | null;
   }>;
+  templates: Array<{
+    id: string;
+    companyId: string;
+    slug: string;
+    name: string;
+    description?: string | null;
+    currentVersion: string;
+    status: "draft" | "published" | "archived";
+    visibility: "company" | "private";
+    variables: Array<{
+      key: string;
+      label?: string;
+      description?: string;
+      type: "string" | "number" | "boolean" | "select";
+      required: boolean;
+      defaultValue?: unknown;
+      options?: string[];
+    }>;
+    manifest: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+  }>;
 }
 
 export interface HeartbeatRunMessageRow {
@@ -192,7 +214,8 @@ type WorkspaceDataSection =
   | "governanceInbox"
   | "auditEvents"
   | "costEntries"
-  | "projects";
+  | "projects"
+  | "templates";
 
 export interface WorkspaceDataLoadOptions {
   include?: Partial<Record<WorkspaceDataSection, boolean>>;
@@ -293,6 +316,11 @@ async function loadProjects(companyId: string) {
   return result.data;
 }
 
+async function loadTemplates(companyId: string) {
+  const result = (await apiGet("/templates", companyId)) as ApiResult<WorkspaceData["templates"]>;
+  return result.data;
+}
+
 export async function loadWorkspaceData(
   requestedCompanyId?: string | null,
   options: WorkspaceDataLoadOptions = {}
@@ -307,6 +335,7 @@ export async function loadWorkspaceData(
     auditEvents: true,
     costEntries: true,
     projects: true,
+    templates: true,
     ...options.include
   } satisfies Record<WorkspaceDataSection, boolean>;
   const emptyWorkspaceData = (): WorkspaceData => ({
@@ -321,7 +350,8 @@ export async function loadWorkspaceData(
     governanceInbox: [],
     auditEvents: [],
     costEntries: [],
-    projects: []
+    projects: [],
+    templates: []
   });
   let companies: WorkspaceData["companies"] = [];
   try {
@@ -344,7 +374,7 @@ export async function loadWorkspaceData(
   }
 
   const companyId = activeCompany.id;
-  const [issues, agents, heartbeatRuns, goals, approvals, governanceInbox, auditEvents, costEntries, projects] = await Promise.all(
+  const [issues, agents, heartbeatRuns, goals, approvals, governanceInbox, auditEvents, costEntries, projects, templates] = await Promise.all(
     [
       include.issues ? loadIssues(companyId) : Promise.resolve([]),
       include.agents ? loadAgents(companyId) : Promise.resolve([]),
@@ -354,7 +384,8 @@ export async function loadWorkspaceData(
       include.governanceInbox ? loadGovernanceInbox(companyId) : Promise.resolve([]),
       include.auditEvents ? loadAuditEvents(companyId) : Promise.resolve([]),
       include.costEntries ? loadCostEntries(companyId) : Promise.resolve([]),
-      include.projects ? loadProjects(companyId) : Promise.resolve([])
+      include.projects ? loadProjects(companyId) : Promise.resolve([]),
+      include.templates ? loadTemplates(companyId) : Promise.resolve([])
     ]
   );
 
@@ -370,6 +401,7 @@ export async function loadWorkspaceData(
     governanceInbox,
     auditEvents,
     costEntries,
-    projects
+    projects,
+    templates
   };
 }

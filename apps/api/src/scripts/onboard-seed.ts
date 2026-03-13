@@ -1,10 +1,14 @@
 import { pathToFileURL } from "node:url";
 import { mkdir } from "node:fs/promises";
+import { TemplateManifestDefault, TemplateManifestSchema } from "bopodev-contracts";
 import { getAdapterModels } from "bopodev-agent-sdk";
 import {
   bootstrapDatabase,
   createProjectWorkspace,
   createAgent,
+  getCurrentTemplateVersion,
+  getTemplate,
+  getTemplateBySlug,
   createCompany,
   createIssue,
   createProject,
@@ -27,6 +31,8 @@ import {
 } from "../lib/instance-paths";
 import { resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { ensureCompanyModelPricingDefaults } from "../services/model-pricing";
+import { applyTemplateManifest } from "../services/template-apply-service";
+import { ensureCompanyBuiltinTemplateDefaults } from "../services/template-catalog";
 
 export interface OnboardSeedSummary {
   companyId: string;
@@ -36,12 +42,15 @@ export interface OnboardSeedSummary {
   ceoProviderType: AgentProvider;
   ceoRuntimeModel: string | null;
   ceoMigrated: boolean;
+  templateApplied: boolean;
+  templateId: string | null;
 }
 
 const DEFAULT_COMPANY_NAME_ENV = "BOPO_DEFAULT_COMPANY_NAME";
 const DEFAULT_COMPANY_ID_ENV = "BOPO_DEFAULT_COMPANY_ID";
 const DEFAULT_AGENT_PROVIDER_ENV = "BOPO_DEFAULT_AGENT_PROVIDER";
 const DEFAULT_AGENT_MODEL_ENV = "BOPO_DEFAULT_AGENT_MODEL";
+const DEFAULT_TEMPLATE_ENV = "BOPO_DEFAULT_TEMPLATE_ID";
 type AgentProvider = "codex" | "claude_code" | "cursor" | "gemini_cli" | "opencode" | "openai_api" | "anthropic_api" | "shell";
 const CEO_BOOTSTRAP_SUMMARY = "ceo bootstrap heartbeat";
 const STARTUP_PROJECT_NAME = "Leadership Setup";
@@ -54,6 +63,7 @@ export async function ensureOnboardingSeed(input: {
   companyId?: string;
   agentProvider?: AgentProvider;
   agentModel?: string;
+  templateId?: string;
 }): Promise<OnboardSeedSummary> {
   const companyName = input.companyName.trim();
   if (companyName.length === 0) {
@@ -86,6 +96,7 @@ export async function ensureOnboardingSeed(input: {
 
     const companyId = companyRow.id;
     const resolvedCompanyName = companyRow.name;
+    await ensureCompanyBuiltinTemplateDefaults(db, companyId);
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(db, companyId);
     await mkdir(normalizeCompanyWorkspacePath(companyId, defaultRuntimeCwd), { recursive: true });
     const seedRuntimeEnv = resolveSeedRuntimeEnv(agentProvider);
@@ -154,6 +165,39 @@ export async function ensureOnboardingSeed(input: {
         ceoId
       });
     }
+    let templateApplied = false;
+    let appliedTemplateId: string | null = null;
+    if (input.templateId?.trim()) {
+      const requestedTemplateId = input.templateId.trim();
+      const template =
+        (await getTemplate(db, companyId, requestedTemplateId)) ??
+        (await getTemplateBySlug(db, companyId, requestedTemplateId));
+      if (template) {
+        const templateVersion = await getCurrentTemplateVersion(db, companyId, template.id);
+        if (templateVersion) {
+          let manifest: Record<string, unknown> = {};
+          try {
+            manifest = JSON.parse(templateVersion.manifestJson) as Record<string, unknown>;
+          } catch {
+            manifest = {};
+          }
+          const parsedManifest = TemplateManifestSchema.safeParse(manifest);
+          const normalizedManifest = parsedManifest.success
+            ? parsedManifest.data
+            : TemplateManifestSchema.parse(TemplateManifestDefault);
+          const applied = await applyTemplateManifest(db, {
+            companyId,
+            templateId: template.id,
+            templateVersion: templateVersion.version,
+            templateVersionId: templateVersion.id,
+            manifest: normalizedManifest,
+            variables: {}
+          });
+          templateApplied = applied.applied;
+          appliedTemplateId = template.id;
+        }
+      }
+    }
     await ensureCompanyModelPricingDefaults(db, companyId);
 
     return {
@@ -163,7 +207,9 @@ export async function ensureOnboardingSeed(input: {
       ceoCreated,
       ceoProviderType,
       ceoRuntimeModel,
-      ceoMigrated
+      ceoMigrated,
+      templateApplied,
+      templateId: appliedTemplateId
     };
   } finally {
     const maybeClose = (client as { close?: () => Promise<void> }).close;
@@ -312,13 +358,15 @@ async function main() {
   const companyId = process.env[DEFAULT_COMPANY_ID_ENV]?.trim() || undefined;
   const agentProvider = parseAgentProvider(process.env[DEFAULT_AGENT_PROVIDER_ENV]) ?? undefined;
   const agentModel = process.env[DEFAULT_AGENT_MODEL_ENV]?.trim() || undefined;
+  const templateId = process.env[DEFAULT_TEMPLATE_ENV]?.trim() || undefined;
   const dbPath = normalizeOptionalDbPath(process.env.BOPO_DB_PATH);
   const result = await ensureOnboardingSeed({
     dbPath,
     companyName,
     companyId,
     agentProvider,
-    agentModel
+    agentModel,
+    templateId
   });
   // eslint-disable-next-line no-console
   console.log(JSON.stringify(result));

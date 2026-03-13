@@ -9,7 +9,8 @@ import type {
   HeartbeatRunRow,
   IssueRow,
   PluginRow,
-  ProjectRow
+  ProjectRow,
+  TemplateRow
 } from "@/components/workspace/types";
 
 export interface WorkspacePageProps {
@@ -26,4 +27,5 @@ export interface WorkspacePageProps {
   costEntries: CostRow[];
   projects: ProjectRow[];
   plugins?: PluginRow[];
+  templates?: TemplateRow[];
 }

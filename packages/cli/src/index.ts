@@ -14,14 +14,16 @@ program
   .description("Install, configure, and start Bopodev locally")
   .option("--yes", "Run non-interactively using defaults", false)
   .option("--force-install", "Force reinstall dependencies even if already installed", false)
+  .option("--template <template>", "Apply template by id or slug during onboarding")
   .option("--no-start", "Run setup and doctor checks without starting services")
-  .action(async (options: { yes: boolean; start: boolean; forceInstall: boolean }) => {
+  .action(async (options: { yes: boolean; start: boolean; forceInstall: boolean; template?: string }) => {
     try {
       await runOnboardFlow({
         cwd: process.cwd(),
         yes: options.yes,
         start: options.start,
-        forceInstall: options.forceInstall
+        forceInstall: options.forceInstall,
+        template: options.template
       });
       if (!options.start) {
         outro("Onboarding finished.");

@@ -482,7 +482,7 @@ export function IssueDetailPageClient({
           <div className={styles.issueDetailContainer5}>
             <SectionHeading
               title={issue.title}
-              description="Describe the work and expected outcome."
+              description="Issue details and controls."
             />
           </div>
           <div className={styles.issueHeaderActionsContainer}>
@@ -784,7 +784,7 @@ export function IssueDetailPageClient({
 
       <Card>
         <CardContent className={styles.issueSidebarCardContent}>
-          <PropertyRow label="Priority" value={<Badge variant="outline">{issue.priority}</Badge>} />
+          <PropertyRow label="Priority" value={issue.priority} />
           <PropertyRow label="Labels" value={issue.labels.length > 0 ? issue.labels.join(", ") : "No labels"} />
           <PropertyRow label="Assignee" value={selectedAssignee ? `${selectedAssignee.name}` : "Unassigned"} />
           <PropertyRow

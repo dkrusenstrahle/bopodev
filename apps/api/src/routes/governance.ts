@@ -172,6 +172,8 @@ export function createGovernanceRouter(ctx: AppContext) {
       const eventType =
         resolution.action === "grant_plugin_capabilities"
           ? "plugin.capabilities_granted_from_approval"
+          : resolution.action === "apply_template"
+            ? "template.applied_from_approval"
           : resolution.execution.entityType === "agent"
           ? "agent.hired_from_approval"
           : resolution.execution.entityType === "goal"

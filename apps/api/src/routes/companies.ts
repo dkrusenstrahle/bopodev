@@ -5,6 +5,7 @@ import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { ensureCompanyModelPricingDefaults } from "../services/model-pricing";
 import { ensureCompanyBuiltinPluginDefaults } from "../services/plugin-runtime";
+import { ensureCompanyBuiltinTemplateDefaults } from "../services/template-catalog";
 
 const createCompanySchema = z.object({
   name: z.string().min(1),
@@ -33,6 +34,7 @@ export function createCompaniesRouter(ctx: AppContext) {
     }
     const company = await createCompany(ctx.db, parsed.data);
     await ensureCompanyBuiltinPluginDefaults(ctx.db, company.id);
+    await ensureCompanyBuiltinTemplateDefaults(ctx.db, company.id);
     await ensureCompanyModelPricingDefaults(ctx.db, company.id);
     return sendOk(res, company);
   });

@@ -21,6 +21,9 @@ import {
   plugins,
   projectWorkspaces,
   projects,
+  templateInstalls,
+  templateVersions,
+  templates,
   touchUpdatedAtSql
 } from "./schema";
 
@@ -72,6 +75,17 @@ async function assertAgentBelongsToCompany(db: BopoDb, companyId: string, agentI
     .limit(1);
   if (!agent) {
     throw new RepositoryValidationError("Agent not found for company.");
+  }
+}
+
+async function assertTemplateBelongsToCompany(db: BopoDb, companyId: string, templateId: string) {
+  const [template] = await db
+    .select({ id: templates.id })
+    .from(templates)
+    .where(and(eq(templates.companyId, companyId), eq(templates.id, templateId)))
+    .limit(1);
+  if (!template) {
+    throw new RepositoryValidationError("Template not found for company.");
   }
 }
 
@@ -1549,6 +1563,215 @@ export async function listPluginRuns(
     )
     .orderBy(desc(pluginRuns.createdAt))
     .limit(limit);
+}
+
+export async function listTemplates(db: BopoDb, companyId: string) {
+  return db
+    .select()
+    .from(templates)
+    .where(eq(templates.companyId, companyId))
+    .orderBy(desc(templates.updatedAt), asc(templates.slug));
+}
+
+export async function getTemplate(db: BopoDb, companyId: string, templateId: string) {
+  const [template] = await db
+    .select()
+    .from(templates)
+    .where(and(eq(templates.companyId, companyId), eq(templates.id, templateId)))
+    .limit(1);
+  return template ?? null;
+}
+
+export async function getTemplateBySlug(db: BopoDb, companyId: string, slug: string) {
+  const [template] = await db
+    .select()
+    .from(templates)
+    .where(and(eq(templates.companyId, companyId), eq(templates.slug, slug)))
+    .limit(1);
+  return template ?? null;
+}
+
+export async function createTemplate(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    slug: string;
+    name: string;
+    description?: string | null;
+    currentVersion?: string;
+    status?: "draft" | "published" | "archived";
+    visibility?: "company" | "private";
+    variablesJson?: string;
+  }
+) {
+  const id = nanoid(12);
+  const [template] = await db
+    .insert(templates)
+    .values({
+      id,
+      companyId: input.companyId,
+      slug: input.slug,
+      name: input.name,
+      description: input.description ?? null,
+      currentVersion: input.currentVersion ?? "1.0.0",
+      status: input.status ?? "draft",
+      visibility: input.visibility ?? "company",
+      variablesJson: input.variablesJson ?? "[]"
+    })
+    .returning();
+  return template ?? null;
+}
+
+export async function updateTemplate(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    id: string;
+    slug?: string;
+    name?: string;
+    description?: string | null;
+    currentVersion?: string;
+    status?: "draft" | "published" | "archived";
+    visibility?: "company" | "private";
+    variablesJson?: string;
+  }
+) {
+  const [template] = await db
+    .update(templates)
+    .set(
+      compactUpdate({
+        slug: input.slug,
+        name: input.name,
+        description: input.description,
+        currentVersion: input.currentVersion,
+        status: input.status,
+        visibility: input.visibility,
+        variablesJson: input.variablesJson,
+        updatedAt: touchUpdatedAtSql
+      })
+    )
+    .where(and(eq(templates.companyId, input.companyId), eq(templates.id, input.id)))
+    .returning();
+  return template ?? null;
+}
+
+export async function deleteTemplate(db: BopoDb, companyId: string, templateId: string) {
+  const [deleted] = await db
+    .delete(templates)
+    .where(and(eq(templates.companyId, companyId), eq(templates.id, templateId)))
+    .returning({ id: templates.id });
+  return Boolean(deleted);
+}
+
+export async function listTemplateVersions(db: BopoDb, companyId: string, templateId: string) {
+  await assertTemplateBelongsToCompany(db, companyId, templateId);
+  return db
+    .select()
+    .from(templateVersions)
+    .where(and(eq(templateVersions.companyId, companyId), eq(templateVersions.templateId, templateId)))
+    .orderBy(desc(templateVersions.createdAt));
+}
+
+export async function getTemplateVersionByVersion(
+  db: BopoDb,
+  input: { companyId: string; templateId: string; version: string }
+) {
+  const [row] = await db
+    .select()
+    .from(templateVersions)
+    .where(
+      and(
+        eq(templateVersions.companyId, input.companyId),
+        eq(templateVersions.templateId, input.templateId),
+        eq(templateVersions.version, input.version)
+      )
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function getCurrentTemplateVersion(db: BopoDb, companyId: string, templateId: string) {
+  const template = await getTemplate(db, companyId, templateId);
+  if (!template) {
+    return null;
+  }
+  return getTemplateVersionByVersion(db, {
+    companyId,
+    templateId,
+    version: template.currentVersion
+  });
+}
+
+export async function createTemplateVersion(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    templateId: string;
+    version: string;
+    manifestJson: string;
+  }
+) {
+  await assertTemplateBelongsToCompany(db, input.companyId, input.templateId);
+  const id = nanoid(14);
+  const [row] = await db
+    .insert(templateVersions)
+    .values({
+      id,
+      companyId: input.companyId,
+      templateId: input.templateId,
+      version: input.version,
+      manifestJson: input.manifestJson
+    })
+    .returning();
+  return row ?? null;
+}
+
+export async function listTemplateInstalls(
+  db: BopoDb,
+  input: { companyId: string; templateId?: string; limit?: number }
+) {
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), 1000);
+  return db
+    .select()
+    .from(templateInstalls)
+    .where(
+      and(
+        eq(templateInstalls.companyId, input.companyId),
+        input.templateId ? eq(templateInstalls.templateId, input.templateId) : undefined
+      )
+    )
+    .orderBy(desc(templateInstalls.createdAt))
+    .limit(limit);
+}
+
+export async function createTemplateInstall(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    templateId?: string | null;
+    templateVersionId?: string | null;
+    status?: "applied" | "queued" | "failed";
+    summaryJson?: string;
+    variablesJson?: string;
+  }
+) {
+  if (input.templateId) {
+    await assertTemplateBelongsToCompany(db, input.companyId, input.templateId);
+  }
+  const id = nanoid(14);
+  const [row] = await db
+    .insert(templateInstalls)
+    .values({
+      id,
+      companyId: input.companyId,
+      templateId: input.templateId ?? null,
+      templateVersionId: input.templateVersionId ?? null,
+      status: input.status ?? "applied",
+      summaryJson: input.summaryJson ?? "{}",
+      variablesJson: input.variablesJson ?? "{}"
+    })
+    .returning();
+  return row ?? null;
 }
 
 export async function listModelPricing(db: BopoDb, companyId: string) {

@@ -3,7 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { ensureOnboardingSeed } from "../apps/api/src/scripts/onboard-seed";
-import { bootstrapDatabase, createAgent, createCompany, listAgents, listCompanies, listIssues, listProjects } from "../packages/db/src";
+import {
+  bootstrapDatabase,
+  createAgent,
+  createCompany,
+  createTemplate,
+  createTemplateVersion,
+  listAgents,
+  listCompanies,
+  listIssues,
+  listProjects
+} from "../packages/db/src";
 
 describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
   const cleanupDirs: string[] = [];
@@ -72,6 +82,77 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
       expect(startupBody).not.toContain("instruction file path");
     } finally {
       await (client as { close?: () => Promise<void> }).close?.();
+    }
+  });
+
+  test("applies requested template during onboarding when available", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bopo-onboard-seed-"));
+    cleanupDirs.push(tempDir);
+    const dbPath = join(tempDir, "seed.db");
+    const boot = await bootstrapDatabase(dbPath);
+    try {
+      const company = await createCompany(boot.db, { name: "Template Co" });
+      const template = await createTemplate(boot.db, {
+        companyId: company.id,
+        slug: "starter-template",
+        name: "Starter Template",
+        currentVersion: "1.0.0",
+        variablesJson: "[]"
+      });
+      expect(template).toBeTruthy();
+      await createTemplateVersion(boot.db, {
+        companyId: company.id,
+        templateId: template!.id,
+        version: "1.0.0",
+        manifestJson: JSON.stringify({
+          projects: [{ key: "ops", name: "Operations" }],
+          issues: [{ title: "Set up operating cadence", projectKey: "ops" }]
+        })
+      });
+      const result = await ensureOnboardingSeed({
+        dbPath,
+        companyName: "Template Co",
+        companyId: company.id,
+        agentProvider: "codex",
+        templateId: "starter-template"
+      });
+      expect(result.templateApplied).toBe(true);
+      expect(result.templateId).toBe(template!.id);
+      const verify = await bootstrapDatabase(dbPath);
+      try {
+        const projects = await listProjects(verify.db, company.id);
+        const issues = await listIssues(verify.db, company.id);
+        expect(projects.some((project) => project.name === "Operations")).toBe(true);
+        expect(issues.some((issue) => issue.title === "Set up operating cadence")).toBe(true);
+      } finally {
+        await verify.client.close?.();
+      }
+    } finally {
+      await boot.client.close?.();
+    }
+  });
+
+  test("applies built-in founder-startup-basic template during onboarding by slug", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bopo-onboard-seed-"));
+    cleanupDirs.push(tempDir);
+    const dbPath = join(tempDir, "seed.db");
+    const result = await ensureOnboardingSeed({
+      dbPath,
+      companyName: "Builtins Co",
+      agentProvider: "codex",
+      templateId: "founder-startup-basic"
+    });
+
+    expect(result.templateApplied).toBe(true);
+    expect(result.templateId).toBeTruthy();
+
+    const verify = await bootstrapDatabase(dbPath);
+    try {
+      const projects = await listProjects(verify.db, result.companyId);
+      expect(projects.some((project) => project.name === "Leadership Operations")).toBe(true);
+      expect(projects.some((project) => project.name === "Product Delivery")).toBe(true);
+    } finally {
+      await verify.client.close?.();
     }
   });
 

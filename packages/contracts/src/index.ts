@@ -149,6 +149,203 @@ export const GoalSchema = z.object({
   updatedAt: z.string()
 });
 
+export const TemplateStatusSchema = z.enum(["draft", "published", "archived"]);
+export type TemplateStatus = z.infer<typeof TemplateStatusSchema>;
+export const TemplateVisibilitySchema = z.enum(["company", "private"]);
+export type TemplateVisibility = z.infer<typeof TemplateVisibilitySchema>;
+export const TemplateVariableTypeSchema = z.enum(["string", "number", "boolean", "select"]);
+export type TemplateVariableType = z.infer<typeof TemplateVariableTypeSchema>;
+export const TemplateVariableSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1).optional(),
+  description: z.string().optional(),
+  type: TemplateVariableTypeSchema.default("string"),
+  required: z.boolean().default(false),
+  defaultValue: z.unknown().optional(),
+  options: z.array(z.string().min(1)).default([])
+});
+export type TemplateVariable = z.infer<typeof TemplateVariableSchema>;
+export const TemplateManifestProjectSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  status: z.enum(["planned", "active", "paused", "blocked", "completed", "archived"]).optional()
+});
+export const TemplateManifestGoalSchema = z.object({
+  key: z.string().min(1),
+  level: GoalLevelSchema,
+  title: z.string().min(1),
+  description: z.string().optional(),
+  projectKey: z.string().optional()
+});
+export const TemplateManifestAgentSchema = z.object({
+  key: z.string().min(1),
+  role: z.string().min(1),
+  name: z.string().min(1),
+  providerType: z.lazy(() => ProviderTypeSchema).default("shell"),
+  heartbeatCron: z.string().default("*/5 * * * *"),
+  monthlyBudgetUsd: z.number().nonnegative().default(0),
+  canHireAgents: z.boolean().default(false),
+  managerAgentKey: z.string().optional(),
+  runtimeConfig: z.lazy(() => AgentRuntimeConfigSchema.partial()).optional()
+});
+export const TemplateManifestIssueSchema = z.object({
+  key: z.string().min(1).optional(),
+  title: z.string().min(1),
+  body: z.string().optional(),
+  status: IssueStatusSchema.optional(),
+  priority: IssuePrioritySchema.optional(),
+  projectKey: z.string().min(1),
+  assigneeAgentKey: z.string().optional(),
+  labels: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([])
+});
+export const TemplateManifestPluginSchema = z.object({
+  pluginId: z.string().min(1),
+  enabled: z.boolean().optional(),
+  priority: z.number().int().min(0).max(1000).optional(),
+  grantedCapabilities: z.array(z.string().min(1)).default([]),
+  config: z.record(z.string(), z.unknown()).default({})
+});
+export const TemplateRecurrenceJobSchema = z.object({
+  id: z.string().min(1).optional(),
+  cron: z.string().min(1),
+  targetType: z.enum(["agent", "template_task"]).default("agent"),
+  targetKey: z.string().min(1),
+  instruction: z.string().optional()
+});
+export const TemplateManifestSchema = z.object({
+  company: z
+    .object({
+      mission: z.string().optional(),
+      settings: z.record(z.string(), z.unknown()).default({})
+    })
+    .optional(),
+  projects: z.array(TemplateManifestProjectSchema).default([]),
+  goals: z.array(TemplateManifestGoalSchema).default([]),
+  agents: z.array(TemplateManifestAgentSchema).default([]),
+  issues: z.array(TemplateManifestIssueSchema).default([]),
+  plugins: z.array(TemplateManifestPluginSchema).default([]),
+  recurrence: z.array(TemplateRecurrenceJobSchema).default([])
+});
+export type TemplateManifest = z.infer<typeof TemplateManifestSchema>;
+export const TemplateManifestDefault: TemplateManifest = {
+  projects: [],
+  goals: [],
+  agents: [],
+  issues: [],
+  plugins: [],
+  recurrence: []
+};
+export const TemplateSchema = z.object({
+  id: EntityIdSchema,
+  companyId: EntityIdSchema,
+  slug: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  currentVersion: z.string().min(1),
+  status: TemplateStatusSchema,
+  visibility: TemplateVisibilitySchema,
+  variables: z.array(TemplateVariableSchema).default([]),
+  manifest: TemplateManifestSchema,
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+export type Template = z.infer<typeof TemplateSchema>;
+export const TemplateCreateRequestSchema = z.object({
+  slug: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  currentVersion: z.string().min(1).default("1.0.0"),
+  status: TemplateStatusSchema.default("draft"),
+  visibility: TemplateVisibilitySchema.default("company"),
+  variables: z.array(TemplateVariableSchema).default([]),
+  manifest: TemplateManifestSchema.default(TemplateManifestDefault)
+});
+export type TemplateCreateRequest = z.infer<typeof TemplateCreateRequestSchema>;
+export const TemplateUpdateRequestSchema = z
+  .object({
+    slug: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+    description: z.string().nullable().optional(),
+    currentVersion: z.string().min(1).optional(),
+    status: TemplateStatusSchema.optional(),
+    visibility: TemplateVisibilitySchema.optional(),
+    variables: z.array(TemplateVariableSchema).optional(),
+    manifest: TemplateManifestSchema.optional()
+  })
+  .refine((payload) => Object.keys(payload).length > 0, "At least one field must be provided.");
+export type TemplateUpdateRequest = z.infer<typeof TemplateUpdateRequestSchema>;
+export const TemplatePreviewRequestSchema = z.object({
+  variables: z.record(z.string(), z.unknown()).default({}),
+  mode: z.enum(["apply_company", "create_company"]).default("apply_company"),
+  targetCompanyName: z.string().min(1).optional()
+});
+export type TemplatePreviewRequest = z.infer<typeof TemplatePreviewRequestSchema>;
+export const TemplatePreviewResponseSchema = z.object({
+  templateId: EntityIdSchema,
+  templateVersion: z.string().min(1),
+  plannedActions: z.array(z.string()),
+  summary: z.object({
+    projects: z.number().int().nonnegative(),
+    goals: z.number().int().nonnegative(),
+    agents: z.number().int().nonnegative(),
+    issues: z.number().int().nonnegative(),
+    plugins: z.number().int().nonnegative(),
+    recurrence: z.number().int().nonnegative()
+  }),
+  warnings: z.array(z.string())
+});
+export type TemplatePreviewResponse = z.infer<typeof TemplatePreviewResponseSchema>;
+export const TemplateApplyRequestSchema = z.object({
+  variables: z.record(z.string(), z.unknown()).default({}),
+  requestApproval: z.boolean().default(false),
+  mode: z.enum(["apply_company", "create_company"]).default("apply_company"),
+  targetCompanyName: z.string().min(1).optional()
+});
+export type TemplateApplyRequest = z.infer<typeof TemplateApplyRequestSchema>;
+export const TemplateApplyResponseSchema = z.object({
+  applied: z.boolean(),
+  queuedForApproval: z.boolean().optional(),
+  approvalId: z.string().optional(),
+  installId: z.string().optional(),
+  summary: TemplatePreviewResponseSchema.shape.summary,
+  warnings: z.array(z.string()).default([])
+});
+export type TemplateApplyResponse = z.infer<typeof TemplateApplyResponseSchema>;
+export const TemplateExportSchema = z.object({
+  schemaVersion: z.literal("bopo.template.v1"),
+  template: TemplateCreateRequestSchema.extend({
+    currentVersion: z.string().min(1)
+  })
+});
+export type TemplateExport = z.infer<typeof TemplateExportSchema>;
+export const TemplateImportRequestSchema = z.object({
+  template: TemplateExportSchema,
+  overwrite: z.boolean().default(false)
+});
+export type TemplateImportRequest = z.infer<typeof TemplateImportRequestSchema>;
+export const TemplateVersionSchema = z.object({
+  id: EntityIdSchema,
+  companyId: EntityIdSchema,
+  templateId: EntityIdSchema,
+  version: z.string().min(1),
+  manifest: TemplateManifestSchema,
+  createdAt: z.string()
+});
+export type TemplateVersion = z.infer<typeof TemplateVersionSchema>;
+export const TemplateInstallSchema = z.object({
+  id: EntityIdSchema,
+  companyId: EntityIdSchema,
+  templateId: EntityIdSchema.nullable(),
+  templateVersionId: EntityIdSchema.nullable(),
+  status: z.enum(["applied", "queued", "failed"]),
+  summary: z.record(z.string(), z.unknown()).default({}),
+  variables: z.record(z.string(), z.unknown()).default({}),
+  createdAt: z.string()
+});
+export type TemplateInstall = z.infer<typeof TemplateInstallSchema>;
+
 export const AgentStatusSchema = z.enum(["idle", "running", "paused", "terminated"]);
 export const ProviderTypeSchema = z.enum([
   "claude_code",
@@ -417,7 +614,10 @@ export const ApprovalActionSchema = z.enum([
   "activate_goal",
   "override_budget",
   "pause_agent",
-  "terminate_agent"
+  "terminate_agent",
+  "promote_memory_fact",
+  "grant_plugin_capabilities",
+  "apply_template"
 ]);
 
 export const ApprovalRequestSchema = z.object({

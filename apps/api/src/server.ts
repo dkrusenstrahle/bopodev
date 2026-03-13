@@ -19,6 +19,7 @@ import {
   resolvePublicBaseUrl
 } from "./security/deployment-mode";
 import { ensureBuiltinPluginsRegistered } from "./services/plugin-runtime";
+import { ensureBuiltinTemplatesRegistered } from "./services/template-catalog";
 import { createHeartbeatScheduler } from "./worker/scheduler";
 
 loadApiEnv();
@@ -34,6 +35,10 @@ async function main() {
   const { db } = await bootstrapDatabase(dbPath);
   const existingCompanies = await listCompanies(db);
   await ensureBuiltinPluginsRegistered(
+    db,
+    existingCompanies.map((company) => company.id)
+  );
+  await ensureBuiltinTemplatesRegistered(
     db,
     existingCompanies.map((company) => company.id)
   );

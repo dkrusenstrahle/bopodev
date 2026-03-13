@@ -270,6 +270,48 @@ export const plugins = pgTable("plugins", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
 });
 
+export const templates = pgTable("templates", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  currentVersion: text("current_version").notNull().default("1.0.0"),
+  status: text("status").notNull().default("draft"),
+  visibility: text("visibility").notNull().default("company"),
+  variablesJson: text("variables_json").notNull().default("[]"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
+});
+
+export const templateVersions = pgTable("template_versions", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  templateId: text("template_id")
+    .notNull()
+    .references(() => templates.id, { onDelete: "cascade" }),
+  version: text("version").notNull(),
+  manifestJson: text("manifest_json").notNull().default("{}"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
+});
+
+export const templateInstalls = pgTable("template_installs", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  templateId: text("template_id").references(() => templates.id, { onDelete: "set null" }),
+  templateVersionId: text("template_version_id").references(() => templateVersions.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("applied"),
+  summaryJson: text("summary_json").notNull().default("{}"),
+  variablesJson: text("variables_json").notNull().default("{}"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
+});
+
 export const modelPricing = pgTable(
   "model_pricing",
   {
@@ -356,6 +398,9 @@ export const schema = {
   plugins,
   pluginConfigs,
   pluginRuns,
+  templates,
+  templateVersions,
+  templateInstalls,
   modelPricing,
   agentIssueLabels,
   projectWorkspaces

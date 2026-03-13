@@ -21,7 +21,8 @@ import {
   Target,
   Users,
   Settings,
-  Puzzle
+  Puzzle,
+  LayoutTemplate
 } from "lucide-react";
 import type { SectionLabel, SectionSlug } from "@/lib/sections";
 import {
@@ -74,6 +75,7 @@ const navGroups: Array<{
     label: "Settings",
     items: [
       { slug: "models", label: "Models", icon: BarChart3 },
+      { slug: "templates", label: "Templates", icon: LayoutTemplate },
       { slug: "plugins", label: "Plugins", icon: Puzzle },
       { slug: "settings", label: "Settings", icon: Settings }
     ]

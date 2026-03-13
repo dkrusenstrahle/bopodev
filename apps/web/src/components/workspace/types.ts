@@ -221,3 +221,26 @@ export interface PluginRunRow {
   createdAt: string;
   diagnostics?: Record<string, unknown>;
 }
+
+export interface TemplateRow {
+  id: string;
+  companyId: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  currentVersion: string;
+  status: "draft" | "published" | "archived";
+  visibility: "company" | "private";
+  variables: Array<{
+    key: string;
+    label?: string;
+    description?: string;
+    type: "string" | "number" | "boolean" | "select";
+    required: boolean;
+    defaultValue?: unknown;
+    options?: string[];
+  }>;
+  manifest: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}

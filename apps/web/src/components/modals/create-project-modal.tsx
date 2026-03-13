@@ -65,7 +65,7 @@ export function CreateProjectModal({
   project,
   triggerLabel = "New Project",
   triggerVariant = "default",
-  triggerSize
+  triggerSize = "sm"
 }: {
   companyId: string;
   goals: Array<{ id: string; title: string; projectId: string | null }>;

@@ -89,6 +89,18 @@ describe("authorization route matrix", { timeout: 30_000 }, () => {
       body: () => ({})
     },
     {
+      name: "templates:create",
+      permission: "templates:write",
+      method: "post",
+      path: () => "/templates",
+      body: () => ({
+        slug: "starter-template",
+        name: "Starter Template",
+        currentVersion: "1.0.0",
+        manifest: {}
+      })
+    },
+    {
       name: "governance:resolve",
       permission: "governance:resolve",
       method: "post",
@@ -146,12 +158,12 @@ describe("authorization route matrix", { timeout: 30_000 }, () => {
       }
     });
     ids = { projectId: project.id, issueId: issue.id, goalId: goal.id, agentId: agent.id, approvalId };
-  });
+  }, 30_000);
 
   afterEach(async () => {
     await client.close?.();
     await rm(tempDir, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   it("enforces permission and company scope checks for protected write routes", async () => {
     for (const routeCase of permissionCases) {

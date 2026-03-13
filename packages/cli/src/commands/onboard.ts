@@ -12,6 +12,7 @@ export interface OnboardOptions {
   yes: boolean;
   start: boolean;
   forceInstall: boolean;
+  template?: string;
 }
 
 export interface OnboardFlowResult {
@@ -29,6 +30,8 @@ interface OnboardSeedResult {
   ceoProviderType: AgentProvider;
   ceoRuntimeModel: string | null;
   ceoMigrated: boolean;
+  templateApplied?: boolean;
+  templateId?: string | null;
 }
 
 type AgentProvider = "codex" | "claude_code" | "gemini_cli" | "opencode" | "openai_api" | "anthropic_api" | "shell";
@@ -39,7 +42,7 @@ interface OnboardDeps {
   initializeDatabase: (workspaceRoot: string, dbPath?: string) => Promise<void>;
   seedOnboardingDatabase: (
     workspaceRoot: string,
-    input: { dbPath?: string; companyName: string; companyId?: string; agentProvider: AgentProvider }
+    input: { dbPath?: string; companyName: string; companyId?: string; agentProvider: AgentProvider; templateId?: string }
   ) => Promise<OnboardSeedResult>;
   startServices: (workspaceRoot: string) => Promise<number | null>;
   promptForCompanyName: () => Promise<string>;
@@ -60,6 +63,7 @@ const DEFAULT_COMPANY_ID_ENV = "BOPO_DEFAULT_COMPANY_ID";
 const DEFAULT_PUBLIC_COMPANY_ID_ENV = "NEXT_PUBLIC_DEFAULT_COMPANY_ID";
 const DEFAULT_AGENT_PROVIDER_ENV = "BOPO_DEFAULT_AGENT_PROVIDER";
 const DEFAULT_AGENT_MODEL_ENV = "BOPO_DEFAULT_AGENT_MODEL";
+const DEFAULT_TEMPLATE_ENV = "BOPO_DEFAULT_TEMPLATE_ID";
 const DEFAULT_DEPLOYMENT_MODE_ENV = "BOPO_DEPLOYMENT_MODE";
 const DEFAULT_ENV_TEMPLATE = "NEXT_PUBLIC_API_URL=http://localhost:4020\n";
 const CLI_ONBOARD_VISIBLE_PROVIDERS: Array<{ value: AgentProvider; label: string }> = [
@@ -99,6 +103,7 @@ const defaultDeps: OnboardDeps = {
         [DEFAULT_COMPANY_NAME_ENV]: input.companyName,
         [DEFAULT_AGENT_PROVIDER_ENV]: input.agentProvider,
         ...(process.env[DEFAULT_AGENT_MODEL_ENV] ? { [DEFAULT_AGENT_MODEL_ENV]: process.env[DEFAULT_AGENT_MODEL_ENV] } : {}),
+        ...(input.templateId ? { [DEFAULT_TEMPLATE_ENV]: input.templateId } : {}),
         ...(input.companyId ? { [DEFAULT_COMPANY_ID_ENV]: input.companyId } : {}),
         ...(input.dbPath ? { BOPO_DB_PATH: input.dbPath } : {})
       }
@@ -243,6 +248,10 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
         preferredModel
       });
   printCheck("ok", "Default model", selectedAgentModel ?? "Provider default");
+  const requestedTemplateId = options.template?.trim() || normalizeOptionalEnvValue(preEnvValues[DEFAULT_TEMPLATE_ENV]);
+  if (requestedTemplateId) {
+    printCheck("ok", "Template", requestedTemplateId);
+  }
 
   const envSpin = spinner();
   envSpin.start("Ensuring local environment");
@@ -252,6 +261,7 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
     [DEFAULT_DEPLOYMENT_MODE_ENV]: "local",
     [DEFAULT_COMPANY_NAME_ENV]: companyName,
     [DEFAULT_AGENT_PROVIDER_ENV]: agentProvider ?? "codex",
+    ...(requestedTemplateId ? { [DEFAULT_TEMPLATE_ENV]: requestedTemplateId } : {}),
     ...(selectedAgentModel ? { [DEFAULT_AGENT_MODEL_ENV]: selectedAgentModel } : {})
   });
   dotenv.config({ path: envPath, quiet: true });
@@ -265,6 +275,9 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
   process.env[DEFAULT_DEPLOYMENT_MODE_ENV] = "local";
   process.env[DEFAULT_COMPANY_NAME_ENV] = companyName;
   process.env[DEFAULT_AGENT_PROVIDER_ENV] = agentProvider ?? "codex";
+  if (requestedTemplateId) {
+    process.env[DEFAULT_TEMPLATE_ENV] = requestedTemplateId;
+  }
   if (selectedAgentModel) {
     process.env[DEFAULT_AGENT_MODEL_ENV] = selectedAgentModel;
   } else {
@@ -289,7 +302,8 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
     dbPath: configuredDbPath,
     companyName,
     companyId: envValues[DEFAULT_COMPANY_ID_ENV]?.trim() || undefined,
-    agentProvider
+    agentProvider,
+    templateId: requestedTemplateId
   });
   seedSpin.stop("Seed complete");
   await updateEnvFile(envPath, {
@@ -309,12 +323,24 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
   } else {
     delete process.env[DEFAULT_AGENT_MODEL_ENV];
   }
+  if (seedResult.templateId) {
+    process.env[DEFAULT_TEMPLATE_ENV] = seedResult.templateId;
+  }
   printCheck("ok", "Configured company", `${seedResult.companyName}${seedResult.companyCreated ? " (created)" : ""}`);
   printCheck(
     "ok",
     "CEO agent",
     `${seedResult.ceoCreated ? "Created CEO" : seedResult.ceoMigrated ? "Migrated existing CEO" : "CEO already present"} (${formatAgentProvider(seedResult.ceoProviderType)})`
   );
+  if (requestedTemplateId) {
+    printCheck(
+      seedResult.templateApplied ? "ok" : "warn",
+      "Template apply",
+      seedResult.templateApplied
+        ? `Applied ${seedResult.templateId ?? requestedTemplateId}`
+        : `Template not applied (${requestedTemplateId})`
+    );
+  }
 
   const dbPathSummary = resolveDbPathSummary(configuredDbPath);
   printSummaryCard([
@@ -553,7 +579,9 @@ function parseSeedResult(stdout: string): OnboardSeedResult {
     ceoCreated: parsed.ceoCreated,
     ceoProviderType: parseAgentProvider(parsed.ceoProviderType) ?? "shell",
     ceoRuntimeModel: typeof parsed.ceoRuntimeModel === "string" ? parsed.ceoRuntimeModel : null,
-    ceoMigrated: parsed.ceoMigrated
+    ceoMigrated: parsed.ceoMigrated,
+    templateApplied: typeof parsed.templateApplied === "boolean" ? parsed.templateApplied : undefined,
+    templateId: typeof parsed.templateId === "string" ? parsed.templateId : null
   };
 }
 

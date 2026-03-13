@@ -44,7 +44,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import type { ModelPricingRow } from "@/components/workspace/types";
+import type { ModelPricingRow, TemplateRow } from "@/components/workspace/types";
 
 const MODELS_PROVIDER_FALLBACKS = ["openai_api", "anthropic_api", "opencode", "gemini_api"] as const;
 
@@ -562,7 +562,8 @@ export function WorkspaceClient({
   auditEvents,
   costEntries,
   projects,
-  plugins = []
+  plugins = [],
+  templates = []
 }: {
   activeNav: SectionLabel;
   companyId: string | null;
@@ -578,6 +579,7 @@ export function WorkspaceClient({
   costEntries: CostRow[];
   projects: ProjectRow[];
   plugins?: PluginRow[];
+  templates?: TemplateRow[];
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -612,6 +614,7 @@ export function WorkspaceClient({
   const [pluginsQuery, setPluginsQuery] = useState("");
   const [pluginsStatusFilter, setPluginsStatusFilter] = useState<"all" | "active" | "installed" | "not_installed">("all");
   const [pluginsKindFilter, setPluginsKindFilter] = useState<string>("all");
+  const [templatesQuery, setTemplatesQuery] = useState("");
   const [installPluginDialogOpen, setInstallPluginDialogOpen] = useState(false);
   const [pluginBuilderMode, setPluginBuilderMode] = useState<"create" | "edit">("create");
   const [pluginBuilderId, setPluginBuilderId] = useState("");
@@ -651,6 +654,7 @@ export function WorkspaceClient({
   const isCostsNav = activeNav === "Costs";
   const isPluginsNav = activeNav === "Plugins";
   const isModelsNav = activeNav === "Models";
+  const isTemplatesNav = activeNav === "Templates";
   const includeCostAggregations = isCostsNav || isDashboardNav;
 
   const isActionPending = useCallback(
@@ -780,6 +784,15 @@ export function WorkspaceClient({
         requestApproval: false
       });
     }, `Failed to ${enabled ? "activate" : "deactivate"} plugin.`, `plugin:${plugin.id}:${enabled ? "activate" : "deactivate"}`);
+  }
+
+  async function applyTemplate(templateId: string) {
+    await runCrudAction(async () => {
+      await apiPost(`/templates/${templateId}/apply`, companyId!, {
+        requestApproval: false,
+        variables: {}
+      });
+    }, "Failed to apply template.", `template:${templateId}:apply`);
   }
 
   function openCreatePluginDialog() {
@@ -1475,6 +1488,23 @@ export function WorkspaceClient({
     );
     return { total, installed, active, kinds, grantedCapabilities };
   }, [filteredPlugins]);
+  const filteredTemplates = useMemo(() => {
+    if (!isTemplatesNav) {
+      return [];
+    }
+    const normalizedQuery = templatesQuery.trim().toLowerCase();
+    return templates.filter((template) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+      return (
+        template.name.toLowerCase().includes(normalizedQuery) ||
+        template.slug.toLowerCase().includes(normalizedQuery) ||
+        template.currentVersion.toLowerCase().includes(normalizedQuery) ||
+        template.status.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [isTemplatesNav, templates, templatesQuery]);
   const pluginBuilderManifestJson = useMemo(() => {
     const capabilities = pluginBuilderCapabilities
       .split(",")
@@ -2720,6 +2750,64 @@ export function WorkspaceClient({
     ],
     [deletePlugin, isActionPending]
   );
+  const templateColumns = useMemo<ColumnDef<TemplateRow>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Template" />,
+        cell: ({ row }) => {
+          const template = row.original;
+          return (
+            <div className={styles.workspaceSectionCellStack}>
+              <div className={styles.workspaceSectionCellPrimary}>{template.name}</div>
+              <div className={styles.workspaceSectionCellMeta}>{template.slug}</div>
+            </div>
+          );
+        }
+      },
+      {
+        accessorKey: "currentVersion",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Version" />,
+        cell: ({ row }) => <div className={styles.formatDurationContainer5}>{row.original.currentVersion}</div>
+      },
+      {
+        accessorKey: "status",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>
+      },
+      {
+        accessorKey: "visibility",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Visibility" />,
+        cell: ({ row }) => <div className={styles.formatDurationContainer5}>{row.original.visibility}</div>
+      },
+      {
+        id: "actions",
+        header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
+        cell: ({ row }) => {
+          const template = row.original;
+          const applyActionKey = `template:${template.id}:apply`;
+          return (
+            <div className={styles.formatDurationContainer3}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isActionPending(applyActionKey)}
+                onClick={() => applyTemplate(template.id)}
+              >
+                Apply
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href={{ pathname: "/templates", query: { companyId: companyId ?? "" } }}>
+                  View
+                </Link>
+              </Button>
+            </div>
+          );
+        }
+      }
+    ],
+    [applyTemplate, companyId, isActionPending]
+  );
 
   function renderSectionActions(section: SectionLabel) {
     if (!companyId && section !== "Settings") {
@@ -2768,6 +2856,14 @@ export function WorkspaceClient({
             />
           </div>
         );
+      case "Templates":
+        return (
+          <div className={styles.renderSectionActionsContainer1}>
+            <Button asChild variant="outline" size="sm">
+              <Link href={{ pathname: "/templates", query: { companyId: scopedCompanyId } }}>Open templates</Link>
+            </Button>
+          </div>
+        );
       case "Settings":
         return (
           <div className={styles.renderSectionActionsContainer1}>
@@ -2783,6 +2879,9 @@ export function WorkspaceClient({
     <>
       <div className={styles.renderSectionActionsContainer1}>
         <CreateCompanyModal companyId="bootstrap-company" />
+        <Button asChild variant="outline" size="sm">
+          <Link href={{ pathname: "/templates" as Route }}>Browse templates</Link>
+        </Button>
       </div>
       <Card>
         <CardHeader>
@@ -3986,6 +4085,30 @@ export function WorkspaceClient({
           </>
         );
       }
+      case "Templates":
+        return (
+          <>
+            <SectionHeading
+              title="Templates"
+              description="Portable org templates for reproducible company setup."
+            />
+            <DataTable
+              columns={templateColumns}
+              data={filteredTemplates}
+              emptyMessage="No templates available yet."
+              toolbarActions={
+                <div className={styles.governanceFiltersCardContent}>
+                  <Input
+                    value={templatesQuery}
+                    onChange={(event) => setTemplatesQuery(event.target.value)}
+                    placeholder="Search template name, slug, version..."
+                    className={styles.governanceFiltersInput}
+                  />
+                </div>
+              }
+            />
+          </>
+        );
       case "Models":
         return (
           <>

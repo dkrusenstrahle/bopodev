@@ -367,6 +367,43 @@ export async function bootstrapDatabase(dbPath?: string) {
     );
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS templates (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      current_version TEXT NOT NULL DEFAULT '1.0.0',
+      status TEXT NOT NULL DEFAULT 'draft',
+      visibility TEXT NOT NULL DEFAULT 'company',
+      variables_json TEXT NOT NULL DEFAULT '[]',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS template_versions (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+      version TEXT NOT NULL,
+      manifest_json TEXT NOT NULL DEFAULT '{}',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS template_installs (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      template_id TEXT REFERENCES templates(id) ON DELETE SET NULL,
+      template_version_id TEXT REFERENCES template_versions(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'applied',
+      summary_json TEXT NOT NULL DEFAULT '{}',
+      variables_json TEXT NOT NULL DEFAULT '{}',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS plugin_configs (
       company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
       plugin_id TEXT NOT NULL REFERENCES plugins(id) ON DELETE CASCADE,
@@ -445,6 +482,18 @@ export async function bootstrapDatabase(dbPath?: string) {
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_plugin_runs_company_created
       ON plugin_runs (company_id, created_at DESC);
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_company_slug
+      ON templates (company_id, slug);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_template_versions_company_template_created
+      ON template_versions (company_id, template_id, created_at DESC);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_template_installs_company_created
+      ON template_installs (company_id, created_at DESC);
   `);
 
   return { db, client };

@@ -174,6 +174,7 @@ export function RunDetailPageClient({
       activeNav="Runs"
       companies={companies}
       activeCompanyId={companyId}
+      leftPaneScrollable={false}
       secondaryPane={
         <div className="run-sidebar-pane">
           <div className="run-sidebar-list">

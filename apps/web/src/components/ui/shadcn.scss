@@ -1,6 +1,8 @@
 @reference "../../app/globals.css";
 
-/* Shared shadcn/ui style layer. */
+html {
+  overscroll-behavior-y: none;
+}
 
 body {
   @apply font-medium antialiased;
@@ -323,11 +325,11 @@ body {
 }
 
 .ui-dialog-content {
-  @apply fixed top-[10%] left-[50%] z-50 flex max-h-[calc(100vh-12rem)] w-full min-w-[40%] max-w-[calc(100%-2rem)] translate-x-[-50%] flex-col gap-4 overflow-hidden rounded-lg border bg-background p-6 duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg;
+  @apply fixed top-[5rem] left-[50%] z-50 flex max-h-[calc(100dvh-10rem)] w-full min-w-[40%] max-w-[calc(100%-2rem)] translate-x-[-50%] flex-col gap-4 overflow-hidden rounded-lg border bg-background p-6 duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg;
 }
 
 .ui-dialog-content-scrollable {
-  @apply min-h-0 flex-1 overflow-y-auto;
+  @apply flex flex-col gap-6 min-h-0 flex-1 overflow-y-auto;
 }
 
 .ui-dialog-content > form {
@@ -412,7 +414,7 @@ body {
 }
 
 .ui-field-group {
-  @apply flex w-full flex-col gap-7 data-[slot=checkbox-group]:gap-3 [&>[data-slot=field-group]]:gap-4;
+  @apply flex w-full flex-col gap-6 gap-y-6 gap-x-6;
 }
 
 .ui-field {
@@ -879,7 +881,11 @@ body {
 }
 
 .ui-shell-left-pane {
-  @apply space-y-6 p-8;
+  @apply h-full min-h-0 overflow-y-auto space-y-6 p-8;
+}
+
+.ui-shell-left-pane-static {
+  @apply h-full min-h-0 space-y-6 p-8;
 }
 
 .ui-shell-right-scroll {

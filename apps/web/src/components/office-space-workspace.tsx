@@ -109,6 +109,7 @@ export function OfficeSpaceWorkspace({
       activeNav="Office"
       companies={companies}
       activeCompanyId={companyId}
+      leftPaneScrollable={false}
     />
   );
 }

@@ -90,7 +90,8 @@ export function AppShell({
   companies,
   activeCompanyId,
   pendingApprovalsCount,
-  hideSidebar = false
+  hideSidebar = false,
+  leftPaneScrollable = true
 }: {
   leftPane: ReactNode;
   rightPane?: ReactNode;
@@ -100,6 +101,7 @@ export function AppShell({
   activeCompanyId: string | null;
   pendingApprovalsCount?: number;
   hideSidebar?: boolean;
+  leftPaneScrollable?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -259,7 +261,7 @@ export function AppShell({
           </div>
         </header>
         <section className={rightPane ? "ui-shell-content-with-pane" : "ui-shell-content"}>
-          <div className="ui-shell-left-pane">{leftPane}</div>
+          <div className={leftPaneScrollable ? "ui-shell-left-pane" : "ui-shell-left-pane-static"}>{leftPane}</div>
           {rightPane ? (
             <ScrollArea className="ui-shell-right-scroll">
               <div className="ui-shell-right-pane">{rightPane}</div>

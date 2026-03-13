@@ -954,10 +954,6 @@ export function AgentDetailPageClient({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-          <CardDescription>Agent runtime details.</CardDescription>
-        </CardHeader>
         <CardContent className={styles.configCardContent}>
           <ConfigRow label="Agent ID" value={agent.id} />
           <ConfigRow label="Adapter" value={getProviderLabel(agent.providerType)} />

@@ -69,15 +69,15 @@
 }
 
 .projectPropertyRow {
-  @apply grid grid-cols-[96px_minmax(0,1fr)] gap-3 text-sm;
+  @apply space-y-1.5 py-1 text-sm leading-6;
 }
 
 .projectPropertyLabel {
-  @apply text-muted-foreground;
+  @apply text-xs font-medium uppercase tracking-wide text-muted-foreground/80;
 }
 
 .projectPropertyValue {
-  @apply min-w-0;
+  @apply min-w-0 text-base text-foreground;
   overflow-wrap: anywhere;
 }
 

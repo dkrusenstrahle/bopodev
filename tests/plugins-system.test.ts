@@ -116,6 +116,16 @@ describe("plugin system", { timeout: 30_000 }, () => {
       title: "Execute plugin hooks",
       assigneeAgentId: agent.id
     });
+    const enableResponse = await request(app)
+      .put("/plugins/trace-exporter")
+      .set("x-company-id", companyId)
+      .send({
+        enabled: true,
+        grantedCapabilities: ["emit_audit"],
+        requestApproval: false
+      });
+    expect(enableResponse.status).toBe(200);
+    expect(enableResponse.body.data.ok).toBe(true);
 
     const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
     expect(runId).toBeTruthy();

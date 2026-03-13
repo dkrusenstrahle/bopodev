@@ -794,6 +794,14 @@ body {
   @apply size-4 shrink-0;
 }
 
+.ui-shell-nav-label {
+  @apply truncate;
+}
+
+.ui-shell-nav-count-badge {
+  @apply ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-sidebar-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none text-sidebar-primary-foreground;
+}
+
 .ui-shell-footer-card {
   @apply rounded-2xl border border-sidebar-border bg-sidebar-accent/30 p-4;
 }

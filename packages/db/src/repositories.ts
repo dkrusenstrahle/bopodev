@@ -754,6 +754,14 @@ export async function listApprovalRequests(db: BopoDb, companyId: string) {
     .orderBy(desc(approvalRequests.createdAt));
 }
 
+export async function countPendingApprovalRequests(db: BopoDb, companyId: string) {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(approvalRequests)
+    .where(and(eq(approvalRequests.companyId, companyId), eq(approvalRequests.status, "pending")));
+  return Number(row?.count ?? 0);
+}
+
 export async function listApprovalInboxStates(db: BopoDb, companyId: string, actorId: string) {
   return db
     .select()

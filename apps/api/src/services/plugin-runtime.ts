@@ -214,8 +214,8 @@ export async function ensureCompanyBuiltinPluginDefaults(db: BopoDb, companyId: 
   const existing = await listCompanyPluginConfigs(db, companyId);
   const existingIds = new Set(existing.map((row) => row.pluginId));
   const defaults = [
-    { pluginId: "trace-exporter", enabled: true, priority: 40 },
-    { pluginId: "memory-enricher", enabled: true, priority: 60 },
+    { pluginId: "trace-exporter", enabled: false, priority: 40 },
+    { pluginId: "memory-enricher", enabled: false, priority: 60 },
     { pluginId: "queue-publisher", enabled: false, priority: 80 },
     { pluginId: "heartbeat-tagger", enabled: false, priority: 90 }
   ];

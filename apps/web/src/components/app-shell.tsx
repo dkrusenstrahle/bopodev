@@ -1,10 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
 import { cn } from "@/lib/utils";
+import { apiGet } from "@/lib/api";
 import {
   Activity,
   BarChart3,
@@ -86,6 +87,7 @@ export function AppShell({
   activeNav,
   companies,
   activeCompanyId,
+  pendingApprovalsCount,
   hideSidebar = false
 }: {
   leftPane: ReactNode;
@@ -94,11 +96,42 @@ export function AppShell({
   activeNav: SectionLabel;
   companies: Array<{ id: string; name: string }>;
   activeCompanyId: string | null;
+  pendingApprovalsCount?: number;
   hideSidebar?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [pendingApprovalsCountFromApi, setPendingApprovalsCountFromApi] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof pendingApprovalsCount === "number") {
+      setPendingApprovalsCountFromApi(null);
+      return;
+    }
+    if (!activeCompanyId) {
+      setPendingApprovalsCountFromApi(null);
+      return;
+    }
+    let cancelled = false;
+    void apiGet<{ count: number }>("/governance/approvals/pending-count", activeCompanyId)
+      .then((result) => {
+        if (!cancelled) {
+          setPendingApprovalsCountFromApi(Math.max(0, Math.floor(Number(result.data.count) || 0)));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPendingApprovalsCountFromApi(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCompanyId, pendingApprovalsCount]);
+
+  const resolvedPendingApprovalsCount =
+    typeof pendingApprovalsCount === "number" ? pendingApprovalsCount : pendingApprovalsCountFromApi;
 
   function updateCompany(companyId: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -169,6 +202,10 @@ export function AppShell({
                       {group.items.map((item) => {
                         const Icon = item.icon;
                         const isActive = activeNav === item.label;
+                        const showPendingApprovalsBadge =
+                          item.slug === "governance" &&
+                          typeof resolvedPendingApprovalsCount === "number" &&
+                          resolvedPendingApprovalsCount > 0;
                         return (
                           <Link
                             key={item.slug}
@@ -183,7 +220,12 @@ export function AppShell({
                             className={cn("ui-shell-nav-link", isActive ? "ui-shell-nav-link-active" : "ui-shell-nav-link-inactive")}
                           >
                             <Icon className="ui-shell-nav-icon" />
-                            <span>{item.label}</span>
+                            <span className="ui-shell-nav-label">{item.label}</span>
+                            {showPendingApprovalsBadge ? (
+                              <span className="ui-shell-nav-count-badge" aria-label={`${resolvedPendingApprovalsCount} pending approvals`}>
+                                {resolvedPendingApprovalsCount > 99 ? "99+" : resolvedPendingApprovalsCount}
+                              </span>
+                            ) : null}
                           </Link>
                         );
                       })}

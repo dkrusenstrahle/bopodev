@@ -808,6 +808,10 @@ export function WorkspaceClient({
     () => (isDashboardNav ? approvals.filter((approval) => approval.status === "pending") : []),
     [approvals, isDashboardNav]
   );
+  const pendingApprovalsCount = useMemo(
+    () => approvals.reduce((count, approval) => count + (approval.status === "pending" ? 1 : 0), 0),
+    [approvals]
+  );
   const sortedInboxItems = useMemo(
     () => {
       if (!isInboxNav) {
@@ -4226,6 +4230,7 @@ export function WorkspaceClient({
         activeNav={activeNav}
         companies={companies}
         activeCompanyId={companyId}
+        pendingApprovalsCount={pendingApprovalsCount}
       />
     </>
   );

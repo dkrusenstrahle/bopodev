@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   appendAuditEvent,
   clearApprovalInboxDismissed,
+  countPendingApprovalRequests,
   getApprovalRequest,
   listApprovalInboxStates,
   listApprovalRequests,
@@ -42,6 +43,11 @@ export function createGovernanceRouter(ctx: AppContext) {
         payload: parsePayload(approval.payloadJson)
       }))
     );
+  });
+
+  router.get("/approvals/pending-count", async (req, res) => {
+    const count = await countPendingApprovalRequests(ctx.db, req.companyId!);
+    return sendOk(res, { count });
   });
 
   router.get("/inbox", async (req, res) => {

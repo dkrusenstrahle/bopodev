@@ -16,6 +16,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { ApiError, apiDelete, apiPost } from "@/lib/api";
 import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { parseRuntimeFromAgentColumns } from "@/lib/agent-detail-logic";
+import { getModelOptionsForProvider, heartbeatCronToIntervalSec } from "@/lib/agent-runtime-options";
+import { getDefaultModelForProvider, type RuntimeProviderType } from "@/lib/model-registry-options";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
 import { isSkippedRun } from "@/lib/workspace-logic";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
@@ -184,6 +186,87 @@ function formatRunStatusLabel(status: string) {
   return status === "started" ? "running" : status;
 }
 
+function formatHeartbeatInterval(seconds: number) {
+  if (seconds <= 60) {
+    return "Every minute";
+  }
+  if (seconds < 3600) {
+    const minutes = Math.round(seconds / 60);
+    return `Every ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  const hours = Math.round(seconds / 3600);
+  return `Every ${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+function formatHeartbeatCadence(cronExpression: string | undefined) {
+  if (!cronExpression) {
+    return "Not configured";
+  }
+  const normalized = cronExpression.trim();
+  if (normalized === "* * * * *") {
+    return "Every minute";
+  }
+  const stepMatch = normalized.match(/^\*\/(\d+)\s+\*\s+\*\s+\*\s+\*$/);
+  if (stepMatch) {
+    const minutes = Number(stepMatch[1]);
+    if (Number.isInteger(minutes) && minutes > 0) {
+      return `Every ${minutes} minute${minutes === 1 ? "" : "s"}`;
+    }
+  }
+  const fixedMinuteMatch = normalized.match(/^(\d+)\s+\*\s+\*\s+\*\s+\*$/);
+  if (fixedMinuteMatch) {
+    const minuteValue = fixedMinuteMatch[1];
+    if (!minuteValue) {
+      return formatHeartbeatInterval(heartbeatCronToIntervalSec(cronExpression, 300));
+    }
+    const minute = minuteValue.padStart(2, "0");
+    return `Every hour at :${minute}`;
+  }
+  return formatHeartbeatInterval(heartbeatCronToIntervalSec(cronExpression, 300));
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  claude_code: "Claude Code",
+  codex: "Codex",
+  cursor: "Cursor",
+  opencode: "OpenCode",
+  gemini_cli: "Gemini CLI",
+  openai_api: "OpenAI API",
+  anthropic_api: "Anthropic API",
+  http: "HTTP",
+  shell: "Shell"
+};
+
+function normalizeRuntimeProvider(providerType: string): RuntimeProviderType | null {
+  if (
+    providerType === "claude_code" ||
+    providerType === "codex" ||
+    providerType === "cursor" ||
+    providerType === "opencode" ||
+    providerType === "gemini_cli" ||
+    providerType === "openai_api" ||
+    providerType === "anthropic_api" ||
+    providerType === "http" ||
+    providerType === "shell"
+  ) {
+    return providerType;
+  }
+  return null;
+}
+
+function getProviderLabel(providerType: string) {
+  return PROVIDER_LABELS[providerType] ?? providerType;
+}
+
+function getModelLabel(providerType: string, modelId: string) {
+  const runtimeProvider = normalizeRuntimeProvider(providerType);
+  if (!runtimeProvider) {
+    return modelId;
+  }
+  const matching = getModelOptionsForProvider(runtimeProvider, modelId).find((option) => option.value === modelId);
+  return matching?.label ?? modelId;
+}
+
 function parseStateBlob(raw: string | undefined) {
   if (!raw) {
     return { runtime: null, promptTemplate: null };
@@ -281,11 +364,14 @@ function BarMetricChart({
   );
 }
 
-function ConfigRow({ label, value }: { label: string; value: string }) {
+function ConfigRow({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className={styles.configRowContainer1}>
       <div className={styles.configRowContainer2}>{label}</div>
-      <div className={styles.configRowContainer3}>{value}</div>
+      <div className={styles.configRowContainer3}>
+        <div>{value}</div>
+        {detail ? <div className={styles.mutedTextContainer}>{detail}</div> : null}
+      </div>
     </div>
   );
 }
@@ -358,6 +444,14 @@ export function AgentDetailPageClient({
     };
   }, [agent]);
   const managerName = agent.managerAgentId ? managerNameById.get(agent.managerAgentId) ?? shortId(agent.managerAgentId) : "Unassigned";
+  const configuredModelId =
+    state.runtime?.model?.trim() ||
+    agent.runtimeModel?.trim() ||
+    (() => {
+      const provider = normalizeRuntimeProvider(agent.providerType);
+      return provider ? getDefaultModelForProvider(provider) ?? "" : "";
+    })();
+  const configuredModelLabel = configuredModelId ? getModelLabel(agent.providerType, configuredModelId) : "Not configured";
   const runActivityBars = useMemo(() => buildLastNDaysSeries(14, agentRuns, (run) => run.startedAt), [agentRuns]);
   const successRateBars = useMemo(() => {
     const now = new Date();
@@ -745,9 +839,10 @@ export function AgentDetailPageClient({
           </CardHeader>
           <CardContent className={styles.configCardContent}>
             <ConfigRow label="Agent ID" value={agent.id} />
-            <ConfigRow label="Adapter" value={agent.providerType} />
+            <ConfigRow label="Adapter" value={getProviderLabel(agent.providerType)} />
+            <ConfigRow label="Model" value={configuredModelLabel} />
             <ConfigRow label="Status" value={agent.status} />
-            <ConfigRow label="Heartbeat" value={agent.heartbeatCron ?? "Not configured"} />
+            <ConfigRow label="Heartbeat" value={formatHeartbeatCadence(agent.heartbeatCron)} />
             <ConfigRow label="Last heartbeat" value={formatDateTime(latestRun?.startedAt)} />
             <ConfigRow label="Reports to" value={managerName} />
             <ConfigRow label="Monthly budget" value={typeof agent.monthlyBudgetUsd === "number" ? `$${agent.monthlyBudgetUsd}` : "Not set"} />

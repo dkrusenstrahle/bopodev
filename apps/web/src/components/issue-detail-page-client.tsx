@@ -116,7 +116,7 @@ function PropertyRow({ label, value }: { label: string; value: React.ReactNode }
   return (
     <div className={styles.propertyRowContainer1}>
       <div className={styles.propertyRowContainer2}>{label}</div>
-      <div>{value}</div>
+      <div className={styles.propertyRowValue}>{value}</div>
     </div>
   );
 }

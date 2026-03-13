@@ -795,7 +795,7 @@ export function AgentDetailPageClient({
           <MetricCard label="Input tokens" value={costSummary.input.toLocaleString()} />
           <MetricCard label="Output tokens" value={costSummary.output.toLocaleString()} />
           <MetricCard label="Cost entries" value={agentCosts.length.toLocaleString()} />
-          <MetricCard label="Total cost" value={costSummary.usd.toFixed(2)} />
+          <MetricCard label="Total cost" value={'$' + costSummary.usd.toFixed(2)} />
         </div>
       </div>
 

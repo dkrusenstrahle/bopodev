@@ -1121,7 +1121,6 @@ describe("BopoDev core workflows", () => {
     try {
       const remoteRepoPath = await createSeedGitRemote(tempDir, "repo-isolated");
       const baseWorkspacePath = join(tempDir, "isolated-base");
-      const isolatedRoot = join(tempDir, "isolated-worktrees");
       const project = await createProject(db, {
         companyId,
         name: "Isolated Worktree Workspace",
@@ -1129,7 +1128,6 @@ describe("BopoDev core workflows", () => {
           mode: "isolated",
           strategy: {
             type: "git_worktree",
-            rootDir: isolatedRoot,
             branchPrefix: "bopo-test"
           }
         }
@@ -1174,7 +1172,7 @@ describe("BopoDev core workflows", () => {
       const latest = runs.find((run) => run.id === runId);
       expect(latest?.status).toBe("completed");
       expect(latest?.message).toContain("isolated-cwd:");
-      expect(latest?.message).toContain(isolatedRoot);
+      expect(latest?.message).toContain(`/workspaces/${companyId}/agents/${agent.id}/worktrees/${project.id}`);
     } finally {
       if (previousFlag === undefined) {
         delete process.env.BOPO_ENABLE_GIT_WORKTREE_ISOLATION;

@@ -345,10 +345,6 @@ export function CreateProjectModal({
                   placeholder="https://github.com/org/repo"
                   autoComplete="off"
                 />
-                <FieldDescription>
-                  Git auth defaults to host credentials (ssh-agent, gh auth, or git credential helper). For headless runs,
-                  set project policy credentials mode to env token.
-                </FieldDescription>
               </Field>
             ) : null}
             {workspaceMode !== "local" ? (
@@ -361,20 +357,10 @@ export function CreateProjectModal({
                   placeholder="main"
                   autoComplete="off"
                 />
-                <FieldDescription>Optional branch, tag, or commit reference.</FieldDescription>
               </Field>
             ) : null}
             {project?.gitDiagnostics ? (
-              <Field>
-                <FieldDescription>
-                  Workspace runtime status: {project.gitDiagnostics.workspaceStatus ?? "unconfigured"} / clone{" "}
-                  {project.gitDiagnostics.cloneState ?? "n/a"}
-                  {project.gitDiagnostics.authMode === "env_token" && project.gitDiagnostics.tokenEnvVar
-                    ? ` / token env ${project.gitDiagnostics.tokenEnvVar}`
-                    : ""}
-                  {project.gitDiagnostics.effectiveCwd ? ` / cwd ${project.gitDiagnostics.effectiveCwd}` : ""}
-                </FieldDescription>
-              </Field>
+              <></>
             ) : null}
           </FieldGroup>
 

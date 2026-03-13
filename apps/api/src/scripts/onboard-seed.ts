@@ -19,7 +19,7 @@ import {
   updateCompany
 } from "bopodev-db";
 import { normalizeRuntimeConfig, runtimeConfigToDb, runtimeConfigToStateBlobPatch } from "../lib/agent-config";
-import { resolveProjectWorkspacePath } from "../lib/instance-paths";
+import { resolveAgentFallbackWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
 import { resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { ensureCompanyModelPricingDefaults } from "../services/model-pricing";
 
@@ -238,22 +238,25 @@ async function ensureCeoStartupTask(
       typeof issue.body === "string" &&
       issue.body.includes(CEO_STARTUP_TASK_MARKER)
   );
+  const ceoWorkspaceRoot = resolveAgentFallbackWorkspacePath(input.companyId, input.ceoId);
+  const ceoOperatingFolder = `${ceoWorkspaceRoot}/operating`;
+  const ceoTmpFolder = `${ceoWorkspaceRoot}/tmp`;
   const body = [
     CEO_STARTUP_TASK_MARKER,
     "",
     "Stand up your leadership operating baseline before taking on additional delivery work.",
     "",
-    `1. Create the folder \`agents/${input.ceoId}/\` in the repository workspace.`,
+    `1. Create your operating folder at \`${ceoOperatingFolder}/\` (system path, outside project workspaces).`,
     "2. Author these files with your own voice and responsibilities:",
-    `   - \`agents/${input.ceoId}/AGENTS.md\``,
-    `   - \`agents/${input.ceoId}/HEARTBEAT.md\``,
-    `   - \`agents/${input.ceoId}/SOUL.md\``,
-    `   - \`agents/${input.ceoId}/TOOLS.md\``,
+    `   - \`${ceoOperatingFolder}/AGENTS.md\``,
+    `   - \`${ceoOperatingFolder}/HEARTBEAT.md\``,
+    `   - \`${ceoOperatingFolder}/SOUL.md\``,
+    `   - \`${ceoOperatingFolder}/TOOLS.md\``,
     "3. Save your operating-file reference on your own agent record via `PUT /agents/:agentId`.",
-    `   - Supported simple body: \`{ "bootstrapPrompt": "Primary operating reference: agents/${input.ceoId}/AGENTS.md ..." }\``,
+    `   - Supported simple body: \`{ "bootstrapPrompt": "Primary operating reference: ${ceoOperatingFolder}/AGENTS.md ..." }\``,
     "   - If using `runtimeConfig`, only `runtimeConfig.bootstrapPrompt` is supported there.",
     "   - Prefer heredoc/stdin payloads (for example `curl --data-binary @- <<'JSON' ... JSON`) to avoid temp-file cleanup failures under runtime policy.",
-    `   - If you must use payload files, store them in \`agents/${input.ceoId}/tmp/\` (or OS temp via \`mktemp\`) and avoid chaining cleanup commands into critical task flow.`,
+    `   - If you must use payload files, store them in \`${ceoTmpFolder}/\` (or OS temp via \`mktemp\`) and avoid chaining cleanup commands into critical task flow.`,
     "4. To inspect your own agent record, use `GET /agents` and filter by your agent id. Do not call `GET /agents/:agentId`.",
     "   - `GET /agents` uses envelope shape `{ \"ok\": true, \"data\": [...] }`; treat any other shape as failure.",
     "   - Deterministic filter: `jq -er --arg id \"$BOPODEV_AGENT_ID\" '.data | if type==\"array\" then . else error(\"invalid_agents_payload\") end | map(select((.id? // \"\") == $id))[0] | {id,name,role,bootstrapPrompt}'`",
@@ -265,6 +268,7 @@ async function ensureCeoStartupTask(
     "7. Do not use unsupported hire fields such as `adapterType`, `adapterConfig`, or `reportsTo`.",
     "",
     "Safety checks before requesting hire:",
+    "- Do not write operating/system files under any project workspace folder.",
     "- Do not request duplicates if a Founding Engineer already exists.",
     "- Do not request duplicates if a pending approval for the same role is already open.",
     "- For control-plane calls, prefer direct header env vars (`BOPODEV_COMPANY_ID`, `BOPODEV_ACTOR_TYPE`, `BOPODEV_ACTOR_ID`, `BOPODEV_ACTOR_COMPANIES`, `BOPODEV_ACTOR_PERMISSIONS`) instead of parsing `BOPODEV_REQUEST_HEADERS_JSON`.",

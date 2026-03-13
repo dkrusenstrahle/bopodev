@@ -27,7 +27,7 @@ import {
   runtimeConfigToStateBlobPatch
 } from "../lib/agent-config";
 import { resolveOpencodeRuntimeModel } from "../lib/opencode-model";
-import { resolveProjectWorkspacePath } from "../lib/instance-paths";
+import { resolveAgentFallbackWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
 import { hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { appendDurableFact } from "./memory-file-service";
 
@@ -431,7 +431,7 @@ async function ensureAgentStartupIssue(
   role: string
 ) {
   const title = `Set up ${role} operating files`;
-  const body = buildAgentStartupTaskBody(agentId);
+  const body = buildAgentStartupTaskBody(companyId, agentId);
   const existingIssues = await listIssues(db, companyId);
   const existing = existingIssues.find(
     (issue) =>
@@ -457,24 +457,26 @@ async function ensureAgentStartupIssue(
   return created.id;
 }
 
-function buildAgentStartupTaskBody(agentId: string) {
-  const agentFolder = `agents/${agentId}`;
+function buildAgentStartupTaskBody(companyId: string, agentId: string) {
+  const agentWorkspaceRoot = resolveAgentFallbackWorkspacePath(companyId, agentId);
+  const agentOperatingFolder = `${agentWorkspaceRoot}/operating`;
   return [
     AGENT_STARTUP_TASK_MARKER,
     "",
     `Create your operating baseline before starting feature delivery work.`,
     "",
-    `1. Create the folder \`${agentFolder}/\` in the repository workspace.`,
+    `1. Create your operating folder at \`${agentOperatingFolder}/\` (system path, outside project workspaces).`,
     "2. Author these files with your own responsibilities and working style:",
-    `   - \`${agentFolder}/AGENTS.md\``,
-    `   - \`${agentFolder}/HEARTBEAT.md\``,
-    `   - \`${agentFolder}/SOUL.md\``,
-    `   - \`${agentFolder}/TOOLS.md\``,
-    `3. Update your own agent runtime config via \`PUT /agents/:agentId\` and set \`runtimeConfig.bootstrapPrompt\` to reference \`${agentFolder}/AGENTS.md\` as your primary guide.`,
+    `   - \`${agentOperatingFolder}/AGENTS.md\``,
+    `   - \`${agentOperatingFolder}/HEARTBEAT.md\``,
+    `   - \`${agentOperatingFolder}/SOUL.md\``,
+    `   - \`${agentOperatingFolder}/TOOLS.md\``,
+    `3. Update your own agent runtime config via \`PUT /agents/:agentId\` and set \`runtimeConfig.bootstrapPrompt\` to reference \`${agentOperatingFolder}/AGENTS.md\` as your primary guide.`,
     "4. Post an issue comment summarizing completed setup artifacts.",
     "",
     "Safety checks:",
-    "- Do not overwrite another agent's folder.",
+    "- Do not write operating/system files under any project workspace folder.",
+    "- Do not overwrite another agent's operating folder.",
     "- Keep content original to your role and scope."
   ].join("\n");
 }

@@ -1848,6 +1848,7 @@ async function resolveRuntimeWorkspaceForWorkItems(
       ) {
         const projectIssue = workItems.find((item) => item.project_id === projectId);
         const worktree = await ensureIsolatedGitWorktree({
+          companyId,
           repoCwd: selectedWorkspaceCwd,
           projectId,
           agentId,

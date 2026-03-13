@@ -1,7 +1,11 @@
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { normalizeAbsolutePath, resolveProjectWorkspacePath } from "./instance-paths";
+import {
+  normalizeAbsolutePath,
+  resolveAgentProjectWorktreeRootPath,
+  resolveProjectWorkspacePath
+} from "./instance-paths";
 import type { ProjectExecutionWorkspacePolicy } from "./workspace-policy";
 
 const DEFAULT_GIT_TIMEOUT_MS = 30_000;
@@ -107,6 +111,7 @@ export async function bootstrapRepositoryWorkspace(input: {
 }
 
 export async function ensureIsolatedGitWorktree(input: {
+  companyId: string;
   repoCwd: string;
   projectId: string;
   agentId: string;
@@ -125,7 +130,7 @@ export async function ensureIsolatedGitWorktree(input: {
   const branch = `${branchPrefix}/${projectPart}/${agentPart}/${issuePart}`;
   const rootDir = strategy?.rootDir?.trim()
     ? normalizeAbsolutePath(strategy.rootDir)
-    : join(input.repoCwd, ".bopo", "worktrees");
+    : resolveAgentProjectWorktreeRootPath(input.companyId, input.agentId, input.projectId);
   await mkdir(rootDir, { recursive: true });
   await cleanupStaleWorktrees({ rootDir, ttlMs: resolveWorktreeTtlMs() });
   const targetPath = join(rootDir, `${projectPart}-${agentPart}-${issuePart}`);

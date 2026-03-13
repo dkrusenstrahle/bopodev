@@ -62,6 +62,13 @@ export function resolveAgentFallbackWorkspacePath(companyId: string, agentId: st
   return join(resolveBopoInstanceRoot(), "workspaces", companyId, "agents", agentId);
 }
 
+export function resolveAgentProjectWorktreeRootPath(companyId: string, agentId: string, projectId: string) {
+  assertPathSegment(companyId, "companyId");
+  assertPathSegment(agentId, "agentId");
+  assertPathSegment(projectId, "projectId");
+  return join(resolveBopoInstanceRoot(), "workspaces", companyId, "agents", agentId, "worktrees", projectId);
+}
+
 export function resolveAgentMemoryRootPath(companyId: string, agentId: string) {
   return join(resolveAgentFallbackWorkspacePath(companyId, agentId), "memory");
 }

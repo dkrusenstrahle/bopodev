@@ -57,6 +57,27 @@ export function createApp(ctx: AppContext) {
     res.setHeader("x-request-id", requestId);
     next();
   });
+  const logApiRequests = process.env.BOPO_LOG_API_REQUESTS !== "0";
+  if (logApiRequests) {
+    app.use((req, res, next) => {
+      if (req.path === "/health") {
+        next();
+        return;
+      }
+      const method = req.method.toUpperCase();
+      if (!isCrudMethod(method)) {
+        next();
+        return;
+      }
+      const startedAt = Date.now();
+      res.on("finish", () => {
+        const elapsedMs = Date.now() - startedAt;
+        const timestamp = new Date().toTimeString().slice(0, 8);
+        process.stderr.write(`[${timestamp}] INFO: ${method} ${req.originalUrl} ${res.statusCode} ${elapsedMs}ms\n`);
+      });
+      next();
+    });
+  }
 
   app.get("/health", async (_req, res) => {
     let dbReady = false;
@@ -104,4 +125,8 @@ export function createApp(ctx: AppContext) {
   });
 
   return app;
+}
+
+function isCrudMethod(method: string) {
+  return method === "GET" || method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
 }

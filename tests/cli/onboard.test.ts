@@ -27,6 +27,7 @@ describe("bopo onboard flow", () => {
       companyCreated: true,
       ceoCreated: true,
       ceoProviderType: "codex" as const,
+      ceoRuntimeModel: "gpt-5",
       ceoMigrated: false
     }));
     const startServices = vi.fn(async () => 0);
@@ -36,6 +37,7 @@ describe("bopo onboard flow", () => {
     ]);
     const promptForCompanyName = vi.fn(async () => "Acme AI");
     const promptForAgentProvider = vi.fn(async () => "codex" as const);
+    const promptForAgentModel = vi.fn(async () => "gpt-5");
 
     const result = await runOnboardFlow(
       { cwd: workspace, yes: true, start: false, forceInstall: false },
@@ -46,7 +48,8 @@ describe("bopo onboard flow", () => {
         startServices,
         runDoctor,
         promptForCompanyName,
-        promptForAgentProvider
+        promptForAgentProvider,
+        promptForAgentModel
       }
     );
 
@@ -70,7 +73,7 @@ describe("bopo onboard flow", () => {
     expect(envContent).toContain("BOPO_DEFAULT_COMPANY_ID=company-123");
     expect(envContent).toContain("NEXT_PUBLIC_DEFAULT_COMPANY_ID=company-123");
     expect(envContent).toContain("BOPO_DEFAULT_AGENT_PROVIDER=codex");
-    expect(logs.output).toContain("Summary:");
+    expect(logs.output).toContain("| Mode");
     expect(logs.output).toContain("Default company");
     expect(logs.output).toContain("Primary agent framework");
   });
@@ -84,6 +87,7 @@ describe("bopo onboard flow", () => {
     );
     const promptForCompanyName = vi.fn(async () => "Unused Name");
     const promptForAgentProvider = vi.fn(async () => "shell" as const);
+    const promptForAgentModel = vi.fn(async () => "gpt-5");
 
     await runOnboardFlow(
       { cwd: workspace, yes: true, start: false, forceInstall: false },
@@ -96,12 +100,14 @@ describe("bopo onboard flow", () => {
           companyCreated: false,
           ceoCreated: false,
           ceoProviderType: "codex" as const,
+          ceoRuntimeModel: "gpt-5",
           ceoMigrated: false
         }),
         startServices: async () => 0,
         runDoctor: async () => [],
         promptForCompanyName,
-        promptForAgentProvider
+        promptForAgentProvider,
+        promptForAgentModel
       }
     );
 
@@ -132,12 +138,14 @@ describe("bopo onboard flow", () => {
           companyCreated: false,
           ceoCreated: false,
           ceoProviderType: "shell" as const,
+          ceoRuntimeModel: "gpt-5",
           ceoMigrated: false
         }),
         startServices: async () => 0,
         runDoctor: async () => [],
         promptForCompanyName: async () => "Acme AI",
-        promptForAgentProvider: async () => "shell" as const
+        promptForAgentProvider: async () => "shell" as const,
+        promptForAgentModel: async () => "gpt-5"
       }
     );
 
@@ -153,12 +161,14 @@ describe("bopo onboard flow", () => {
     );
     const promptForCompanyName = vi.fn(async () => "Unused Name");
     const promptForAgentProvider = vi.fn(async () => "shell" as const);
+    const promptForAgentModel = vi.fn(async () => "gpt-5");
     const seedOnboardingDatabase = vi.fn(async () => ({
       companyId: "company-789",
       companyName: "Existing Co",
       companyCreated: false,
       ceoCreated: false,
       ceoProviderType: "codex" as const,
+      ceoRuntimeModel: "gpt-5",
       ceoMigrated: false
     }));
 
@@ -171,7 +181,8 @@ describe("bopo onboard flow", () => {
         startServices: async () => 0,
         runDoctor: async () => [],
         promptForCompanyName,
-        promptForAgentProvider
+        promptForAgentProvider,
+        promptForAgentModel
       }
     );
 
@@ -193,12 +204,14 @@ describe("bopo onboard flow", () => {
       "utf8"
     );
     const promptForAgentProvider = vi.fn(async () => "shell" as const);
+    const promptForAgentModel = vi.fn(async () => "gpt-5");
     const seedOnboardingDatabase = vi.fn(async () => ({
       companyId: "company-cursor",
       companyName: "Cursor Co",
       companyCreated: false,
       ceoCreated: false,
       ceoProviderType: "shell" as const,
+      ceoRuntimeModel: "gpt-5",
       ceoMigrated: false
     }));
 
@@ -211,7 +224,8 @@ describe("bopo onboard flow", () => {
         startServices: async () => 0,
         runDoctor: async () => [],
         promptForCompanyName: async () => "Unused Name",
-        promptForAgentProvider
+        promptForAgentProvider,
+        promptForAgentModel
       }
     );
 
@@ -238,12 +252,14 @@ describe("bopo onboard flow", () => {
           companyCreated: true,
           ceoCreated: true,
           ceoProviderType: "codex" as const,
+          ceoRuntimeModel: "gpt-5",
           ceoMigrated: false
         }),
         startServices: async () => 0,
         runDoctor: async () => [],
         promptForCompanyName: async () => "Acme AI",
-        promptForAgentProvider: async () => "codex" as const
+        promptForAgentProvider: async () => "codex" as const,
+        promptForAgentModel: async () => "gpt-5"
       }
     );
 

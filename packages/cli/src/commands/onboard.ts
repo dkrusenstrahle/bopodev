@@ -1,5 +1,6 @@
 import { access, copyFile, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { confirm, isCancel, log, select, spinner, text } from "@clack/prompts";
 import dotenv from "dotenv";
 import { runDoctorChecks, type DoctorCheck } from "../lib/checks";
@@ -26,6 +27,7 @@ interface OnboardSeedResult {
   companyCreated: boolean;
   ceoCreated: boolean;
   ceoProviderType: AgentProvider;
+  ceoRuntimeModel: string | null;
   ceoMigrated: boolean;
 }
 
@@ -41,7 +43,11 @@ interface OnboardDeps {
   ) => Promise<OnboardSeedResult>;
   startServices: (workspaceRoot: string) => Promise<number | null>;
   promptForCompanyName: () => Promise<string>;
-  promptForAgentProvider: () => Promise<AgentProvider>;
+  promptForAgentProvider: (input?: {
+    availableProviders?: AgentProvider[];
+    preferredProvider?: AgentProvider | null;
+  }) => Promise<AgentProvider>;
+  promptForAgentModel: (input: { provider: AgentProvider; preferredModel?: string | null }) => Promise<string | undefined>;
 }
 
 interface EnsureEnvResult {
@@ -53,6 +59,7 @@ const DEFAULT_COMPANY_NAME_ENV = "BOPO_DEFAULT_COMPANY_NAME";
 const DEFAULT_COMPANY_ID_ENV = "BOPO_DEFAULT_COMPANY_ID";
 const DEFAULT_PUBLIC_COMPANY_ID_ENV = "NEXT_PUBLIC_DEFAULT_COMPANY_ID";
 const DEFAULT_AGENT_PROVIDER_ENV = "BOPO_DEFAULT_AGENT_PROVIDER";
+const DEFAULT_AGENT_MODEL_ENV = "BOPO_DEFAULT_AGENT_MODEL";
 const DEFAULT_DEPLOYMENT_MODE_ENV = "BOPO_DEPLOYMENT_MODE";
 const DEFAULT_ENV_TEMPLATE = "NEXT_PUBLIC_API_URL=http://localhost:4020\n";
 const CLI_ONBOARD_VISIBLE_PROVIDERS: Array<{ value: AgentProvider; label: string }> = [
@@ -64,22 +71,24 @@ const CLI_ONBOARD_VISIBLE_PROVIDERS: Array<{ value: AgentProvider; label: string
 
 const defaultDeps: OnboardDeps = {
   installDependencies: async (workspaceRoot) => {
-    const code = await runCommandStreaming("pnpm", ["install"], { cwd: workspaceRoot });
-    if (code !== 0) {
-      throw new Error(`pnpm install failed with exit code ${String(code)}`);
+    const result = await runCommandCapture("pnpm", ["install"], { cwd: workspaceRoot });
+    if (!result.ok) {
+      const details = [result.stderr, result.stdout].filter((value) => value.trim().length > 0).join("\n").trim();
+      throw new Error(details.length > 0 ? details : `pnpm install failed with exit code ${String(result.code)}`);
     }
   },
   runDoctor: (workspaceRoot) => runDoctorChecks({ workspaceRoot }),
   initializeDatabase: async (workspaceRoot, dbPath) => {
-    const code = await runCommandStreaming("pnpm", ["--filter", "bopodev-api", "db:init"], {
+    const result = await runCommandCapture("pnpm", ["--filter", "bopodev-api", "db:init"], {
       cwd: workspaceRoot,
       env: {
         ...process.env,
         ...(dbPath ? { BOPO_DB_PATH: dbPath } : {})
       }
     });
-    if (code !== 0) {
-      throw new Error(`db:init failed with exit code ${String(code)}`);
+    if (!result.ok) {
+      const details = [result.stderr, result.stdout].filter((value) => value.trim().length > 0).join("\n").trim();
+      throw new Error(details.length > 0 ? details : `db:init failed with exit code ${String(result.code)}`);
     }
   },
   seedOnboardingDatabase: async (workspaceRoot, input) => {
@@ -89,6 +98,7 @@ const defaultDeps: OnboardDeps = {
         ...process.env,
         [DEFAULT_COMPANY_NAME_ENV]: input.companyName,
         [DEFAULT_AGENT_PROVIDER_ENV]: input.agentProvider,
+        ...(process.env[DEFAULT_AGENT_MODEL_ENV] ? { [DEFAULT_AGENT_MODEL_ENV]: process.env[DEFAULT_AGENT_MODEL_ENV] } : {}),
         ...(input.companyId ? { [DEFAULT_COMPANY_ID_ENV]: input.companyId } : {}),
         ...(input.dbPath ? { BOPO_DB_PATH: input.dbPath } : {})
       }
@@ -111,11 +121,19 @@ const defaultDeps: OnboardDeps = {
     }
     return answer.trim();
   },
-  promptForAgentProvider: async () => {
+  promptForAgentProvider: async (input) => {
+    const availableProviders = input?.availableProviders && input.availableProviders.length > 0
+      ? input.availableProviders
+      : CLI_ONBOARD_VISIBLE_PROVIDERS.map((entry) => entry.value);
+    const options = CLI_ONBOARD_VISIBLE_PROVIDERS.filter((entry) => availableProviders.includes(entry.value));
+    const fallback = options[0]?.value ?? "codex";
+    const preferred = input?.preferredProvider && availableProviders.includes(input.preferredProvider)
+      ? input.preferredProvider
+      : fallback;
     const answer = await select({
       message: "Primary agent framework",
-      initialValue: "codex",
-      options: CLI_ONBOARD_VISIBLE_PROVIDERS
+      initialValue: preferred,
+      options
     });
     if (isCancel(answer)) {
       throw new Error("Onboarding cancelled.");
@@ -125,6 +143,23 @@ const defaultDeps: OnboardDeps = {
       throw new Error("Invalid primary agent framework selected.");
     }
     return provider;
+  },
+  promptForAgentModel: async ({ provider, preferredModel }) => {
+    const options = buildModelOptions(provider, preferredModel ?? undefined);
+    const defaultOption = options[0];
+    const answer = await select({
+      message: "Default model",
+      initialValue: defaultOption?.value ?? "",
+      options
+    });
+    if (isCancel(answer)) {
+      throw new Error("Onboarding cancelled.");
+    }
+    const selected = typeof answer === "string" ? answer.trim() : "";
+    if (selected === "__auto__") {
+      return undefined;
+    }
+    return selected.length > 0 ? selected : undefined;
   }
 };
 
@@ -154,80 +189,109 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
   const shouldInstall = options.forceInstall || !(await hasExistingInstall(workspaceRoot));
   if (shouldInstall) {
     const installSpin = spinner();
-    installSpin.start("Installing dependencies");
+    installSpin.start("Preparing dependencies");
     await deps.installDependencies(workspaceRoot);
-    installSpin.stop("Dependencies installed");
+    installSpin.stop("Dependencies ready");
   } else {
-    log.step("Dependencies already present. Skipping install (use --force-install to reinstall).");
+    printCheck("ok", "Dependencies", "Already installed");
   }
 
-  const envSpin = spinner();
-  envSpin.start("Ensuring .env exists");
-  const envResult = await ensureEnvFile(workspaceRoot);
-  const envCreated = envResult.created;
-  if (!envResult.created) {
-    envSpin.stop(".env already present");
-  } else if (envResult.source === "example") {
-    envSpin.stop("Created .env from .env.example");
-  } else {
-    envSpin.stop("Created .env with defaults (.env.example not found)");
-  }
   const envPath = join(workspaceRoot, ".env");
+  const preEnvValues = (await fileExists(envPath)) ? await readEnvValues(envPath) : {};
+
+  const doctorSpin = spinner();
+  doctorSpin.start("Running doctor checks");
+  const checks = await deps.runDoctor(workspaceRoot);
+  doctorSpin.stop("Doctor checks complete");
+  const runtimeAvailability = deriveAvailableAgentProviders(checks);
+  const passed = checks.filter((check) => check.ok).length;
+  const warnings = checks.length - passed;
+  printCheck("ok", "Doctor", "checks complete");
+  printCheck("ok", "Doctor summary", `${passed} passed, ${warnings} warning${warnings === 1 ? "" : "s"}`);
+  if (warnings === 0) {
+    printCheck("ok", "Doctor status", "All checks passed");
+  }
+  for (const check of checks) {
+    printCheck(check.ok ? "ok" : "warn", check.label, check.details);
+  }
+
+  let companyName = preEnvValues[DEFAULT_COMPANY_NAME_ENV]?.trim() ?? "";
+  if (companyName.length > 0) {
+    printCheck("ok", "Default company", companyName);
+  } else {
+    companyName = await deps.promptForCompanyName();
+    printCheck("ok", "Default company", companyName);
+  }
+  const selectableProviders = runtimeAvailability.length > 0 ? runtimeAvailability : CLI_ONBOARD_VISIBLE_PROVIDERS.map((entry) => entry.value);
+  const configuredProvider = parseAgentProvider(preEnvValues[DEFAULT_AGENT_PROVIDER_ENV]);
+  let agentProvider: AgentProvider = configuredProvider ?? selectableProviders[0] ?? "codex";
+  const canReuseProvider = Boolean(configuredProvider && selectableProviders.includes(configuredProvider));
+  if (canReuseProvider) {
+    printCheck("ok", "Primary agent framework", formatAgentProvider(agentProvider));
+  } else {
+    agentProvider = await deps.promptForAgentProvider({
+      availableProviders: selectableProviders,
+      preferredProvider: configuredProvider
+    });
+    printCheck("ok", "Primary agent framework", formatAgentProvider(agentProvider));
+  }
+  const preferredModel = normalizeOptionalEnvValue(preEnvValues[DEFAULT_AGENT_MODEL_ENV]) ?? getDefaultModelForProvider(agentProvider);
+  const selectedAgentModel = options.yes
+    ? preferredModel ?? undefined
+    : await deps.promptForAgentModel({
+        provider: agentProvider,
+        preferredModel
+      });
+  printCheck("ok", "Default model", selectedAgentModel ?? "Provider default");
+
+  const envSpin = spinner();
+  envSpin.start("Ensuring local environment");
+  const envResult = await ensureEnvFile(workspaceRoot);
   await sanitizeBlankDbPathEnvEntry(envPath);
-  dotenv.config({ path: envPath });
+  await updateEnvFile(envPath, {
+    [DEFAULT_DEPLOYMENT_MODE_ENV]: "local",
+    [DEFAULT_COMPANY_NAME_ENV]: companyName,
+    [DEFAULT_AGENT_PROVIDER_ENV]: agentProvider ?? "codex",
+    ...(selectedAgentModel ? { [DEFAULT_AGENT_MODEL_ENV]: selectedAgentModel } : {})
+  });
+  dotenv.config({ path: envPath, quiet: true });
   const envValues = await readEnvValues(envPath);
-  const configuredDbPath = normalizeOptionalEnvValue(process.env.BOPO_DB_PATH);
+  const configuredDbPath = normalizeOptionalEnvValue(envValues.BOPO_DB_PATH);
   if (configuredDbPath) {
     process.env.BOPO_DB_PATH = configuredDbPath;
   } else {
     delete process.env.BOPO_DB_PATH;
   }
-  const deploymentMode = envValues[DEFAULT_DEPLOYMENT_MODE_ENV]?.trim() ?? "";
-  if (deploymentMode.length === 0 || deploymentMode !== "local") {
-    await updateEnvFile(envPath, { [DEFAULT_DEPLOYMENT_MODE_ENV]: "local" });
-    process.env[DEFAULT_DEPLOYMENT_MODE_ENV] = "local";
-    printCheck(
-      "ok",
-      "Deployment mode",
-      deploymentMode.length === 0 ? "local (defaulted for local onboarding)" : `local (was ${deploymentMode})`
-    );
+  process.env[DEFAULT_DEPLOYMENT_MODE_ENV] = "local";
+  process.env[DEFAULT_COMPANY_NAME_ENV] = companyName;
+  process.env[DEFAULT_AGENT_PROVIDER_ENV] = agentProvider ?? "codex";
+  if (selectedAgentModel) {
+    process.env[DEFAULT_AGENT_MODEL_ENV] = selectedAgentModel;
   } else {
-    printCheck("ok", "Deployment mode", "local");
+    delete process.env[DEFAULT_AGENT_MODEL_ENV];
   }
-
-  let companyName = envValues[DEFAULT_COMPANY_NAME_ENV]?.trim() ?? "";
-  if (companyName.length > 0) {
-    printCheck("ok", "Default company", companyName);
-  } else {
-    companyName = await deps.promptForCompanyName();
-    await updateEnvFile(envPath, { [DEFAULT_COMPANY_NAME_ENV]: companyName });
-    process.env[DEFAULT_COMPANY_NAME_ENV] = companyName;
-    printCheck("ok", "Default company", companyName);
-  }
-  let agentProvider = parseAgentProvider(envValues[DEFAULT_AGENT_PROVIDER_ENV]);
-  if (agentProvider) {
-    printCheck("ok", "Primary agent framework", formatAgentProvider(agentProvider));
-  } else {
-    agentProvider = await deps.promptForAgentProvider();
-    await updateEnvFile(envPath, { [DEFAULT_AGENT_PROVIDER_ENV]: agentProvider });
-    process.env[DEFAULT_AGENT_PROVIDER_ENV] = agentProvider;
-    printCheck("ok", "Primary agent framework", formatAgentProvider(agentProvider));
-  }
+  envSpin.stop(
+    envResult.created
+      ? envResult.source === "example"
+        ? "Environment configured from .env.example"
+        : "Environment configured from defaults"
+      : "Environment updated"
+  );
 
   const dbSpin = spinner();
-  dbSpin.start("Initializing local database");
+  dbSpin.start("Initializing and migrating database");
   await deps.initializeDatabase(workspaceRoot, configuredDbPath);
-  dbSpin.stop("Database initialized");
+  dbSpin.stop("Database ready");
 
   const seedSpin = spinner();
-  seedSpin.start("Ensuring default company and CEO agent");
+  seedSpin.start("Seeding default company and CEO");
   const seedResult = await deps.seedOnboardingDatabase(workspaceRoot, {
     dbPath: configuredDbPath,
     companyName,
     companyId: envValues[DEFAULT_COMPANY_ID_ENV]?.trim() || undefined,
     agentProvider
   });
-  seedSpin.stop("Default company and CEO ready");
+  seedSpin.stop("Seed complete");
   await updateEnvFile(envPath, {
     [DEFAULT_COMPANY_NAME_ENV]: seedResult.companyName,
     [DEFAULT_COMPANY_ID_ENV]: seedResult.companyId,
@@ -238,6 +302,13 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
   process.env[DEFAULT_COMPANY_ID_ENV] = seedResult.companyId;
   process.env[DEFAULT_PUBLIC_COMPANY_ID_ENV] = seedResult.companyId;
   process.env[DEFAULT_AGENT_PROVIDER_ENV] = seedResult.ceoProviderType;
+  if (seedResult.ceoRuntimeModel) {
+    process.env[DEFAULT_AGENT_MODEL_ENV] = seedResult.ceoRuntimeModel;
+  } else if (selectedAgentModel) {
+    process.env[DEFAULT_AGENT_MODEL_ENV] = selectedAgentModel;
+  } else {
+    delete process.env[DEFAULT_AGENT_MODEL_ENV];
+  }
   printCheck("ok", "Configured company", `${seedResult.companyName}${seedResult.companyCreated ? " (created)" : ""}`);
   printCheck(
     "ok",
@@ -245,30 +316,21 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
     `${seedResult.ceoCreated ? "Created CEO" : seedResult.ceoMigrated ? "Migrated existing CEO" : "CEO already present"} (${formatAgentProvider(seedResult.ceoProviderType)})`
   );
 
-  const doctorSpin = spinner();
-  doctorSpin.start("Running doctor checks");
-  const checks = await deps.runDoctor(workspaceRoot);
-  doctorSpin.stop("Doctor checks complete");
-
-  printDivider();
-  printSection("Doctor");
-  for (const check of checks) {
-    printCheck(check.ok ? "ok" : "warn", check.label, check.details);
-  }
-
-  const passed = checks.filter((check) => check.ok).length;
-  const failed = checks.length - passed;
-  printLine("");
+  const dbPathSummary = resolveDbPathSummary(configuredDbPath);
   printSummaryCard([
-    `Summary: ${passed} passed, ${failed} warnings`,
-    "Web URL: http://127.0.0.1:4010 (auto-fallback if occupied)",
-    "API URL: http://127.0.0.1:4020 (auto-fallback if occupied)"
+    `Mode    ${padSummaryValue("local")}`,
+    `Deploy  ${padSummaryValue("local_mac")}`,
+    `Doctor  ${padSummaryValue(`${passed} passed, ${warnings} warning${warnings === 1 ? "" : "s"}`)}`,
+    `Company ${padSummaryValue(`${seedResult.companyName} (${seedResult.companyId})`)}`,
+    `Agent   ${padSummaryValue(formatAgentProvider(seedResult.ceoProviderType))}`,
+    `Model   ${padSummaryValue(seedResult.ceoRuntimeModel ?? selectedAgentModel ?? "provider default")}`,
+    `API     ${padSummaryValue("http://127.0.0.1:4020")}`,
+    `UI      ${padSummaryValue("http://127.0.0.1:4010")}`,
+    `DB      ${padSummaryValue(dbPathSummary)}`
   ]);
-  printLine("");
 
   if (options.start) {
-    printSection("Starting services");
-    printLine("Running `pnpm start:quiet` (production mode)...");
+    printLine("Starting services in quiet mode and opening admin...");
     printDivider();
     await deps.startServices(workspaceRoot);
   } else {
@@ -281,7 +343,7 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
 
   return {
     workspaceRoot,
-    envCreated,
+    envCreated: envResult.created,
     dbInitialized: true,
     checks
   };
@@ -363,6 +425,106 @@ function normalizeOptionalEnvValue(value: string | undefined) {
   return normalized && normalized.length > 0 ? normalized : undefined;
 }
 
+function deriveAvailableAgentProviders(checks: DoctorCheck[]): AgentProvider[] {
+  const providers: AgentProvider[] = [];
+  for (const check of checks) {
+    if (!check.ok) {
+      continue;
+    }
+    if (check.label === "Codex runtime") {
+      providers.push("codex");
+    }
+    if (check.label === "Claude Code runtime") {
+      providers.push("claude_code");
+    }
+    if (check.label === "Gemini runtime") {
+      providers.push("gemini_cli");
+    }
+    if (check.label === "OpenCode runtime") {
+      providers.push("opencode");
+    }
+  }
+  return Array.from(new Set(providers));
+}
+
+function resolveDbPathSummary(configuredDbPath: string | undefined) {
+  if (configuredDbPath) {
+    return resolve(expandHomePrefix(configuredDbPath));
+  }
+  const home = process.env.BOPO_HOME?.trim() ? expandHomePrefix(process.env.BOPO_HOME.trim()) : join(homedir(), ".bopodev");
+  const instanceId = process.env.BOPO_INSTANCE_ID?.trim() || "default";
+  return resolve(home, "instances", instanceId, "db", "bopodev.db");
+}
+
+function expandHomePrefix(value: string) {
+  if (value === "~") {
+    return homedir();
+  }
+  if (value.startsWith("~/")) {
+    return resolve(homedir(), value.slice(2));
+  }
+  return value;
+}
+
+function padSummaryValue(value: string) {
+  return `| ${value}`;
+}
+
+function getDefaultModelForProvider(provider: AgentProvider): string | null {
+  if (provider === "codex" || provider === "openai_api") {
+    return process.env.BOPO_OPENAI_MODEL?.trim() || "gpt-5";
+  }
+  if (provider === "claude_code" || provider === "anthropic_api") {
+    return process.env.BOPO_ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-6";
+  }
+  if (provider === "opencode") {
+    return process.env.BOPO_OPENCODE_MODEL?.trim() || "opencode/default";
+  }
+  if (provider === "gemini_cli") {
+    return process.env.BOPO_GEMINI_MODEL?.trim() || "gemini-2.5-pro";
+  }
+  if (provider === "shell") {
+    return "n/a";
+  }
+  return null;
+}
+
+function buildModelOptions(provider: AgentProvider, preferredModel?: string) {
+  const providerDefault = { value: "", label: "Provider default" };
+  const defaultModel = getDefaultModelForProvider(provider);
+  const modelIds = new Set<string>();
+  const presets = getModelPresetsForProvider(provider);
+  for (const model of presets) {
+    modelIds.add(model);
+  }
+  if (preferredModel && preferredModel.trim().length > 0) {
+    modelIds.add(preferredModel.trim());
+  }
+  if (defaultModel) {
+    modelIds.add(defaultModel);
+  }
+  return [
+    providerDefault,
+    ...Array.from(modelIds).map((model) => ({ value: model, label: model }))
+  ];
+}
+
+function getModelPresetsForProvider(provider: AgentProvider): string[] {
+  if (provider === "codex" || provider === "openai_api") {
+    return ["gpt-5", "gpt-5-mini", "gpt-4.1"];
+  }
+  if (provider === "claude_code" || provider === "anthropic_api") {
+    return ["claude-sonnet-4-6", "claude-opus-4-1"];
+  }
+  if (provider === "gemini_cli") {
+    return ["gemini-2.5-pro", "gemini-2.5-flash"];
+  }
+  if (provider === "opencode") {
+    return ["opencode/default"];
+  }
+  return [];
+}
+
 function parseSeedResult(stdout: string): OnboardSeedResult {
   const lines = stdout
     .split(/\r?\n/)
@@ -378,6 +540,7 @@ function parseSeedResult(stdout: string): OnboardSeedResult {
     typeof parsed.companyName !== "string" ||
     typeof parsed.companyCreated !== "boolean" ||
     typeof parsed.ceoCreated !== "boolean" ||
+    !(parsed.ceoRuntimeModel === null || typeof parsed.ceoRuntimeModel === "string" || typeof parsed.ceoRuntimeModel === "undefined") ||
     typeof parsed.ceoMigrated !== "boolean" ||
     !parseAgentProvider(parsed.ceoProviderType)
   ) {
@@ -389,6 +552,7 @@ function parseSeedResult(stdout: string): OnboardSeedResult {
     companyCreated: parsed.companyCreated,
     ceoCreated: parsed.ceoCreated,
     ceoProviderType: parseAgentProvider(parsed.ceoProviderType) ?? "shell",
+    ceoRuntimeModel: typeof parsed.ceoRuntimeModel === "string" ? parsed.ceoRuntimeModel : null,
     ceoMigrated: parsed.ceoMigrated
   };
 }

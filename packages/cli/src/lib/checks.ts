@@ -47,6 +47,28 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
         : openCode.error ?? `Command '${openCodeCommand}' exited with ${String(openCode.exitCode)}`
   });
 
+  const claudeCommand = process.env.BOPO_CLAUDE_COMMAND?.trim() || "claude";
+  const claude = await checkRuntimeCommandHealth(claudeCommand, options?.workspaceRoot);
+  checks.push({
+    label: "Claude Code runtime",
+    ok: claude.available && claude.exitCode === 0,
+    details:
+      claude.available && claude.exitCode === 0
+        ? `Command '${claudeCommand}' is available`
+        : claude.error ?? `Command '${claudeCommand}' exited with ${String(claude.exitCode)}`
+  });
+
+  const geminiCommand = process.env.BOPO_GEMINI_COMMAND?.trim() || "gemini";
+  const gemini = await checkRuntimeCommandHealth(geminiCommand, options?.workspaceRoot);
+  checks.push({
+    label: "Gemini runtime",
+    ok: gemini.available && gemini.exitCode === 0,
+    details:
+      gemini.available && gemini.exitCode === 0
+        ? `Command '${geminiCommand}' is available`
+        : gemini.error ?? `Command '${geminiCommand}' exited with ${String(gemini.exitCode)}`
+  });
+
   const instanceRoot = resolveInstanceRoot();
   const storageRoot = join(instanceRoot, "data", "storage");
   const workspaceRoot = join(instanceRoot, "workspaces");

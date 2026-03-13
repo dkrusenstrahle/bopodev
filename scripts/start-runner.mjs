@@ -24,7 +24,7 @@ const args = [
   "--env-mode=loose"
 ];
 if (quiet) {
-  args.push("--ui=stream", "--output-logs=new-only", "--log-prefix=none");
+  args.push("--ui=stream", "--output-logs=errors-only", "--log-prefix=none");
 }
 
 const child = spawn("pnpm", args, {

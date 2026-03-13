@@ -36,9 +36,11 @@ export function printDivider() {
   process.stdout.write(`${color.dim("----------------------------------------")}\n`);
 }
 
-export function printCheck(state: CheckMark, label: string, details: string) {
-  const icon = state === "ok" ? color.green("[ok]") : state === "warn" ? color.yellow("[..]") : color.red("[x]");
-  process.stdout.write(`${icon} ${color.bold(label)}: ${details}\n`);
+export function printCheck(state: CheckMark, label: string, details: string, options?: { indent?: number }) {
+  const status = state === "ok" ? color.green("ok") : state === "warn" ? color.yellow("warn") : color.red("fail");
+  const indent = " ".repeat(Math.max(0, options?.indent ?? 0));
+  const paddedLabel = `${label}:`.padEnd(26);
+  process.stdout.write(`│  ${indent}${color.bold(paddedLabel)} ${details}  ${status}\n`);
 }
 
 export function printSummaryCard(lines: string[]) {

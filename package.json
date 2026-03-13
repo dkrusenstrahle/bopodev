@@ -14,7 +14,7 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "format": "prettier --write .",
-    "onboard": "pnpm --filter bopodev build && node packages/cli/dist/index.js onboard --yes",
+    "onboard": "pnpm --filter bopodev build && node packages/cli/dist/index.js onboard",
     "doctor": "pnpm --filter bopodev build && node packages/cli/dist/index.js doctor",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

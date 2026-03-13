@@ -25,12 +25,14 @@ export interface OnboardSeedSummary {
   companyCreated: boolean;
   ceoCreated: boolean;
   ceoProviderType: AgentProvider;
+  ceoRuntimeModel: string | null;
   ceoMigrated: boolean;
 }
 
 const DEFAULT_COMPANY_NAME_ENV = "BOPO_DEFAULT_COMPANY_NAME";
 const DEFAULT_COMPANY_ID_ENV = "BOPO_DEFAULT_COMPANY_ID";
 const DEFAULT_AGENT_PROVIDER_ENV = "BOPO_DEFAULT_AGENT_PROVIDER";
+const DEFAULT_AGENT_MODEL_ENV = "BOPO_DEFAULT_AGENT_MODEL";
 type AgentProvider = "codex" | "claude_code" | "cursor" | "gemini_cli" | "opencode" | "openai_api" | "anthropic_api" | "shell";
 const CEO_BOOTSTRAP_SUMMARY = "ceo bootstrap heartbeat";
 const STARTUP_PROJECT_NAME = "Leadership Setup";
@@ -42,12 +44,14 @@ export async function ensureOnboardingSeed(input: {
   companyName: string;
   companyId?: string;
   agentProvider?: AgentProvider;
+  agentModel?: string;
 }): Promise<OnboardSeedSummary> {
   const companyName = input.companyName.trim();
   if (companyName.length === 0) {
     throw new Error("BOPO_DEFAULT_COMPANY_NAME is required for onboarding seed.");
   }
   const agentProvider = parseAgentProvider(input.agentProvider) ?? "shell";
+  const requestedAgentModel = input.agentModel?.trim() || undefined;
 
   const { db, client } = await bootstrapDatabase(input.dbPath);
 
@@ -81,6 +85,7 @@ export async function ensureOnboardingSeed(input: {
       runtimeConfig: {
         runtimeEnv: seedRuntimeEnv,
         runtimeModel: await resolveSeedRuntimeModel(agentProvider, {
+          requestedModel: requestedAgentModel,
           defaultRuntimeCwd,
           runtimeEnv: seedRuntimeEnv
         })
@@ -91,6 +96,7 @@ export async function ensureOnboardingSeed(input: {
     let ceoCreated = false;
     let ceoMigrated = false;
     let ceoProviderType: AgentProvider = parseAgentProvider(existingCeo?.providerType) ?? agentProvider;
+    let ceoRuntimeModel = existingCeo?.runtimeModel ?? null;
 
     let ceoId = existingCeo?.id ?? null;
 
@@ -109,6 +115,7 @@ export async function ensureOnboardingSeed(input: {
       ceoId = ceo.id;
       ceoCreated = true;
       ceoProviderType = agentProvider;
+      ceoRuntimeModel = ceo.runtimeModel ?? defaultRuntimeConfig.runtimeModel ?? null;
     } else if (isBootstrapCeoRuntime(existingCeo.providerType, existingCeo.stateBlob)) {
       const nextState = {
         ...stripRuntimeFromState(existingCeo.stateBlob),
@@ -124,8 +131,10 @@ export async function ensureOnboardingSeed(input: {
       ceoMigrated = true;
       ceoProviderType = agentProvider;
       ceoId = existingCeo.id;
+      ceoRuntimeModel = defaultRuntimeConfig.runtimeModel ?? null;
     } else {
       ceoId = existingCeo.id;
+      ceoRuntimeModel = existingCeo.runtimeModel ?? null;
     }
 
     if (ceoId) {
@@ -144,6 +153,7 @@ export async function ensureOnboardingSeed(input: {
       companyCreated,
       ceoCreated,
       ceoProviderType,
+      ceoRuntimeModel,
       ceoMigrated
     };
   } finally {
@@ -242,12 +252,14 @@ async function main() {
   const companyName = process.env[DEFAULT_COMPANY_NAME_ENV]?.trim() ?? "";
   const companyId = process.env[DEFAULT_COMPANY_ID_ENV]?.trim() || undefined;
   const agentProvider = parseAgentProvider(process.env[DEFAULT_AGENT_PROVIDER_ENV]) ?? undefined;
+  const agentModel = process.env[DEFAULT_AGENT_MODEL_ENV]?.trim() || undefined;
   const dbPath = normalizeOptionalDbPath(process.env.BOPO_DB_PATH);
   const result = await ensureOnboardingSeed({
     dbPath,
     companyName,
     companyId,
-    agentProvider
+    agentProvider,
+    agentModel
   });
   // eslint-disable-next-line no-console
   console.log(JSON.stringify(result));
@@ -302,8 +314,11 @@ function resolveSeedRuntimeEnv(agentProvider: AgentProvider): Record<string, str
 
 async function resolveSeedRuntimeModel(
   agentProvider: AgentProvider,
-  input: { defaultRuntimeCwd: string; runtimeEnv: Record<string, string> }
+  input: { requestedModel?: string; defaultRuntimeCwd: string; runtimeEnv: Record<string, string> }
 ): Promise<string | undefined> {
+  if (input.requestedModel) {
+    return input.requestedModel;
+  }
   if (agentProvider !== "opencode") {
     return undefined;
   }

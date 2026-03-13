@@ -519,7 +519,7 @@ export function IssueDetailPageClient({
       <Card>
         <CardHeader>
           <CardTitle>Issue details</CardTitle>
-          <CardDescription>Current metadata and timeline for this issue.</CardDescription>
+          <CardDescription>Current metadata for this issue.</CardDescription>
         </CardHeader>
         <CardContent className={styles.issueSidebarCardContent}>
           {issue.body?.trim() ? (
@@ -745,7 +745,7 @@ export function IssueDetailPageClient({
       <Card>
         <CardHeader>
           <CardTitle>Issue controls</CardTitle>
-          <CardDescription>Update this issue&apos;s live assignment and status.</CardDescription>
+          <CardDescription>Update this issue data.</CardDescription>
         </CardHeader>
         <CardContent className={styles.issueSidebarCardContent}>
           <Field>
@@ -789,12 +789,12 @@ export function IssueDetailPageClient({
       <Card>
         <CardHeader>
           <CardTitle>Issue details</CardTitle>
-          <CardDescription>Current metadata and timeline for this issue.</CardDescription>
+          <CardDescription>Current metadata for this issue.</CardDescription>
         </CardHeader>
         <CardContent className={styles.issueSidebarCardContent}>
           <PropertyRow label="Priority" value={<Badge variant="outline">{issue.priority}</Badge>} />
           <PropertyRow label="Labels" value={issue.labels.length > 0 ? issue.labels.join(", ") : "No labels"} />
-          <PropertyRow label="Assignee" value={selectedAssignee ? `${selectedAssignee.name} · ${selectedAssignee.role}` : "Unassigned"} />
+          <PropertyRow label="Assignee" value={selectedAssignee ? `${selectedAssignee.name}` : "Unassigned"} />
           <PropertyRow
             label="Project"
             value={

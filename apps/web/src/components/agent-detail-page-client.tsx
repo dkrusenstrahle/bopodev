@@ -470,7 +470,11 @@ export function AgentDetailPageClient({
     }
     return getModelOptionsForProvider(provider, configuredModelId).filter((option) => option.value.trim().length > 0);
   }, [agent.providerType, configuredModelId]);
+  const configuredThinkingEffort = state.runtime?.thinkingEffort ?? agent.runtimeThinkingEffort ?? "auto";
   const [selectedModelId, setSelectedModelId] = useState(configuredModelId);
+  const [selectedThinkingEffort, setSelectedThinkingEffort] = useState<"auto" | "low" | "medium" | "high">(
+    configuredThinkingEffort
+  );
   const [selectedManagerAgentId, setSelectedManagerAgentId] = useState(agent.managerAgentId ?? "__none");
   const runActivityBars = useMemo(() => buildLastNDaysSeries(14, agentRuns, (run) => run.startedAt), [agentRuns]);
   const successRateBars = useMemo(() => {
@@ -528,6 +532,10 @@ export function AgentDetailPageClient({
   useEffect(() => {
     setSelectedModelId(configuredModelId);
   }, [configuredModelId]);
+
+  useEffect(() => {
+    setSelectedThinkingEffort(configuredThinkingEffort);
+  }, [configuredThinkingEffort]);
 
   useEffect(() => {
     setSelectedManagerAgentId(agent.managerAgentId ?? "__none");
@@ -610,7 +618,13 @@ export function AgentDetailPageClient({
     }, "Failed to terminate agent.", `agent:${agent.id}:terminate`);
   }
 
-  async function updateSidebarSettings(payload: { runtimeConfig?: { runtimeModel?: string }; managerAgentId?: string | null }, actionKey: string) {
+  async function updateSidebarSettings(
+    payload: {
+      runtimeConfig?: { runtimeModel?: string; runtimeThinkingEffort?: "auto" | "low" | "medium" | "high" };
+      managerAgentId?: string | null;
+    },
+    actionKey: string
+  ) {
     setSidebarError(null);
     if (isActionPending(actionKey)) {
       return;
@@ -641,6 +655,19 @@ export function AgentDetailPageClient({
       await updateSidebarSettings({ runtimeConfig: { runtimeModel: nextModelId } }, `agent:${agent.id}:runtime-model`);
     } catch {
       setSelectedModelId(previousModelId);
+    }
+  }
+
+  async function handleThinkingEffortChange(nextThinkingEffort: "auto" | "low" | "medium" | "high") {
+    const previousThinkingEffort = selectedThinkingEffort;
+    setSelectedThinkingEffort(nextThinkingEffort);
+    try {
+      await updateSidebarSettings(
+        { runtimeConfig: { runtimeThinkingEffort: nextThinkingEffort } },
+        `agent:${agent.id}:runtime-thinking-effort`
+      );
+    } catch {
+      setSelectedThinkingEffort(previousThinkingEffort);
     }
   }
 
@@ -887,6 +914,25 @@ export function AgentDetailPageClient({
                     {option.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field className={styles.agentSidebarField}>
+            <FieldLabel>Thinking effort</FieldLabel>
+            <Select
+              value={selectedThinkingEffort}
+              onValueChange={(value) => void handleThinkingEffortChange(value as "auto" | "low" | "medium" | "high")}
+              disabled={isActionPending(`agent:${agent.id}:runtime-thinking-effort`) || agent.status === "terminated"}
+            >
+              <SelectTrigger className={styles.agentSidebarSelectTrigger}>
+                <SelectValue placeholder="Select thinking effort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
               </SelectContent>
             </Select>
           </Field>

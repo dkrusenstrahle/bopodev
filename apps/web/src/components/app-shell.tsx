@@ -28,6 +28,7 @@ import type { SectionLabel, SectionSlug } from "@/lib/sections";
 import {
   GovernanceNotificationCenter
 } from "@/components/notifications/governance-notification-center";
+import { ThemePaletteSelect } from "@/components/theme-palette-select";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -239,7 +240,10 @@ export function AppShell({
               </div>
               </div>
             </ScrollArea>
-            <ThemeToggle />
+            <div className="ui-shell-stack-sm">
+              <ThemePaletteSelect />
+              <ThemeToggle />
+            </div>
           </div>
         </aside>
       ) : null}

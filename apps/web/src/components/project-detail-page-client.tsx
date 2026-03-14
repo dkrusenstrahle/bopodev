@@ -2,16 +2,20 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AppShell } from "@/components/app-shell";
 import { CreateIssueModal } from "@/components/modals/create-issue-modal";
 import { CreateProjectModal } from "@/components/modals/create-project-modal";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ApiError, apiPut } from "@/lib/api";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
 import styles from "./project-detail-page-client.module.scss";
 import { MetricCard, SectionHeading } from "./workspace/shared";
@@ -70,6 +74,15 @@ interface CostRow {
   usdCost: number;
 }
 
+const projectStatusOptions = [
+  { value: "planned", label: "Planned" },
+  { value: "active", label: "Active" },
+  { value: "paused", label: "Paused" },
+  { value: "blocked", label: "Blocked" },
+  { value: "completed", label: "Completed" },
+  { value: "archived", label: "Archived" }
+] as const;
+
 function PropertyRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className={styles.projectPropertyRow}>
@@ -113,6 +126,8 @@ export function ProjectDetailPageClient({
   agents: AgentRow[];
   costEntries: CostRow[];
 }) {
+  const router = useRouter();
+  const [actionError, setActionError] = useState<string | null>(null);
   const [issuesQuery, setIssuesQuery] = useState("");
   const [issuesStatusFilter, setIssuesStatusFilter] = useState<string>("all");
   const [issuesAssigneeFilter, setIssuesAssigneeFilter] = useState<string>("all");
@@ -223,6 +238,16 @@ export function ProjectDetailPageClient({
           .join(", ")
       : "No workspaces configured";
 
+  async function updateProjectStatus(status: ProjectRow["status"]) {
+    setActionError(null);
+    try {
+      await apiPut(`/projects/${project.id}`, companyId, { status });
+      router.refresh();
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : "Failed to update project status.");
+    }
+  }
+
   const leftPane = (
     <div className={styles.projectDetailContainer2}>
       <SectionHeading
@@ -250,6 +275,12 @@ export function ProjectDetailPageClient({
           </div>
         }
       />
+      {actionError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Project update failed</AlertTitle>
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
       <div className="ui-stats">
           <MetricCard label="Status" value={project.status} />
           <MetricCard label="Total issues" value={issues.length} />
@@ -309,6 +340,25 @@ export function ProjectDetailPageClient({
 
   const rightPane = (
     <div className={styles.projectDetailContainer6}>
+      <Card>
+        <CardContent className={styles.projectDetailCardContent2}>
+          <Field>
+            <FieldLabel>Status</FieldLabel>
+            <Select value={project.status} onValueChange={(value) => void updateProjectStatus(value as ProjectRow["status"])}>
+              <SelectTrigger className={styles.projectDetailSelectTrigger}>
+                <SelectValue placeholder="Select project status" />
+              </SelectTrigger>
+              <SelectContent>
+                {projectStatusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className={styles.projectDetailCardContent2}>
           <PropertyRow label="Description" value={projectDescription} />

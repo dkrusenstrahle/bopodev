@@ -68,6 +68,10 @@
   @apply space-y-2 text-sm;
 }
 
+.projectDetailSelectTrigger {
+  @apply w-full;
+}
+
 .projectPropertyRow {
   @apply space-y-1.5 py-1 text-sm leading-6;
 }

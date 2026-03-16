@@ -177,7 +177,7 @@ function OfficeSpaceCanvas({
                           />
                           <span className="min-w-0 flex-1 text-left">
                             <span className="block truncate">{occupant.displayName}</span>
-                            <span className="block text-xs text-muted-foreground">
+                            <span className="block text-base text-muted-foreground">
                               {occupant.status === "working" && occupant.taskLabel ? occupant.taskLabel : occupant.status}
                             </span>
                           </span>

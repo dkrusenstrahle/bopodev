@@ -1,9 +1,9 @@
 @reference "../../app/globals.css";
 
 .confirmActionModalText {
-  @apply text-sm text-destructive;
+  @apply text-base text-destructive;
 }
 
 .confirmActionModalDetails {
-  @apply max-h-80 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap wrap-break-word;
+  @apply max-h-80 overflow-auto rounded-md border bg-muted p-3 text-base whitespace-pre-wrap wrap-break-word;
 }

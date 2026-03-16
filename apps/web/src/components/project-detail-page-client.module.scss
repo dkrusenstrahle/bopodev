@@ -5,7 +5,7 @@
 }
 
 .projectDetailContainer1 {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .projectDetailContainer2 {
@@ -29,7 +29,7 @@
 }
 
 .projectDetailText {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .projectDetailContainer5 {
@@ -41,7 +41,7 @@
 }
 
 .projectDetailCardContent1 {
-  @apply space-y-3 text-sm;
+  @apply space-y-3 text-base;
 }
 
 .projectDetailContainer7 {
@@ -65,7 +65,7 @@
 }
 
 .projectDetailCardContent2 {
-  @apply space-y-2 text-sm;
+  @apply space-y-2 text-base;
 }
 
 .projectDetailSelectTrigger {
@@ -73,11 +73,11 @@
 }
 
 .projectPropertyRow {
-  @apply space-y-1.5 py-1 text-sm leading-6;
+  @apply space-y-1.5 py-1 text-base leading-6;
 }
 
 .projectPropertyLabel {
-  @apply text-sm text-muted-foreground font-medium;
+  @apply text-base text-muted-foreground font-medium;
 }
 
 .projectPropertyValue {

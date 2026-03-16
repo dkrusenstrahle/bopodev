@@ -1,7 +1,7 @@
 @reference "../app/globals.css";
 
 .emptyState {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .viewport {
@@ -25,7 +25,7 @@
 }
 
 .warningBanner {
-  @apply absolute left-3 top-3 z-20 max-w-lg rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/60 dark:text-amber-200;
+  @apply absolute left-3 top-3 z-20 max-w-lg rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-base text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/60 dark:text-amber-200;
 }
 
 .treeScroller {
@@ -93,13 +93,13 @@
 }
 
 .orgCardName {
-  @apply truncate text-sm font-semibold leading-tight text-foreground;
+  @apply truncate text-base font-semibold leading-tight text-foreground;
 }
 
 .orgCardMeta {
-  @apply truncate text-xs text-muted-foreground mt-2;
+  @apply truncate text-sm text-muted-foreground mt-2;
 }
 
 .orgCardDetails {
-  @apply truncate text-xs text-muted-foreground;
+  @apply truncate text-base text-muted-foreground;
 }

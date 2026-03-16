@@ -11,7 +11,7 @@ body {
 }
 
 .ui-alert {
-  @apply relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current;
+  @apply relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-base has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current;
 }
 
 .ui-alert--default {
@@ -27,11 +27,11 @@ body {
 }
 
 .ui-alert-description {
-  @apply col-start-2 grid justify-items-start gap-1 text-sm text-muted-foreground [&_p]:leading-relaxed;
+  @apply col-start-2 grid justify-items-start gap-1 text-base text-muted-foreground [&_p]:leading-relaxed;
 }
 
 .ui-badge {
-  @apply inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3;
+  @apply inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-base font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3;
 }
 
 .ui-badge--default {
@@ -59,7 +59,7 @@ body {
 }
 
 .ui-button {
-  @apply inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
+  @apply inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-base font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
 }
 
 .ui-button--default {
@@ -91,7 +91,7 @@ body {
 }
 
 .ui-button--size-xs {
-  @apply h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3;
+  @apply h-6 gap-1 rounded-md px-2 text-base has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3;
 }
 
 .ui-button--size-sm {
@@ -131,7 +131,7 @@ body {
 }
 
 .ui-button-group-text {
-  @apply flex items-center gap-2 rounded-md border bg-muted px-4 text-sm font-medium [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4;
+  @apply flex items-center gap-2 rounded-md border bg-muted px-4 text-base font-medium [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4;
 }
 
 .ui-button-group-separator {
@@ -183,7 +183,7 @@ body {
 }
 
 .ui-card-description {
-  @apply text-sm text-muted-foreground ;
+  @apply text-base text-muted-foreground ;
 }
 
 .ui-card-action {
@@ -248,7 +248,7 @@ body {
 }
 
 .ui-data-table-header-cell {
-  @apply h-11 px-4 text-xs font-medium tracking-wide text-muted-foreground uppercase;
+  @apply h-11 px-4 text-base font-medium tracking-wide text-muted-foreground uppercase;
 }
 
 .ui-data-table-row {
@@ -284,7 +284,7 @@ body {
 }
 
 .ui-data-table-pagination-total {
-  @apply flex-1 text-sm text-muted-foreground;
+  @apply flex-1 text-base text-muted-foreground;
 }
 
 .ui-data-table-pagination-controls {
@@ -296,7 +296,7 @@ body {
 }
 
 .ui-data-table-pagination-label {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .ui-data-table-pagination-size-trigger {
@@ -304,7 +304,7 @@ body {
 }
 
 .ui-data-table-pagination-page-info {
-  @apply flex w-[120px] items-center justify-center text-sm text-muted-foreground;
+  @apply flex w-[120px] items-center justify-center text-base text-muted-foreground;
 }
 
 .ui-data-table-pagination-buttons {
@@ -368,7 +368,7 @@ body {
 }
 
 .ui-dialog-description {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .ui-sheet-overlay {
@@ -401,7 +401,7 @@ body {
 }
 
 .ui-sheet-description {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .ui-drawer-overlay {
@@ -430,7 +430,7 @@ body {
 }
 
 .ui-drawer-description {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .ui-accordion-item {
@@ -442,7 +442,7 @@ body {
 }
 
 .ui-accordion-trigger {
-  @apply flex flex-1 items-center justify-between py-4 text-sm font-medium transition-all hover:underline;
+  @apply flex flex-1 items-center justify-between py-4 text-base font-medium transition-all hover:underline;
 }
 
 .ui-accordion-trigger-icon {
@@ -454,7 +454,7 @@ body {
 }
 
 .ui-accordion-content {
-  @apply overflow-hidden text-sm data-[state=closed]:animate-out data-[state=open]:animate-in;
+  @apply overflow-hidden text-base data-[state=closed]:animate-out data-[state=open]:animate-in;
 }
 
 .ui-accordion-content-inner {
@@ -467,7 +467,7 @@ body {
 }
 
 .ui-tooltip-content {
-  @apply z-50 overflow-hidden rounded-md bg-foreground px-3 py-1.5 text-xs text-background;
+  @apply z-50 overflow-hidden rounded-md bg-foreground px-3 py-1.5 text-base text-background;
   @apply data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0;
 }
 
@@ -484,7 +484,7 @@ body {
 }
 
 .ui-command-input {
-  @apply flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground;
+  @apply flex h-10 w-full rounded-md bg-transparent py-3 text-base outline-none placeholder:text-muted-foreground;
 }
 
 .ui-command-list {
@@ -492,7 +492,7 @@ body {
 }
 
 .ui-command-empty {
-  @apply py-6 text-center text-sm;
+  @apply py-6 text-center text-base;
 }
 
 .ui-command-group {
@@ -504,12 +504,12 @@ body {
 }
 
 .ui-command-item {
-  @apply relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-left outline-none select-none;
+  @apply relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-base text-left outline-none select-none;
   @apply hover:bg-accent hover:text-accent-foreground;
 }
 
 .ui-command-shortcut {
-  @apply ml-auto text-xs tracking-widest text-muted-foreground;
+  @apply ml-auto text-base tracking-widest text-muted-foreground;
 }
 
 .ui-dropdown-menu-content {
@@ -517,12 +517,12 @@ body {
 }
 
 .ui-dropdown-menu-item {
-  @apply relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground data-[variant=destructive]:*:[svg]:text-destructive!;
+  @apply relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-base outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground data-[variant=destructive]:*:[svg]:text-destructive!;
 }
 
 .ui-dropdown-menu-checkbox-item,
 .ui-dropdown-menu-radio-item {
-  @apply relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
+  @apply relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-base outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
 }
 
 .ui-dropdown-menu-item-indicator {
@@ -538,7 +538,7 @@ body {
 }
 
 .ui-dropdown-menu-label {
-  @apply px-2 py-1.5 text-sm font-medium data-[inset]:pl-8;
+  @apply px-2 py-1.5 text-base font-medium data-[inset]:pl-8;
 }
 
 .ui-dropdown-menu-separator {
@@ -546,11 +546,11 @@ body {
 }
 
 .ui-dropdown-menu-shortcut {
-  @apply ml-auto text-xs tracking-widest text-muted-foreground;
+  @apply ml-auto text-base tracking-widest text-muted-foreground;
 }
 
 .ui-dropdown-menu-sub-trigger {
-  @apply flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[inset]:pl-8 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground;
+  @apply flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-base outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[inset]:pl-8 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground;
 }
 
 .ui-dropdown-menu-sub-icon {
@@ -598,15 +598,15 @@ body {
 }
 
 .ui-field-title {
-  @apply flex w-fit items-center gap-2 text-sm leading-snug font-medium group-data-[disabled=true]/field:opacity-50;
+  @apply flex w-fit items-center gap-2 text-base leading-snug font-medium group-data-[disabled=true]/field:opacity-50;
 }
 
 .ui-field-description {
-  @apply text-sm leading-normal font-normal text-muted-foreground group-has-[[data-orientation=horizontal]]/field:text-balance last:mt-0 nth-last-2:-mt-1 [[data-variant=legend]+&]:-mt-1.5 [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary;
+  @apply text-base leading-normal font-normal text-muted-foreground group-has-[[data-orientation=horizontal]]/field:text-balance last:mt-0 nth-last-2:-mt-1 [[data-variant=legend]+&]:-mt-1.5 [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary;
 }
 
 .ui-field-separator {
-  @apply relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2;
+  @apply relative -my-2 h-5 text-base group-data-[variant=outline]/field-group:-mb-2;
 }
 
 .ui-field-separator-line {
@@ -622,15 +622,15 @@ body {
 }
 
 .ui-field-error {
-  @apply text-sm font-normal text-destructive;
+  @apply text-base font-normal text-destructive;
 }
 
 .ui-input {
-  @apply h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40;
+  @apply h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40;
 }
 
 .ui-label {
-  @apply flex items-center gap-2 text-sm leading-none font-medium text-muted-foreground select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50;
+  @apply flex items-center gap-2 text-base leading-none font-medium text-muted-foreground select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50;
 }
 
 .ui-navigation-menu {
@@ -646,7 +646,7 @@ body {
 }
 
 .ui-navigation-menu-trigger {
-  @apply inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-[color,box-shadow] outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-accent/50 data-[state=open]:text-accent-foreground data-[state=open]:hover:bg-accent data-[state=open]:focus:bg-accent;
+  @apply inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-base font-medium transition-[color,box-shadow] outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-accent/50 data-[state=open]:text-accent-foreground data-[state=open]:hover:bg-accent data-[state=open]:focus:bg-accent;
 }
 
 .ui-navigation-menu-trigger-icon {
@@ -666,7 +666,7 @@ body {
 }
 
 .ui-navigation-menu-link {
-  @apply flex flex-col gap-1 rounded-sm p-2 text-sm transition-all outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 data-[active=true]:bg-accent/50 data-[active=true]:text-accent-foreground data-[active=true]:hover:bg-accent data-[active=true]:focus:bg-accent [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground;
+  @apply flex flex-col gap-1 rounded-sm p-2 text-base transition-all outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 data-[active=true]:bg-accent/50 data-[active=true]:text-accent-foreground data-[active=true]:hover:bg-accent data-[active=true]:focus:bg-accent [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground;
 }
 
 .ui-navigation-menu-indicator {
@@ -730,7 +730,7 @@ body {
 }
 
 .ui-select-trigger {
-  @apply flex w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm whitespace-nowrap transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[placeholder]:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground;
+  @apply flex w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-base whitespace-nowrap transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[placeholder]:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground;
 }
 
 .ui-select-trigger-icon {
@@ -754,11 +754,11 @@ body {
 }
 
 .ui-select-label {
-  @apply px-2 py-1.5 text-xs text-muted-foreground;
+  @apply px-2 py-1.5 text-base text-muted-foreground;
 }
 
 .ui-select-item {
-  @apply relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2;
+  @apply relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-base outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2;
 }
 
 .ui-select-item-indicator {
@@ -790,7 +790,7 @@ body {
 }
 
 .ui-table {
-  @apply w-max min-w-full caption-bottom text-sm;
+  @apply w-max min-w-full caption-bottom text-base;
 }
 
 .ui-table-header {
@@ -810,7 +810,7 @@ body {
 }
 
 .ui-table-head {
-  @apply px-3 py-3 first:pl-5 last:pr-4 text-left align-middle font-medium text-sm capitalize whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
+  @apply px-3 py-3 first:pl-5 last:pr-4 text-left align-middle font-medium text-base capitalize whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
 }
 
 .ui-table-cell {
@@ -818,7 +818,7 @@ body {
 }
 
 .ui-table-caption {
-  @apply mt-4 text-sm text-muted-foreground;
+  @apply mt-4 text-base text-muted-foreground;
 }
 
 .ui-tabs {
@@ -830,7 +830,7 @@ body {
 }
 
 .ui-tabs-trigger {
-  @apply inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all;
+  @apply inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-base font-medium transition-all;
   @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   @apply disabled:pointer-events-none disabled:opacity-50;
   @apply data-[state=active]:bg-background data-[state=active]:text-foreground;
@@ -841,7 +841,7 @@ body {
 }
 
 .ui-textarea {
-  @apply flex field-sizing-content min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40;
+  @apply flex field-sizing-content min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:ring-destructive/40;
 }
 
 .ui-visually-hidden {
@@ -905,7 +905,7 @@ body {
 }
 
 .ui-shell-brand-subtitle {
-  @apply text-sm text-sidebar-foreground/60;
+  @apply text-base text-sidebar-foreground/60;
 }
 
 .ui-shell-stack-sm {
@@ -913,7 +913,7 @@ body {
 }
 
 .ui-shell-section-label {
-  @apply text-[0.7rem] font-bold uppercase text-sidebar-foreground/45;
+  @apply text-sm font-bold uppercase text-sidebar-foreground/45;
 }
 
 .ui-shell-company-trigger {
@@ -921,7 +921,7 @@ body {
 }
 
 .ui-shell-company-empty {
-  @apply rounded-xl border border-dashed border-sidebar-border bg-sidebar-accent/20 p-4 text-sm text-sidebar-foreground/60;
+  @apply rounded-xl border border-dashed border-sidebar-border bg-sidebar-accent/20 p-4 text-base text-sidebar-foreground/60;
 }
 
 .ui-shell-separator {
@@ -933,7 +933,7 @@ body {
 }
 
 .ui-shell-group-label {
-  @apply px-2 text-xs font-bold text-sidebar-foreground/45 tracking-wider uppercase;
+  @apply px-2 text-sm font-bold text-sidebar-foreground/45 tracking-wider uppercase;
 }
 
 .ui-shell-nav {
@@ -941,7 +941,7 @@ body {
 }
 
 .ui-shell-nav-link {
-  @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors;
+  @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-base transition-colors;
 }
 
 .ui-shell-nav-link-active {
@@ -973,7 +973,7 @@ body {
 }
 
 .ui-shell-footer-title {
-  @apply flex items-center gap-2 text-sm font-medium mb-4;
+  @apply flex items-center gap-2 text-base font-medium mb-4;
 }
 
 .ui-shell-badge-icon {
@@ -981,7 +981,7 @@ body {
 }
 
 .ui-shell-footer-text {
-  @apply mt-1 mb-6 text-sm text-sidebar-foreground/60;
+  @apply mt-1 mb-6 text-base text-sidebar-foreground/60;
 }
 
 .ui-shell-settings-link {
@@ -1017,11 +1017,11 @@ body {
 }
 
 .ui-shell-header-kicker {
-  @apply text-xs uppercase tracking-wide text-muted-foreground;
+  @apply text-base uppercase tracking-wide text-muted-foreground;
 }
 
 .ui-shell-header-title {
-  @apply text-sm font-semibold tracking-tight;
+  @apply text-base font-semibold tracking-tight;
 }
 
 .ui-shell-header-actions {
@@ -1089,7 +1089,7 @@ body {
 }
 
 .ui-feature-metric-label {
-  @apply text-[0.7rem] uppercase text-muted-foreground tracking-[0.12em] font-semibold;
+  @apply text-xs uppercase text-muted-foreground tracking-[0.12em] font-semibold;
 }
 
 .ui-feature-metric-content {
@@ -1101,7 +1101,7 @@ body {
 }
 
 .ui-feature-metric-hint {
-  @apply mt-2 text-sm text-muted-foreground;
+  @apply mt-2 text-base text-muted-foreground;
 }
 
 .ui-stats {
@@ -1113,11 +1113,11 @@ body {
 }
 
 .ui-feature-empty-state {
-  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-sm text-muted-foreground;
+  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-base text-muted-foreground;
 }
 
 .ui-feature-section-row {
-  @apply flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between;
+  @apply flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between h-8;
 }
 
 .ui-feature-section-title {
@@ -1125,7 +1125,7 @@ body {
 }
 
 .ui-feature-section-description {
-  @apply mt-1 text-sm text-muted-foreground;
+  @apply hidden mt-1 text-base text-muted-foreground;
 }
 
 .ui-feature-section-actions {
@@ -1133,7 +1133,7 @@ body {
 }
 
 .ui-markdown {
-  @apply text-sm leading-6 text-foreground wrap-break-word;
+  @apply text-base leading-6 text-foreground wrap-break-word;
   @apply [&>*:first-child]:mt-0 [&>*:last-child]:mb-0;
   @apply [&_h1]:mt-5 [&_h1]:text-xl [&_h1]:font-semibold;
   @apply [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold;
@@ -1162,19 +1162,19 @@ body {
 }
 
 .ui-project-workspace-mode-title {
-  @apply text-sm font-medium text-left;
+  @apply text-base font-medium text-left;
 }
 
 .ui-project-workspace-mode-description {
-  @apply text-xs text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .ui-issue-muted-text {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .ui-issue-error-text {
-  @apply text-sm text-destructive;
+  @apply text-base text-destructive;
 }
 
 .ui-issue-tabs-list {
@@ -1198,7 +1198,7 @@ body {
 }
 
 .ui-issue-comment-author {
-  @apply text-sm font-medium mb-4;
+  @apply text-base font-medium mb-4;
 }
 
 .ui-issue-comment-date {
@@ -1206,7 +1206,7 @@ body {
 }
 
 .ui-issue-comment-body {
-  @apply text-sm leading-6;
+  @apply text-base leading-6;
 }
 
 .ui-issue-action-row {
@@ -1218,7 +1218,7 @@ body {
 }
 
 .ui-issue-record-card {
-  @apply rounded-xl border p-4 text-sm;
+  @apply rounded-xl border p-4 text-base;
 }
 
 .ui-issue-record-row {
@@ -1238,7 +1238,7 @@ body {
 }
 
 .ui-issue-summary {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .ui-run-details-dialog {
@@ -1254,15 +1254,15 @@ body {
 }
 
 .ui-run-details-heading {
-  @apply text-sm font-semibold tracking-tight;
+  @apply text-base font-semibold tracking-tight;
 }
 
 .ui-run-details-text {
-  @apply mt-1 text-sm leading-relaxed text-foreground/90;
+  @apply mt-1 text-base leading-relaxed text-foreground/90;
 }
 
 .ui-run-details-subtext {
-  @apply mt-2 text-xs text-muted-foreground;
+  @apply mt-2 text-base text-muted-foreground;
 }
 
 .ui-run-details-pill-row {
@@ -1278,11 +1278,11 @@ body {
 }
 
 .ui-run-details-blocker-item {
-  @apply rounded border border-destructive/35 bg-destructive/10 p-2 text-xs;
+  @apply rounded border border-destructive/35 bg-destructive/10 p-2 text-base;
 }
 
 .ui-run-details-pre {
-  @apply mt-2 overflow-auto rounded-md border border-border/70 bg-muted/30 p-2 text-xs;
+  @apply mt-2 overflow-auto rounded-md border border-border/70 bg-muted/30 p-2 text-base;
 }
 
 .ui-run-details-transcript {
@@ -1290,7 +1290,7 @@ body {
 }
 
 .ui-run-details-transcript-row {
-  @apply flex flex-col gap-2 rounded-md border border-border/80 bg-muted/20 p-2 text-xs;
+  @apply flex flex-col gap-2 rounded-md border border-border/80 bg-muted/20 p-2 text-base;
 }
 
 .ui-run-details-transcript-kind {
@@ -1302,7 +1302,7 @@ body {
 }
 
 .ui-run-details-summary {
-  @apply cursor-pointer text-sm mt-2;
+  @apply cursor-pointer text-base mt-2;
 }
 
 .ui-run-details-result-box {
@@ -1318,11 +1318,11 @@ body {
 }
 
 .ui-run-details-code-inline {
-  @apply rounded bg-muted/40 px-2 py-1 font-mono text-xs text-foreground;
+  @apply rounded bg-muted/40 px-2 py-1 font-mono text-base text-foreground;
 }
 
 .ui-run-details-code-block {
-  @apply mt-1 overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border/80 bg-muted/40 p-2 font-mono text-xs text-foreground;
+  @apply mt-1 overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border/80 bg-muted/40 p-2 font-mono text-base text-foreground;
 }
 
 .ui-run-details-kv-grid {
@@ -1342,7 +1342,7 @@ body {
 }
 
 .ui-run-details-kv-value {
-  @apply mt-1 block font-mono text-xs text-foreground;
+  @apply mt-1 block font-mono text-base text-foreground;
 }
 
 /* ─── Run detail page ─────────────────────────────────────────── */
@@ -1352,11 +1352,11 @@ body {
 }
 
 .run-sidebar-kicker {
-  @apply text-xs uppercase tracking-wide text-muted-foreground;
+  @apply text-base uppercase tracking-wide text-muted-foreground;
 }
 
 .run-sidebar-title {
-  @apply text-sm font-semibold;
+  @apply text-base font-semibold;
 }
 
 .run-sidebar-list {
@@ -1408,7 +1408,7 @@ body {
 }
 
 .run-detail-subtitle {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .run-transcript-card-content {
@@ -1416,7 +1416,7 @@ body {
 }
 
 .run-transcript-empty {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .run-transcript-filters {
@@ -1440,11 +1440,11 @@ body {
 }
 
 .run-transcript-scroll {
-  @apply w-full h-[calc(100dvh-16rem)] space-y-1 overflow-y-auto p-3 font-mono text-xs;
+  @apply w-full h-[calc(100dvh-16rem)] space-y-1 overflow-y-auto p-3 font-mono text-base;
 }
 
 .run-transcript-row {
-  @apply grid grid-cols-[152px_120px_minmax(0,1fr)] gap-2;
+  @apply grid grid-cols-[152px_120px_minmax(0,1fr)] gap-2 text-xs;
 }
 
 .run-transcript-time {

@@ -17,11 +17,11 @@
 }
 
 .createAgentModalSectionTitle {
-  @apply text-sm font-semibold;
+  @apply text-base font-semibold;
 }
 
 .createAgentModalSectionDescription {
-  @apply text-xs text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .createAgentModalFieldGroup {
@@ -37,7 +37,7 @@
 }
 
 .createAgentModalText {
-  @apply text-sm text-destructive;
+  @apply text-base text-destructive;
 }
 
 .createAgentModalEnvTextarea {

@@ -78,7 +78,7 @@
 }
 
 .roomCount {
-  @apply hidden size-6 items-center justify-center rounded-full border border-border/70 bg-background/80 text-sm font-semibold;
+  @apply hidden size-6 items-center justify-center rounded-full border border-border/70 bg-background/80 text-base font-semibold;
 }
 
 .roomFloor {
@@ -127,7 +127,7 @@
 }
 
 .taskLabel {
-  @apply pointer-events-none absolute -top-8 left-1/2 max-w-44 -translate-x-1/2 truncate rounded-full border border-border/70 bg-background/95 px-3 py-1 text-xs font-medium text-muted-foreground;
+  @apply pointer-events-none absolute -top-8 left-1/2 max-w-44 -translate-x-1/2 truncate rounded-full border border-border/70 bg-background/95 px-3 py-1 text-base font-medium text-muted-foreground;
 }
 
 .avatarBadge {
@@ -135,7 +135,7 @@
 }
 
 .occupantName {
-  @apply block max-w-32 text-xs font-semibold text-foreground;
+  @apply block max-w-32 text-base font-semibold text-foreground;
 }
 
 .loadingOverlay {
@@ -159,7 +159,7 @@
 }
 
 .countLabel {
-  @apply text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground;
+  @apply text-base font-semibold uppercase tracking-[0.16em] text-muted-foreground;
 }
 
 .countValue {
@@ -179,11 +179,11 @@
 }
 
 .detailValue {
-  @apply mt-2 text-sm leading-5;
+  @apply mt-2 text-base leading-5;
 }
 
 .inspectorEmpty {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .legendList {
@@ -195,9 +195,9 @@
 }
 
 .legendRoom {
-  @apply text-sm font-semibold;
+  @apply text-base font-semibold;
 }
 
 .legendDescription {
-  @apply mt-1 text-sm text-muted-foreground;
+  @apply mt-1 text-base text-muted-foreground;
 }

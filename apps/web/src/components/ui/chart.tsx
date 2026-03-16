@@ -60,7 +60,7 @@ const ChartContainer = React.forwardRef<
         data-slot="chart"
         data-chart={chartId}
         ref={ref}
-        className={cn("flex w-full justify-center text-xs", className)}
+        className={cn("flex w-full justify-center text-base", className)}
         style={{ ...chartStyle, ...style } as React.CSSProperties}
         {...props}
       >
@@ -108,7 +108,7 @@ const ChartTooltipContent = React.forwardRef<
       <div
         ref={ref}
         className={cn(
-          "grid min-w-32 items-start gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-xs",
+          "grid min-w-32 items-start gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-base",
           className
         )}
       >

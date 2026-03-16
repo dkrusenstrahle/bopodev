@@ -4623,7 +4623,7 @@ export function WorkspaceClient({
                           id="plugin-builder-template"
                           value={pluginBuilderPromptTemplate}
                           onChange={(event) => setPluginBuilderPromptTemplate(event.target.value)}
-                          className="min-h-[140px] font-mono text-xs"
+                          className="min-h-[140px] font-mono text-base"
                           placeholder="Example: Inject relevant knowledge for this run. Company={{companyId}} Agent={{agentId}}"
                         />
                         <FieldDescription>
@@ -4711,7 +4711,7 @@ export function WorkspaceClient({
                 </DialogHeader>
                 {selectedTemplate ? (
                   <div className="space-y-4">
-                    <div className="grid gap-2 text-sm sm:grid-cols-3">
+                    <div className="grid gap-2 text-base sm:grid-cols-3">
                       <div>
                         <div className="text-muted-foreground">Slug</div>
                         <div className="font-mono">{selectedTemplate.slug}</div>
@@ -4726,14 +4726,14 @@ export function WorkspaceClient({
                       </div>
                     </div>
                     <div>
-                      <div className="mb-1 text-sm text-muted-foreground">Variables</div>
-                      <pre className="rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-all">
+                      <div className="mb-1 text-base text-muted-foreground">Variables</div>
+                      <pre className="rounded-md border bg-muted p-3 text-base whitespace-pre-wrap break-all">
                         {JSON.stringify(selectedTemplate.variables ?? [], null, 2)}
                       </pre>
                     </div>
                     <div>
-                      <div className="mb-1 text-sm text-muted-foreground">Manifest</div>
-                      <pre className="rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-all">
+                      <div className="mb-1 text-base text-muted-foreground">Manifest</div>
+                      <pre className="rounded-md border bg-muted p-3 text-base whitespace-pre-wrap break-all">
                         {JSON.stringify(selectedTemplate.manifest ?? {}, null, 2)}
                       </pre>
                     </div>

@@ -1,15 +1,15 @@
 @reference "../app/globals.css";
 
 .issueEmptyStateContainer {
-  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 mb-8 text-sm text-muted-foreground;
+  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 mb-8 text-base text-muted-foreground;
 }
 
 .propertyRowContainer1 {
-  @apply space-y-1.5 py-1 text-sm leading-6;
+  @apply space-y-1.5 py-1 text-base leading-6;
 }
 
 .propertyRowContainer2 {
-  @apply text-sm text-muted-foreground font-medium;
+  @apply text-base text-muted-foreground font-medium;
 }
 
 .propertyRowValue {
@@ -25,7 +25,7 @@
 }
 
 .issueDetailContainer3 {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .issueDetailLink1 {
@@ -45,7 +45,7 @@
 }
 
 .issueDetailContainer6 {
-  @apply flex flex-wrap items-center gap-2 text-xs text-muted-foreground;
+  @apply flex flex-wrap items-center gap-2 text-base text-muted-foreground;
 }
 
 .issueDetailTitle {
@@ -53,7 +53,7 @@
 }
 
 .issueDetailText {
-  @apply text-sm leading-6 text-muted-foreground;
+  @apply text-base leading-6 text-muted-foreground;
 }
 
 .issueDetailCardHeader {
@@ -127,7 +127,7 @@
 }
 
 .issueAttachmentPlaceholder {
-  @apply flex h-full w-full items-center justify-center text-sm font-semibold text-muted-foreground;
+  @apply flex h-full w-full items-center justify-center text-base font-semibold text-muted-foreground;
 }
 
 .issueActivityTitleRow {
@@ -135,5 +135,5 @@
 }
 
 .issueActivityTimestamp {
-  @apply text-xs text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }

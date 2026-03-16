@@ -21,7 +21,7 @@
 }
 
 .agentHeaderContainer3 {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .agentHeaderLink {
@@ -37,7 +37,7 @@
 }
 
 .agentHeaderText {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .agentHeaderContainer4 {
@@ -65,7 +65,7 @@
 }
 
 .latestRunContainer2 {
-  @apply flex flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between;
+  @apply flex flex-col gap-3 text-base text-muted-foreground md:flex-row md:items-center md:justify-between;
 }
 
 .latestRunSummaryContainer {
@@ -77,15 +77,15 @@
 }
 
 .latestRunMetaLabel {
-  @apply text-xs uppercase tracking-[0.12em] text-muted-foreground;
+  @apply text-base uppercase tracking-[0.12em] text-muted-foreground;
 }
 
 .latestRunSummaryText {
-  @apply text-sm;
+  @apply text-base;
 }
 
 .mutedTextContainer {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .chartGridContainer {
@@ -113,7 +113,7 @@
 }
 
 .issueRowContainer3 {
-  @apply mt-1 text-sm text-muted-foreground;
+  @apply mt-1 text-base text-muted-foreground;
 }
 
 .issueRowContainer4 {
@@ -137,7 +137,7 @@
 }
 
 .costSectionDescription {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .agentSidebarContainer {
@@ -157,11 +157,11 @@
 }
 
 .agentSidebarErrorText {
-  @apply text-sm text-destructive;
+  @apply text-base text-destructive;
 }
 
 .agentSidebarHint {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .costMetricValueContainer {
@@ -173,7 +173,7 @@
 }
 
 .configRowContainer1 {
-  @apply flex items-start justify-between gap-4 border-b pb-2 text-sm last:border-b-0 last:pb-0;
+  @apply flex items-start justify-between gap-4 border-b pb-2 text-base last:border-b-0 last:pb-0;
 }
 
 .configRowContainer2 {
@@ -189,7 +189,7 @@
 }
 
 .promptPre {
-  @apply max-h-56 overflow-auto rounded-md border bg-muted/20 p-3 text-sm leading-6;
+  @apply max-h-56 overflow-auto rounded-md border bg-muted/20 p-3 text-base leading-6;
 }
 
 .capabilitiesContainer1 {
@@ -197,13 +197,13 @@
 }
 
 .capabilitiesContainer2 {
-  @apply text-xs uppercase tracking-[0.12em] text-muted-foreground;
+  @apply text-base uppercase tracking-[0.12em] text-muted-foreground;
 }
 
 .capabilitiesContainer3 {
-  @apply text-sm;
+  @apply text-base;
 }
 
 .runtimeContainer {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }

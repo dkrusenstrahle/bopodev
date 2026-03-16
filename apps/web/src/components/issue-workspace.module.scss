@@ -1,7 +1,7 @@
 @reference "../app/globals.css";
 
 .issueWorkspaceEmptyStateContainer {
-  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-sm text-muted-foreground;
+  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-base text-muted-foreground;
 }
 
 .issueStatusSelectTrigger {
@@ -9,7 +9,7 @@
 }
 
 .savedViewContainer1 {
-  @apply text-xs font-medium text-muted-foreground;
+  @apply text-base font-medium text-muted-foreground;
 }
 
 .savedViewContainer2 {
@@ -21,11 +21,11 @@
 }
 
 .savedViewContainer4 {
-  @apply text-xs text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .savedViewContainer5 {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .savedViewContainer6 {
@@ -57,7 +57,7 @@
 }
 
 .issueCardContainer4 {
-  @apply text-xs text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .issueCardContainer5 {
@@ -93,7 +93,7 @@
 }
 
 .issueCardContainer12 {
-  @apply text-sm text-destructive;
+  @apply text-base text-destructive;
 }
 
 .issueCardSelectTrigger {
@@ -121,7 +121,7 @@
 }
 
 .issueCardTitle2 {
-  @apply text-sm capitalize;
+  @apply text-base capitalize;
 }
 
 .issueCardContent2 {

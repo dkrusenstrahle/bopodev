@@ -141,9 +141,6 @@ export function OrgChart({ agents }: { agents: AgentNode[] }) {
           <div className={styles.orgCardText}>
             <div className={styles.orgCardName}>{agent.name}</div>
             <div className={styles.orgCardMeta}>{formatRole(agent.role)}</div>
-            <div className={styles.orgCardDetails}>
-              {agent.providerType} · {agent.status}
-            </div>
           </div>
         </div>
       </div>

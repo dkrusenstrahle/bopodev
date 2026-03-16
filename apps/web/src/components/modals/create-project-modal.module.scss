@@ -16,11 +16,11 @@
 }
 
 .createProjectModalSectionTitle {
-  @apply text-sm font-semibold;
+  @apply text-base font-semibold;
 }
 
 .createProjectModalSectionDescription {
-  @apply mt-1 text-xs text-muted-foreground;
+  @apply mt-1 text-base text-muted-foreground;
 }
 
 .createProjectModalWorkspaceModes {
@@ -36,7 +36,7 @@
 }
 
 .createProjectModalText {
-  @apply text-sm text-destructive;
+  @apply text-base text-destructive;
 }
 
 .createProjectModalGoalsTrigger {

@@ -9,7 +9,7 @@
 }
 
 .metricCardDescription {
-  @apply text-[0.7rem] uppercase tracking-[0.12em] text-muted-foreground font-semibold;
+  @apply text-xs uppercase tracking-[0.12em] text-muted-foreground font-semibold;
 }
 
 .metricCardContent {
@@ -21,11 +21,11 @@
 }
 
 .metricCardText {
-  @apply mt-2 text-sm text-muted-foreground;
+  @apply mt-2 text-base text-muted-foreground;
 }
 
 .emptyStateContainer {
-  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-sm text-muted-foreground;
+  @apply rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-base text-muted-foreground;
 }
 
 .formatDurationContainer1 {
@@ -37,7 +37,7 @@
 }
 
 .formatDurationContainer2 {
-  @apply max-w-xl text-sm text-muted-foreground;
+  @apply max-w-xl text-base text-muted-foreground;
 }
 
 .formatDurationContainer3 {
@@ -49,11 +49,11 @@
 }
 
 .formatDurationContainer5 {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .formatDurationLabel {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .formatDurationContainer6 {
@@ -69,7 +69,7 @@
 }
 
 .renderSectionActionsCardContent1 {
-  @apply space-y-2 text-sm text-muted-foreground;
+  @apply space-y-2 text-base text-muted-foreground;
 }
 
 .renderSectionActionsCardContent2 {
@@ -86,11 +86,11 @@
 }
 
 .renderSectionActionsContainer4 {
-  @apply text-sm font-medium;
+  @apply text-base font-medium;
 }
 
 .renderSectionActionsContainer5 {
-  @apply mt-1 text-sm text-muted-foreground;
+  @apply mt-1 text-base text-muted-foreground;
 }
 
 .renderSectionActionsContainer6 {
@@ -98,7 +98,7 @@
 }
 
 .renderSectionActionsCardContent4 {
-  @apply text-sm text-muted-foreground;
+  @apply text-base text-muted-foreground;
 }
 
 .renderSectionActionsAlert {
@@ -188,7 +188,7 @@
 }
 
 .runMessageCellContainer {
-  @apply max-w-[520px] truncate text-sm text-muted-foreground;
+  @apply max-w-[520px] truncate text-base text-muted-foreground;
 }
 
 .traceFiltersCardContent {
@@ -266,7 +266,7 @@
 }
 
 .dashboardAgentSpotlightMetric {
-  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-xs;
+  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-base;
 }
 
 .dashboardAgentSpotlightChart {
@@ -290,15 +290,15 @@
 }
 
 .dashboardApprovalPreviewTitle {
-  @apply flex items-center justify-between gap-2 text-sm font-medium;
+  @apply flex items-center justify-between gap-2 text-base font-medium;
 }
 
 .dashboardApprovalPreviewMeta {
-  @apply mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground;
+  @apply mt-1 flex flex-wrap items-center justify-between gap-2 text-base text-muted-foreground;
 }
 
 .dashboardActionQueueEmpty {
-  @apply rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground;
+  @apply rounded-md border border-dashed px-3 py-4 text-base text-muted-foreground;
 }
 
 .dashboardActionQueueActions {
@@ -314,7 +314,7 @@
 }
 
 .dashboardApprovalBreakdownItem {
-  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm;
+  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-base;
 }
 
 .dashboardAttentionGrid {
@@ -330,7 +330,7 @@
 }
 
 .dashboardAttentionRow {
-  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm;
+  @apply flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-base;
 }
 
 .dashboardChartContainer {
@@ -342,7 +342,7 @@
 }
 
 .dashboardInsightsCardContent {
-  @apply space-y-2 text-sm text-muted-foreground;
+  @apply space-y-2 text-base text-muted-foreground;
 }
 
 .modelPricingDialogForm {

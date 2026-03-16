@@ -41,11 +41,11 @@
 }
 
 .itemTitle {
-  @apply text-sm font-medium text-foreground;
+  @apply text-base font-medium text-foreground;
 }
 
 .itemDescription {
-  @apply mt-1 text-xs text-muted-foreground;
+  @apply mt-1 text-base text-muted-foreground;
 }
 
 .itemActions {

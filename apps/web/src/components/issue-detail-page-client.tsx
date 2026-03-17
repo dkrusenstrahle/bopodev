@@ -129,6 +129,50 @@ function formatEventType(eventType: string) {
   return eventType.replace(/[._]/g, " ");
 }
 
+function extractSummaryFromJsonLikeText(input: string) {
+  const normalized = input.trim();
+  const fencedMatch = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1]?.trim() ?? normalized.match(/\{[\s\S]*\}\s*$/)?.[0]?.trim();
+  if (!candidate) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    const summary = parsed.summary;
+    if (typeof summary === "string" && summary.trim()) {
+      return summary.trim();
+    }
+  } catch {
+    // Fall through to regex extraction for loosely formatted JSON.
+  }
+  const summaryMatch = candidate.match(/"summary"\s*:\s*"([\s\S]*?)"/);
+  const summary = summaryMatch?.[1]
+    ?.replace(/\\"/g, "\"")
+    .replace(/\\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return summary && summary.length > 0 ? summary : null;
+}
+
+function normalizePayloadText(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const decoded = value
+    .trim()
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, "\"");
+  const extractedSummary = extractSummaryFromJsonLikeText(decoded);
+  if (extractedSummary) {
+    return extractedSummary;
+  }
+  return decoded
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function summarizeActivityPayload(payload: Record<string, unknown>) {
   const outcome = payload.outcome;
   if (outcome && typeof outcome === "object") {
@@ -148,12 +192,12 @@ function summarizeActivityPayload(payload: Record<string, unknown>) {
       return `Run outcome: ${kind}`;
     }
   }
-  const summary = payload.summary;
-  if (typeof summary === "string" && summary.trim()) {
+  const summary = normalizePayloadText(payload.summary);
+  if (summary) {
     return summary;
   }
-  const message = payload.message;
-  if (typeof message === "string" && message.trim()) {
+  const message = normalizePayloadText(payload.message);
+  if (message) {
     return message;
   }
   return "Event recorded.";

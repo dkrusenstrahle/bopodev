@@ -169,6 +169,7 @@ export function RunDetailPageClient({
     : { pathname: "/runs", query: { companyId } };
   const backLabel = scopedAgentId ? "Back to agent" : "Back to runs";
   const visibleRecentRuns = useMemo(() => recentRuns.filter((entry) => !isSkippedRun(entry)), [recentRuns]);
+  const sidebarRecentRuns = useMemo(() => visibleRecentRuns.slice(0, 20), [visibleRecentRuns]);
 
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -188,8 +189,9 @@ export function RunDetailPageClient({
       secondaryPane={
         <div className="run-sidebar-pane">
           <div className="run-sidebar-list">
-            {visibleRecentRuns.map((entry) => {
+            {sidebarRecentRuns.map((entry) => {
               const isActive = entry.id === run.id;
+              const messagePreview = formatRunMessagePreview(entry.message);
               return (
                 <Link
                   key={entry.id}
@@ -207,9 +209,10 @@ export function RunDetailPageClient({
                       {formatRunStatusLabel(entry.status)}
                     </Badge>
                   </div>
-                  <p className="run-sidebar-item-message">{entry.message ?? "No message"}</p>
+                  <p className="run-sidebar-item-message">{messagePreview}</p>
                   <p className="run-sidebar-item-time">
-                    {formatRelativeTime(entry.startedAt)} ({new Date(entry.startedAt).toLocaleTimeString()})
+                    {formatRelativeTime(entry.startedAt)} ·{" "}
+                    {new Date(entry.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </Link>
               );
@@ -222,7 +225,7 @@ export function RunDetailPageClient({
           <div className="lg:hidden rounded-lg border bg-card p-3">
             <div className="text-xs uppercase tracking-wide text-muted-foreground">Recent runs</div>
             <div className="mt-2 space-y-2">
-              {visibleRecentRuns.slice(0, 6).map((entry) => (
+              {sidebarRecentRuns.slice(0, 6).map((entry) => (
                 <Link
                   key={`mobile-${entry.id}`}
                   href={{
@@ -520,4 +523,52 @@ function formatRelativeTime(value: string) {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function extractSummaryFromJsonLikeMessage(input: string) {
+  const normalized = input.trim();
+  const fencedMatch = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1]?.trim() ?? normalized.match(/\{[\s\S]*\}\s*$/)?.[0]?.trim();
+  if (!candidate) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    const summary = parsed.summary;
+    if (typeof summary === "string" && summary.trim()) {
+      return summary.trim();
+    }
+  } catch {
+    // Ignore parse failures and attempt regex extraction.
+  }
+  const summaryMatch = candidate.match(/"summary"\s*:\s*"([\s\S]*?)"/);
+  const summary = summaryMatch?.[1]
+    ?.replace(/\\"/g, "\"")
+    .replace(/\\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return summary && summary.length > 0 ? summary : null;
+}
+
+function formatRunMessagePreview(message: string | null | undefined) {
+  if (!message || !message.trim()) {
+    return "No summary available";
+  }
+  const normalized = message
+    .trim()
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, "\"");
+  const extractedSummary = extractSummaryFromJsonLikeMessage(normalized);
+  if (extractedSummary) {
+    return extractedSummary;
+  }
+  const plain = normalized
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (plain.length <= 180) {
+    return plain;
+  }
+  return `${plain.slice(0, 177)}...`;
 }

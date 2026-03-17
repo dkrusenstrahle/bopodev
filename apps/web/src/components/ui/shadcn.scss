@@ -1364,15 +1364,15 @@ body {
 }
 
 .run-sidebar-list {
-  @apply flex flex-col min-w-0;
+  @apply flex min-w-0 flex-col gap-4;
 }
 
 .run-sidebar-item {
-  @apply flex flex-col w-full min-w-0 max-w-full overflow-hidden border-b py-2 transition-colors hover:bg-muted/60;
+  @apply flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-lg border bg-card/50 px-3 py-2.5 transition-colors hover:border-border/80 hover:bg-muted/40;
 }
 
 .run-sidebar-item--active {
-  @apply border-primary bg-primary/5;
+  @apply border-primary/60 bg-primary/8;
 }
 
 .run-sidebar-item-header {
@@ -1380,19 +1380,19 @@ body {
 }
 
 .run-sidebar-item-id {
-  @apply min-w-0 truncate font-mono text-[11px] font-semibold;
+  @apply min-w-0 truncate font-mono text-xs font-semibold;
 }
 
 .run-sidebar-item-badge {
-  @apply max-w-[78px] shrink-0 truncate text-[10px];
+  @apply max-w-[78px] shrink-0 truncate text-[10px] px-4 py-0;
 }
 
 .run-sidebar-item-message {
-  @apply mt-1 truncate text-[11px] leading-4 text-muted-foreground;
+  @apply mt-1 line-clamp-2 wrap-break-word text-[12px] leading-5 text-muted-foreground;
 }
 
 .run-sidebar-item-time {
-  @apply mt-1 text-[10px] text-muted-foreground;
+  @apply mt-1 text-[11px] text-muted-foreground/90;
 }
 
 .run-sidebar-see-all {

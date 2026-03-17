@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../apps/api/src/app";
 import { ensureBuiltinPluginsRegistered } from "../apps/api/src/services/plugin-runtime";
 import type { BopoDb } from "../packages/db/src/client";
-import { bootstrapDatabase, createCompany } from "../packages/db/src/index";
+import { bootstrapDatabase, createCompany, listAgents } from "../packages/db/src/index";
 
 describe("company tenant boundaries", { timeout: 30_000 }, () => {
   let db: BopoDb;
@@ -71,6 +71,55 @@ describe("company tenant boundaries", { timeout: 30_000 }, () => {
 
     expect(response.status).toBe(403);
     expect(String(response.body.error ?? "")).toContain("Board role required");
+  });
+
+  it("creates CEO with onboarding provider and model defaults", async () => {
+    const previousProvider = process.env.BOPO_DEFAULT_AGENT_PROVIDER;
+    const previousModel = process.env.BOPO_DEFAULT_AGENT_MODEL;
+    process.env.BOPO_DEFAULT_AGENT_PROVIDER = "codex";
+    process.env.BOPO_DEFAULT_AGENT_MODEL = "gpt-5-mini";
+    try {
+      const response = await request(app).post("/companies").send({ name: "Configured Company" });
+      expect(response.status).toBe(200);
+      const createdCompanyId = response.body?.data?.id as string | undefined;
+      expect(typeof createdCompanyId).toBe("string");
+      expect(createdCompanyId).toBeTruthy();
+
+      const agents = await listAgents(db, createdCompanyId!);
+      const ceo = agents.find((agent) => agent.role === "CEO");
+      expect(ceo).toBeTruthy();
+      expect(ceo?.providerType).toBe("codex");
+      expect(ceo?.runtimeModel).toBe("gpt-5-mini");
+    } finally {
+      if (previousProvider === undefined) {
+        delete process.env.BOPO_DEFAULT_AGENT_PROVIDER;
+      } else {
+        process.env.BOPO_DEFAULT_AGENT_PROVIDER = previousProvider;
+      }
+      if (previousModel === undefined) {
+        delete process.env.BOPO_DEFAULT_AGENT_MODEL;
+      } else {
+        process.env.BOPO_DEFAULT_AGENT_MODEL = previousModel;
+      }
+    }
+  });
+
+  it("creates CEO with explicitly requested provider and model", async () => {
+    const response = await request(app).post("/companies").send({
+      name: "Payload Configured Company",
+      providerType: "codex",
+      runtimeModel: "gpt-5.3-codex"
+    });
+    expect(response.status).toBe(200);
+    const createdCompanyId = response.body?.data?.id as string | undefined;
+    expect(typeof createdCompanyId).toBe("string");
+    expect(createdCompanyId).toBeTruthy();
+
+    const agents = await listAgents(db, createdCompanyId!);
+    const ceo = agents.find((agent) => agent.role === "CEO");
+    expect(ceo).toBeTruthy();
+    expect(ceo?.providerType).toBe("codex");
+    expect(ceo?.runtimeModel).toBe("gpt-5.3-codex");
   });
 
   it("requires companies:write permission for member company mutations", async () => {

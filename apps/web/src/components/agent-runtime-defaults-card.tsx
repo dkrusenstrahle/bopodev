@@ -10,6 +10,7 @@ import {
   type AgentRuntimeDefaults
 } from "@/lib/agent-defaults";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionModal } from "@/components/modals/confirm-action-modal";
 import {
   Card,
   CardContent,
@@ -39,13 +40,19 @@ import {
 
 export function AgentRuntimeDefaultsCard({
   companyId,
-  fallbackDefaults
+  fallbackDefaults,
+  activeCompanyName,
+  onDeleteCompany,
+  deleteActionPending = false
 }: {
   companyId?: string | null;
   fallbackDefaults?: {
     providerType?: AgentRuntimeDefaults["providerType"] | null;
     runtimeModel?: string | null;
   };
+  activeCompanyName?: string | null;
+  onDeleteCompany?: () => Promise<void>;
+  deleteActionPending?: boolean;
 }) {
   const [defaults, setDefaults] = useState<AgentRuntimeDefaults>(defaultAgentRuntimeDefaults);
   const [saved, setSaved] = useState(false);
@@ -56,17 +63,6 @@ export function AgentRuntimeDefaultsCard({
     currentModel: defaults.runtimeModel,
     includeDefault: false
   });
-
-  function buildFallbackDefaults(): AgentRuntimeDefaults {
-    if (!fallbackDefaults?.providerType) {
-      return defaultAgentRuntimeDefaults;
-    }
-    return {
-      ...defaultAgentRuntimeDefaults,
-      providerType: fallbackDefaults.providerType,
-      runtimeModel: fallbackDefaults.runtimeModel ?? ""
-    };
-  }
 
   useEffect(() => {
     if (!companyId) {
@@ -116,13 +112,6 @@ export function AgentRuntimeDefaultsCard({
 
   function save() {
     writeAgentRuntimeDefaults(defaults);
-    setSaved(true);
-  }
-
-  function reset() {
-    const baseDefaults = buildFallbackDefaults();
-    setDefaults(baseDefaults);
-    writeAgentRuntimeDefaults(baseDefaults);
     setSaved(true);
   }
 
@@ -297,9 +286,20 @@ export function AgentRuntimeDefaultsCard({
       <CardFooter className={styles.runtimeDefaultsCardFooter}>
         <span className={styles.runtimeDefaultsLabel}>{saved ? "Saved to local workspace settings." : "Unsaved changes."}</span>
         <div className={styles.runtimeDefaultsContainer}>
-          <Button variant="outline" onClick={reset}>
-            Reset
-          </Button>
+          <ConfirmActionModal
+            triggerLabel="Delete company"
+            title="Delete company?"
+            description={`Delete "${activeCompanyName ?? "this company"}" and all of its resources.`}
+            confirmLabel="Delete company"
+            onConfirm={async () => {
+              if (!onDeleteCompany) {
+                throw new Error("Delete company action is not available.");
+              }
+              await onDeleteCompany();
+            }}
+            triggerVariant="outline"
+            triggerDisabled={!companyId || !onDeleteCompany || deleteActionPending}
+          />
           <Button onClick={save}>Save defaults</Button>
         </div>
       </CardFooter>

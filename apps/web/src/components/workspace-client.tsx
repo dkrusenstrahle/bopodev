@@ -759,6 +759,26 @@ export function WorkspaceClient({
     }, "Failed to delete company.", `company:${company.id}:delete`);
   }
 
+  async function removeActiveCompanyFromSettings() {
+    if (!activeCompany || !companyId) {
+      setActionError("Create or select a company first.");
+      return;
+    }
+    const fallbackCompany = companies.find((entry) => entry.id !== activeCompany.id) ?? null;
+    const fallbackHref = fallbackCompany
+      ? (`/settings?companyId=${encodeURIComponent(fallbackCompany.id)}` as Route)
+      : ("/settings" as Route);
+    await runCrudAction(
+      async () => {
+        await apiDelete(`/companies/${activeCompany.id}`, companyId);
+        router.push(fallbackHref);
+      },
+      "Failed to delete company.",
+      `company:${activeCompany.id}:delete:active`,
+      { refresh: false }
+    );
+  }
+
   async function removeAgent(agent: AgentRow) {
     await runCrudAction(async () => {
       await apiDelete(`/agents/${agent.id}`, companyId!);
@@ -4417,7 +4437,13 @@ export function WorkspaceClient({
                 </div>
               </CardContent>
             </Card>
-            <AgentRuntimeDefaultsCard companyId={companyId} fallbackDefaults={onboardingRuntimeFallback} />
+            <AgentRuntimeDefaultsCard
+              companyId={companyId}
+              fallbackDefaults={onboardingRuntimeFallback}
+              activeCompanyName={activeCompany.name}
+              onDeleteCompany={removeActiveCompanyFromSettings}
+              deleteActionPending={isActionPending(`company:${activeCompany.id}:delete:active`)}
+            />
           </>
         );
       case "Plugins": {

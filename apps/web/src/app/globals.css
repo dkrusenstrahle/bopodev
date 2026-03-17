@@ -608,7 +608,7 @@
 
   --text-sm: 0.875rem;
   --text-sm--line-height: 1.35rem;
-  --text-base: 0.995rem;
+  --text-base: 0.975rem;
   --text-base--line-height: 1.58rem;
 
   --radius-sm: calc(var(--radius) - 4px);

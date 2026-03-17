@@ -310,13 +310,13 @@ export function AppShell({
                   <div className="ui-shell-section-label">Company</div>
                   <CreateCompanyModal
                     companyId={activeCompanyId ?? "bootstrap-company"}
+                    onCreated={updateCompany}
                     trigger={
                       <Button
                         variant="outline"
                         size="icon-xs"
                         className="ui-shell-company-create-button"
-                        aria-label="Create company"
-                      >
+                        aria-label="Create company">
                         <Plus />
                       </Button>
                     }
@@ -385,13 +385,13 @@ export function AppShell({
                       <div className="ui-shell-section-label">Company</div>
                       <CreateCompanyModal
                         companyId={activeCompanyId ?? "bootstrap-company"}
+                        onCreated={updateCompany}
                         trigger={
                           <Button
                             variant="outline"
                             size="icon-xs"
                             className="ui-shell-company-create-button"
-                            aria-label="Create company"
-                          >
+                            aria-label="Create company">
                             <Plus />
                           </Button>
                         }

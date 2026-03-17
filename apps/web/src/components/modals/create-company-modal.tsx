@@ -33,7 +33,15 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import styles from "./create-company-modal.module.scss";
 
-export function CreateCompanyModal({ companyId, trigger }: { companyId: string; trigger?: ReactNode }) {
+export function CreateCompanyModal({
+  companyId,
+  trigger,
+  onCreated
+}: {
+  companyId: string;
+  trigger?: ReactNode;
+  onCreated?: (companyId: string) => void;
+}) {
   const router = useRouter();
   const defaults = useMemo(() => readAgentRuntimeDefaults(), []);
   const allowedProviders: RuntimeProviderType[] = ["claude_code", "codex", "opencode", "gemini_cli"];
@@ -83,7 +91,7 @@ export function CreateCompanyModal({ companyId, trigger }: { companyId: string; 
     setIsSubmitting(true);
     setError(null);
     try {
-      await apiPost("/companies", companyId, {
+      const created = await apiPost<{ id: string }>("/companies", companyId, {
         name,
         mission: mission || undefined,
         providerType,
@@ -92,7 +100,11 @@ export function CreateCompanyModal({ companyId, trigger }: { companyId: string; 
       setName("");
       setMission("");
       setOpen(false);
-      router.refresh();
+      if (created.data.id) {
+        onCreated?.(created.data.id);
+      } else {
+        router.refresh();
+      }
     } catch (submitError) {
       if (submitError instanceof ApiError) {
         setError(submitError.message);

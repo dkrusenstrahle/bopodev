@@ -133,7 +133,6 @@ export function CreateCompanyModal({ companyId, trigger }: { companyId: string; 
                   onChange={(e) => setMission(e.target.value)}
                   placeholder="Describe the company mission and operating context."
                 />
-                <FieldDescription>Optional context shown across the workspace.</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel>CEO provider</FieldLabel>
@@ -163,7 +162,6 @@ export function CreateCompanyModal({ companyId, trigger }: { companyId: string; 
                     ))}
                   </SelectContent>
                 </Select>
-                <FieldDescription>Model options follow the selected provider.</FieldDescription>
               </Field>
             </FieldGroup>
           </div>

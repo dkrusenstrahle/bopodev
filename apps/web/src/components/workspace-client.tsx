@@ -5029,7 +5029,7 @@ export function WorkspaceClient({
         companies={companies}
         activeCompanyId={companyId}
         pendingApprovalsCount={pendingApprovalsCount}
-        leftPaneScrollable={activeNav !== "Organization"}
+        leftPaneScrollable={activeNav !== "Organization" && activeNav !== "Runs"}
       />
     </>
   );

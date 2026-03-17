@@ -1055,6 +1055,7 @@ export function WorkspaceClient({
         tokens: value.tokens
       }));
   }, [costEntries, includeCostAggregations]);
+  const hasCostChartData = selectedMonthChartData.some((entry) => entry.usd > 0 || entry.tokens > 0) || monthlyCostChartData.some((entry) => entry.usd > 0);
   const costDailyConfig = {
     usd: { label: "USD", color: "var(--chart-2)" },
     tokens: { label: "Tokens", color: "var(--chart-4)" }
@@ -1203,6 +1204,7 @@ export function WorkspaceClient({
         };
       });
   }, [agentNameById, filteredHeartbeatRuns]);
+  const hasRunsChartData = runsDailyChartData.some((entry) => entry.completed > 0 || entry.failed > 0) || runsTopAgentsChartData.length > 0;
   const runsTopAgentsChartConfig = {
     total: { label: "Total runs", color: "var(--chart-2)" },
     failed: { label: "Failed runs", color: "var(--chart-5)" }
@@ -1319,6 +1321,7 @@ export function WorkspaceClient({
         anomalies: values.anomalies
       }));
   }, [filteredAuditEvents]);
+  const hasTraceChartData = traceDailyChartData.some((entry) => entry.total > 0 || entry.anomalies > 0) || traceEventTypeChartData.length > 0;
   const traceEventTypeChartConfig = {
     total: { label: "Total", color: "var(--chart-2)" },
     anomalies: { label: "Anomalies", color: "var(--chart-5)" }
@@ -3393,9 +3396,9 @@ export function WorkspaceClient({
               <MetricCard label="Spend today" value={formatUsdCost(todayCostSummary.usd)} hint={`${todayCostSummary.input + todayCostSummary.output} tokens`} />
               <MetricCard label="Spend (last 6m)" value={formatUsdCost(dashboardCostTrendData.reduce((sum, row) => sum + row.usd, 0))} hint={topCostAgent} />
             </div>
-            <div className={styles.dashboardAgentSpotlightGrid}>
-              {dashboardAgentSnapshots.length > 0 ? (
-                dashboardAgentSnapshots.map((agentSnapshot) => (
+            {dashboardAgentSnapshots.length > 0 ? (
+              <div className={styles.dashboardAgentSpotlightGrid}>
+                {dashboardAgentSnapshots.map((agentSnapshot) => (
                   <Card key={agentSnapshot.id} className={styles.dashboardAgentSpotlightCard}>
                     <CardHeader>
                       <span
@@ -3452,16 +3455,9 @@ export function WorkspaceClient({
                       </ChartContainer>
                     </CardContent>
                   </Card>
-                ))
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>No active agents yet</CardTitle>
-                    <CardDescription>Hire agents to unlock per-agent live workload and execution charts.</CardDescription>
-                  </CardHeader>
-                </Card>
-              )}
-            </div>
+                ))}
+              </div>
+            ) : null}
             <div className={styles.dashboardAttentionGrid}>
               <Card className={styles.dashboardAttentionCard}>
                 <CardHeader>
@@ -3544,47 +3540,41 @@ export function WorkspaceClient({
                 </>
               }
             />
-            {projects.length === 0 ? (
-              <EmptyState>Create a project to unlock issue creation and dedicated project pages.</EmptyState>
-            ) : (
-              <>
-                <div className={cn("ui-stats", "mt-4")}>
-                  <MetricCard label="Total projects" value={projectsSummary.total} />
-                  <MetricCard label="With open issues" value={projectsSummary.withOpenIssues} />
-                  <MetricCard label="No open issues" value={projectsSummary.noOpenIssues} />
-                  <MetricCard label="No issues" value={projectsSummary.noIssues} />
+            <div className={cn("ui-stats", "mt-4")}>
+              <MetricCard label="Total projects" value={projectsSummary.total} />
+              <MetricCard label="With open issues" value={projectsSummary.withOpenIssues} />
+              <MetricCard label="No open issues" value={projectsSummary.noOpenIssues} />
+              <MetricCard label="No issues" value={projectsSummary.noIssues} />
+            </div>
+            <DataTable
+              columns={projectColumns}
+              data={filteredProjects}
+              emptyMessage="No projects match current filters."
+              toolbarActions={
+                <div className={styles.goalsFiltersCardContent}>
+                  <Input
+                    value={projectsQuery}
+                    onChange={(event) => setProjectsQuery(event.target.value)}
+                    placeholder="Search project name or description..."
+                    className={styles.goalsFiltersInput}
+                  />
+                  <Select
+                    value={projectsActivityFilter}
+                    onValueChange={(value) => setProjectsActivityFilter(value as "all" | "active" | "no_open_issues" | "no_issues")}
+                  >
+                    <SelectTrigger className={styles.goalsFiltersSelect}>
+                      <SelectValue placeholder="Activity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All projects</SelectItem>
+                      <SelectItem value="active">With open issues</SelectItem>
+                      <SelectItem value="no_open_issues">No open issues</SelectItem>
+                      <SelectItem value="no_issues">No issues</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <DataTable
-                  columns={projectColumns}
-                  data={filteredProjects}
-                  emptyMessage="No projects match current filters."
-                  toolbarActions={
-                    <div className={styles.goalsFiltersCardContent}>
-                      <Input
-                        value={projectsQuery}
-                        onChange={(event) => setProjectsQuery(event.target.value)}
-                        placeholder="Search project name or description..."
-                        className={styles.goalsFiltersInput}
-                      />
-                      <Select
-                        value={projectsActivityFilter}
-                        onValueChange={(value) => setProjectsActivityFilter(value as "all" | "active" | "no_open_issues" | "no_issues")}
-                      >
-                        <SelectTrigger className={styles.goalsFiltersSelect}>
-                          <SelectValue placeholder="Activity" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All projects</SelectItem>
-                          <SelectItem value="active">With open issues</SelectItem>
-                          <SelectItem value="no_open_issues">No open issues</SelectItem>
-                          <SelectItem value="no_issues">No issues</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  }
-                />
-              </>
-            )}
+              }
+            />
           </>
         );
       case "Issues":
@@ -3609,51 +3599,47 @@ export function WorkspaceClient({
               description="Strategic goals stay attached to the selected company scope."
               actions={<CreateGoalModal companyId={companyId} triggerSize="sm" />}
             />
-            {goals.length === 0 ? (
-              <EmptyState>Create a goal to connect strategy with execution.</EmptyState>
-            ) : (
-              <DataTable
-                columns={goalColumns}
-                data={filteredGoals}
-                emptyMessage="No goals match current filters."
-                toolbarActions={
-                  <div className={styles.goalsFiltersCardContent}>
-                    <Input
-                      value={goalsQuery}
-                      onChange={(event) => setGoalsQuery(event.target.value)}
-                      placeholder="Search title, description, status, level, or project..."
-                      className={styles.goalsFiltersInput}
-                    />
-                    <Select value={goalsStatusFilter} onValueChange={setGoalsStatusFilter}>
-                      <SelectTrigger className={styles.goalsFiltersSelect}>
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        {goalStatusOptions.map((status) => (
-                          <SelectItem key={status.value} value={status.value}>
-                            {status.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={goalsLevelFilter} onValueChange={setGoalsLevelFilter}>
-                      <SelectTrigger className={styles.goalsFiltersSelect}>
-                        <SelectValue placeholder="Level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All levels</SelectItem>
-                        {goalsLevelOptions.map((level) => (
-                          <SelectItem key={level} value={level}>
-                            {level}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                }
-              />
-            )}
+            <DataTable
+              columns={goalColumns}
+              data={filteredGoals}
+              emptyMessage="No goals match current filters."
+              toolbarActions={
+                <div className={styles.goalsFiltersCardContent}>
+                  <Input
+                    value={goalsQuery}
+                    onChange={(event) => setGoalsQuery(event.target.value)}
+                    placeholder="Search title, description, status, level, or project..."
+                    className={styles.goalsFiltersInput}
+                  />
+                  <Select value={goalsStatusFilter} onValueChange={setGoalsStatusFilter}>
+                    <SelectTrigger className={styles.goalsFiltersSelect}>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      {goalStatusOptions.map((status) => (
+                        <SelectItem key={status.value} value={status.value}>
+                          {status.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={goalsLevelFilter} onValueChange={setGoalsLevelFilter}>
+                    <SelectTrigger className={styles.goalsFiltersSelect}>
+                      <SelectValue placeholder="Level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All levels</SelectItem>
+                      {goalsLevelOptions.map((level) => (
+                        <SelectItem key={level} value={level}>
+                          {level}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              }
+            />
           </>
         );
       case "Agents":
@@ -3671,150 +3657,138 @@ export function WorkspaceClient({
                 />
               }
             />
-            {agents.length === 0 ? (
-              <EmptyState>Hire your first agent to populate the org chart and issue assignees.</EmptyState>
-            ) : (
-              <>
-                {agentsInsightsHasData ? (
-                  <div className={styles.agentsInsightsChartsGrid}>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Run volume trend</CardTitle>
-                        <CardDescription>Daily total and failed runs over the last 14 days.</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ChartContainer config={agentsRunsTrendConfig} className={styles.agentsInsightsChartContainer}>
-                          <LineChart accessibilityLayer data={agentsRunsTrendData} margin={{ top: 8, left: -8, right: -8 }}>
-                            <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                            <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                            <YAxis hide />
-                            <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                            <Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2.2} dot={false} />
-                            <Line type="monotone" dataKey="failed" stroke="var(--color-failed)" strokeWidth={2} dot={false} />
-                          </LineChart>
-                        </ChartContainer>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Spend trend</CardTitle>
-                        <CardDescription>Daily USD spend over the last 30 days.</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ChartContainer config={agentsSpendTrendConfig} className={styles.agentsInsightsChartContainer}>
-                          <LineChart accessibilityLayer data={agentsSpendTrendData} margin={{ top: 8, left: -8, right: -8 }}>
-                            <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                            <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                            <YAxis hide />
-                            <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                            <Line type="monotone" dataKey="usd" stroke="var(--color-usd)" strokeWidth={2.2} dot={false} />
-                          </LineChart>
-                        </ChartContainer>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Success-rate trend</CardTitle>
-                        <CardDescription>Daily completion quality from completed vs failed runs.</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ChartContainer config={agentsSuccessTrendConfig} className={styles.agentsInsightsChartContainer}>
-                          <LineChart accessibilityLayer data={agentsRunsTrendData} margin={{ top: 8, left: -8, right: -8 }}>
-                            <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                            <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                            <YAxis hide />
-                            <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                            <Line
-                              type="monotone"
-                              dataKey="successRate"
-                              stroke="var(--color-successRate)"
-                              strokeWidth={2.2}
-                              dot={false}
-                            />
-                          </LineChart>
-                        </ChartContainer>
-                      </CardContent>
-                    </Card>
-                  </div>
-                ) : (
-                  <Card className={styles.agentsInsightsEmptyCard}>
+            <>
+              {agentsInsightsHasData ? (
+                <div className={styles.agentsInsightsChartsGrid}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Run volume trend</CardTitle>
+                      <CardDescription>Daily total and failed runs over the last 14 days.</CardDescription>
+                    </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-muted-foreground">
-                        No recent run or spend activity for the selected agent filters.
-                      </p>
+                      <ChartContainer config={agentsRunsTrendConfig} className={styles.agentsInsightsChartContainer}>
+                        <LineChart accessibilityLayer data={agentsRunsTrendData} margin={{ top: 8, left: -8, right: -8 }}>
+                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
+                          <YAxis hide />
+                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                          <Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2.2} dot={false} />
+                          <Line type="monotone" dataKey="failed" stroke="var(--color-failed)" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ChartContainer>
                     </CardContent>
                   </Card>
-                )}
-                <DataTable
-                  columns={agentColumns}
-                  data={filteredAgents}
-                  emptyMessage="No agents match current filters."
-                  toolbarActions={
-                    <div className={styles.agentsFiltersCardContent}>
-                      <Input
-                        value={agentsQuery}
-                        onChange={(event) => setAgentsQuery(event.target.value)}
-                        placeholder="Search name, role, status, or provider..."
-                        className={styles.agentsFiltersInput}
-                      />
-                      <Select value={agentsStatusFilter} onValueChange={setAgentsStatusFilter}>
-                        <SelectTrigger className={styles.agentsFiltersSelect}>
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All statuses</SelectItem>
-                          {agentStatusOptions.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={agentsProviderFilter} onValueChange={setAgentsProviderFilter}>
-                        <SelectTrigger className={styles.agentsFiltersSelect}>
-                          <SelectValue placeholder="Provider" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All providers</SelectItem>
-                          {agentProviderOptions.map((provider) => (
-                            <SelectItem key={provider} value={provider}>
-                              {provider}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={agentsReportToFilter} onValueChange={setAgentsReportToFilter}>
-                        <SelectTrigger className={styles.agentsFiltersSelect}>
-                          <SelectValue placeholder="Report to" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All managers</SelectItem>
-                          <SelectItem value="none">No manager</SelectItem>
-                          {agentReportToOptions.map((manager) => (
-                            <SelectItem key={manager.value} value={manager.value}>
-                              {manager.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={agentsModelFilter} onValueChange={setAgentsModelFilter}>
-                        <SelectTrigger className={styles.agentsFiltersSelect}>
-                          <SelectValue placeholder="Model" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All models</SelectItem>
-                          {agentModelOptions.map((model) => (
-                            <SelectItem key={model} value={model}>
-                              {model === "unconfigured" ? "Unconfigured" : model}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  }
-                />
-              </>
-            )}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Spend trend</CardTitle>
+                      <CardDescription>Daily USD spend over the last 30 days.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={agentsSpendTrendConfig} className={styles.agentsInsightsChartContainer}>
+                        <LineChart accessibilityLayer data={agentsSpendTrendData} margin={{ top: 8, left: -8, right: -8 }}>
+                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
+                          <YAxis hide />
+                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                          <Line type="monotone" dataKey="usd" stroke="var(--color-usd)" strokeWidth={2.2} dot={false} />
+                        </LineChart>
+                      </ChartContainer>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Success-rate trend</CardTitle>
+                      <CardDescription>Daily completion quality from completed vs failed runs.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={agentsSuccessTrendConfig} className={styles.agentsInsightsChartContainer}>
+                        <LineChart accessibilityLayer data={agentsRunsTrendData} margin={{ top: 8, left: -8, right: -8 }}>
+                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
+                          <YAxis hide />
+                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                          <Line
+                            type="monotone"
+                            dataKey="successRate"
+                            stroke="var(--color-successRate)"
+                            strokeWidth={2.2}
+                            dot={false}
+                          />
+                        </LineChart>
+                      </ChartContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+              <DataTable
+                columns={agentColumns}
+                data={filteredAgents}
+                emptyMessage="No agents match current filters."
+                toolbarActions={
+                  <div className={styles.agentsFiltersCardContent}>
+                    <Input
+                      value={agentsQuery}
+                      onChange={(event) => setAgentsQuery(event.target.value)}
+                      placeholder="Search name, role, status, or provider..."
+                      className={styles.agentsFiltersInput}
+                    />
+                    <Select value={agentsStatusFilter} onValueChange={setAgentsStatusFilter}>
+                      <SelectTrigger className={styles.agentsFiltersSelect}>
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        {agentStatusOptions.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={agentsProviderFilter} onValueChange={setAgentsProviderFilter}>
+                      <SelectTrigger className={styles.agentsFiltersSelect}>
+                        <SelectValue placeholder="Provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All providers</SelectItem>
+                        {agentProviderOptions.map((provider) => (
+                          <SelectItem key={provider} value={provider}>
+                            {provider}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={agentsReportToFilter} onValueChange={setAgentsReportToFilter}>
+                      <SelectTrigger className={styles.agentsFiltersSelect}>
+                        <SelectValue placeholder="Report to" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All managers</SelectItem>
+                        <SelectItem value="none">No manager</SelectItem>
+                        {agentReportToOptions.map((manager) => (
+                          <SelectItem key={manager.value} value={manager.value}>
+                            {manager.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={agentsModelFilter} onValueChange={setAgentsModelFilter}>
+                      <SelectTrigger className={styles.agentsFiltersSelect}>
+                        <SelectValue placeholder="Model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All models</SelectItem>
+                        {agentModelOptions.map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model === "unconfigured" ? "Unconfigured" : model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                }
+              />
+            </>
           </>
         );
       case "Organization":
@@ -3834,66 +3808,60 @@ export function WorkspaceClient({
               title="Inbox"
               description="Incoming items to approve or dismiss for the board."
             />
-            {sortedInboxItems.length === 0 ? (
-              <EmptyState>No inbox items in the current governance window.</EmptyState>
-            ) : (
-              <>
-                <div className="ui-stats">
-                  <MetricCard label="Items in inbox" value={inboxSummary.total} />
-                  <MetricCard label="Pending actions" value={inboxSummary.pending} />
-                  <MetricCard label="Resolved history" value={inboxSummary.resolved} />
-                  <MetricCard label="Unseen / Dismissed" value={`${inboxSummary.unseen} / ${inboxSummary.dismissed}`} />
+            <div className="ui-stats">
+              <MetricCard label="Items in inbox" value={inboxSummary.total} />
+              <MetricCard label="Pending actions" value={inboxSummary.pending} />
+              <MetricCard label="Resolved history" value={inboxSummary.resolved} />
+              <MetricCard label="Unseen / Dismissed" value={`${inboxSummary.unseen} / ${inboxSummary.dismissed}`} />
+            </div>
+            <DataTable
+              columns={inboxColumns}
+              data={filteredInboxItems}
+              emptyMessage="No inbox items match current filters."
+              toolbarActions={
+                <div className={styles.governanceFiltersCardContent}>
+                  <Input
+                    value={inboxQuery}
+                    onChange={(event) => setInboxQuery(event.target.value)}
+                    placeholder="Search action, status, or payload..."
+                    className={styles.governanceFiltersInput}
+                  />
+                  <Select value={inboxStateFilter} onValueChange={(value) => setInboxStateFilter(value as "all" | "pending" | "resolved")}>
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All items</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={inboxSeenFilter} onValueChange={(value) => setInboxSeenFilter(value as "all" | "seen" | "unseen")}>
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Seen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Seen + unseen</SelectItem>
+                      <SelectItem value="unseen">Unseen only</SelectItem>
+                      <SelectItem value="seen">Seen only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={inboxDismissedFilter}
+                    onValueChange={(value) => setInboxDismissedFilter(value as "all" | "active" | "dismissed")}
+                  >
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Dismissed" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All dismissal states</SelectItem>
+                      <SelectItem value="active">Not dismissed</SelectItem>
+                      <SelectItem value="dismissed">Dismissed only</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <DataTable
-                  columns={inboxColumns}
-                  data={filteredInboxItems}
-                  emptyMessage="No inbox items match current filters."
-                  toolbarActions={
-                    <div className={styles.governanceFiltersCardContent}>
-                      <Input
-                        value={inboxQuery}
-                        onChange={(event) => setInboxQuery(event.target.value)}
-                        placeholder="Search action, status, or payload..."
-                        className={styles.governanceFiltersInput}
-                      />
-                      <Select value={inboxStateFilter} onValueChange={(value) => setInboxStateFilter(value as "all" | "pending" | "resolved")}>
-                        <SelectTrigger className={styles.governanceFiltersSelect}>
-                          <SelectValue placeholder="Scope" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All items</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="resolved">Resolved</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={inboxSeenFilter} onValueChange={(value) => setInboxSeenFilter(value as "all" | "seen" | "unseen")}>
-                        <SelectTrigger className={styles.governanceFiltersSelect}>
-                          <SelectValue placeholder="Seen" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Seen + unseen</SelectItem>
-                          <SelectItem value="unseen">Unseen only</SelectItem>
-                          <SelectItem value="seen">Seen only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={inboxDismissedFilter}
-                        onValueChange={(value) => setInboxDismissedFilter(value as "all" | "active" | "dismissed")}
-                      >
-                        <SelectTrigger className={styles.governanceFiltersSelect}>
-                          <SelectValue placeholder="Dismissed" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All dismissal states</SelectItem>
-                          <SelectItem value="active">Not dismissed</SelectItem>
-                          <SelectItem value="dismissed">Dismissed only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  }
-                />
-              </>
-            )}
+              }
+            />
           </>
         );
       case "Approvals":
@@ -3903,77 +3871,71 @@ export function WorkspaceClient({
               title="Approvals"
               description="Items to approve or dismiss for the board."
             />
-            {approvals.length === 0 ? (
-              <EmptyState>No approvals yet. Hire an agent or activate a goal to populate approvals.</EmptyState>
-            ) : (
-              <>
-                <div className="ui-stats">
-                  <MetricCard label="Approvals in scope" value={governanceSummary.total} />
-                  <MetricCard label="Pending" value={governanceSummary.pending} />
-                  <MetricCard
-                    label="Approved / Rejected / Overridden"
-                    value={`${governanceSummary.approved} / ${governanceSummary.rejected} / ${governanceSummary.overridden}`}
+            <div className="ui-stats">
+              <MetricCard label="Approvals in scope" value={governanceSummary.total} />
+              <MetricCard label="Pending" value={governanceSummary.pending} />
+              <MetricCard
+                label="Approved / Rejected / Overridden"
+                value={`${governanceSummary.approved} / ${governanceSummary.rejected} / ${governanceSummary.overridden}`}
+              />
+              <MetricCard label="Avg resolution time" value={governanceSummary.avgResolutionLabel} />
+            </div>
+            <DataTable
+              columns={approvalColumns}
+              data={filteredApprovals}
+              emptyMessage="No approvals match current filters."
+              toolbarActions={
+                <div className={styles.governanceFiltersCardContent}>
+                  <Input
+                    value={governanceQuery}
+                    onChange={(event) => setGovernanceQuery(event.target.value)}
+                    placeholder="Search action, status, or payload..."
+                    className={styles.governanceFiltersInput}
                   />
-                  <MetricCard label="Avg resolution time" value={governanceSummary.avgResolutionLabel} />
+                  <Select value={governanceStatusFilter} onValueChange={setGovernanceStatusFilter}>
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      {governanceStatusOptions.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={governanceActionFilter} onValueChange={setGovernanceActionFilter}>
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All actions</SelectItem>
+                      {governanceActionOptions.map((action) => (
+                        <SelectItem key={action} value={action}>
+                          {action}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={governanceWindowFilter}
+                    onValueChange={(value) => setGovernanceWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
+                  >
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Window" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="7d">Last 7 days</SelectItem>
+                      <SelectItem value="30d">Last 30 days</SelectItem>
+                      <SelectItem value="90d">Last 90 days</SelectItem>
+                      <SelectItem value="all">All time</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <DataTable
-                  columns={approvalColumns}
-                  data={filteredApprovals}
-                  emptyMessage="No approvals match current filters."
-                  toolbarActions={
-                    <div className={styles.governanceFiltersCardContent}>
-                      <Input
-                        value={governanceQuery}
-                        onChange={(event) => setGovernanceQuery(event.target.value)}
-                        placeholder="Search action, status, or payload..."
-                        className={styles.governanceFiltersInput}
-                      />
-                      <Select value={governanceStatusFilter} onValueChange={setGovernanceStatusFilter}>
-                        <SelectTrigger className={styles.governanceFiltersSelect}>
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All statuses</SelectItem>
-                          {governanceStatusOptions.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={governanceActionFilter} onValueChange={setGovernanceActionFilter}>
-                        <SelectTrigger className={styles.governanceFiltersSelect}>
-                          <SelectValue placeholder="Action" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All actions</SelectItem>
-                          {governanceActionOptions.map((action) => (
-                            <SelectItem key={action} value={action}>
-                              {action}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={governanceWindowFilter}
-                        onValueChange={(value) => setGovernanceWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
-                      >
-                        <SelectTrigger className={styles.governanceFiltersSelect}>
-                          <SelectValue placeholder="Window" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="today">Today</SelectItem>
-                          <SelectItem value="7d">Last 7 days</SelectItem>
-                          <SelectItem value="30d">Last 30 days</SelectItem>
-                          <SelectItem value="90d">Last 90 days</SelectItem>
-                          <SelectItem value="all">All time</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  }
-                />
-              </>
-            )}
+              }
+            />
           </>
         );
       case "Logs":
@@ -3983,136 +3945,132 @@ export function WorkspaceClient({
               title="Logs"
               description="Audit events emitted by workspace actions and governance flows."
             />
-            {auditEvents.length === 0 ? (
-              <EmptyState>Trace logs appear after workspace actions and governance events.</EmptyState>
-            ) : (
-              <>
-                <div className={cn("ui-stats", "mt-4")}>
-                  <MetricCard label="Events in scope" value={traceSummary.total} />
-                  <MetricCard label="Unique entities" value={traceSummary.uniqueEntities} />
-                  <MetricCard label="Event types" value={traceSummary.uniqueEventTypes} hint={`Top: ${traceSummary.topEventType}`} />
-                  <MetricCard label="Anomalies" value={traceSummary.anomalies} hint="fail/error/reject/timeout events" />
+            <div className={cn("ui-stats", "mt-4")}>
+              <MetricCard label="Events in scope" value={traceSummary.total} />
+              <MetricCard label="Unique entities" value={traceSummary.uniqueEntities} />
+              <MetricCard label="Event types" value={traceSummary.uniqueEventTypes} hint={`Top: ${traceSummary.topEventType}`} />
+              <MetricCard label="Anomalies" value={traceSummary.anomalies} hint="fail/error/reject/timeout events" />
+            </div>
+            {hasTraceChartData ? (
+              <div className={styles.traceChartsGrid}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Trace trend</CardTitle>
+                    <CardDescription>Daily event volume and anomalies (last 14 days, based on current filters).</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={traceChartConfig} className={styles.traceTrendChartContainer}>
+                      <AreaChart accessibilityLayer data={traceDailyChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                        <defs>
+                          <linearGradient id="traceTotalGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="10%" stopColor="var(--color-total)" stopOpacity={0.45} />
+                            <stop offset="90%" stopColor="var(--color-total)" stopOpacity={0.05} />
+                          </linearGradient>
+                          <linearGradient id="traceAnomaliesGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="10%" stopColor="var(--color-anomalies)" stopOpacity={0.4} />
+                            <stop offset="90%" stopColor="var(--color-anomalies)" stopOpacity={0.04} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                        <Area
+                          type="monotone"
+                          dataKey="total"
+                          stroke="var(--color-total)"
+                          fill="url(#traceTotalGradient)"
+                          fillOpacity={1}
+                          strokeWidth={2}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="anomalies"
+                          stroke="var(--color-anomalies)"
+                          fill="url(#traceAnomaliesGradient)"
+                          fillOpacity={1}
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top event types</CardTitle>
+                    <CardDescription>Most frequent log event types in scope, with anomaly counts.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={traceEventTypeChartConfig} className={styles.traceTrendChartContainer}>
+                      <BarChart accessibilityLayer data={traceEventTypeChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                        <XAxis dataKey="eventType" tickLine={false} axisLine={false} tickMargin={10} minTickGap={12} />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent />} cursor={false} />
+                        <Bar dataKey="total" fill="var(--color-total)" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="anomalies" fill="var(--color-anomalies)" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
+            <DataTable
+              columns={auditColumns}
+              data={filteredAuditEvents}
+              emptyMessage="No trace logs match current filters."
+              toolbarActions={
+                <div className={styles.traceFiltersCardContent}>
+                  <Input
+                    value={traceQuery}
+                    onChange={(event) => setTraceQuery(event.target.value)}
+                    placeholder="Search event type, entity type, or entity id..."
+                    className={styles.traceFiltersInput}
+                  />
+                  <Select value={traceEventFilter} onValueChange={setTraceEventFilter}>
+                    <SelectTrigger className={styles.traceFiltersSelect}>
+                      <SelectValue placeholder="Event type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All event types</SelectItem>
+                      {traceEventOptions.map((eventType) => (
+                        <SelectItem key={eventType} value={eventType}>
+                          {eventType}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={traceEntityFilter} onValueChange={setTraceEntityFilter}>
+                    <SelectTrigger className={styles.traceFiltersSelect}>
+                      <SelectValue placeholder="Entity type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All entity types</SelectItem>
+                      {traceEntityOptions.map((entityType) => (
+                        <SelectItem key={entityType} value={entityType}>
+                          {entityType}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={traceWindowFilter}
+                    onValueChange={(value) => setTraceWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
+                  >
+                    <SelectTrigger className={styles.traceFiltersSelect}>
+                      <SelectValue placeholder="Window" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="7d">Last 7 days</SelectItem>
+                      <SelectItem value="30d">Last 30 days</SelectItem>
+                      <SelectItem value="90d">Last 90 days</SelectItem>
+                      <SelectItem value="all">All time</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className={styles.traceChartsGrid}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Trace trend</CardTitle>
-                      <CardDescription>Daily event volume and anomalies (last 14 days, based on current filters).</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={traceChartConfig} className={styles.traceTrendChartContainer}>
-                        <AreaChart accessibilityLayer data={traceDailyChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <defs>
-                            <linearGradient id="traceTotalGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="10%" stopColor="var(--color-total)" stopOpacity={0.45} />
-                              <stop offset="90%" stopColor="var(--color-total)" stopOpacity={0.05} />
-                            </linearGradient>
-                            <linearGradient id="traceAnomaliesGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="10%" stopColor="var(--color-anomalies)" stopOpacity={0.4} />
-                              <stop offset="90%" stopColor="var(--color-anomalies)" stopOpacity={0.04} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                          <Area
-                            type="monotone"
-                            dataKey="total"
-                            stroke="var(--color-total)"
-                            fill="url(#traceTotalGradient)"
-                            fillOpacity={1}
-                            strokeWidth={2}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="anomalies"
-                            stroke="var(--color-anomalies)"
-                            fill="url(#traceAnomaliesGradient)"
-                            fillOpacity={1}
-                            strokeWidth={2}
-                          />
-                        </AreaChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Top event types</CardTitle>
-                      <CardDescription>Most frequent log event types in scope, with anomaly counts.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={traceEventTypeChartConfig} className={styles.traceTrendChartContainer}>
-                        <BarChart accessibilityLayer data={traceEventTypeChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="eventType" tickLine={false} axisLine={false} tickMargin={10} minTickGap={12} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent />} cursor={false} />
-                          <Bar dataKey="total" fill="var(--color-total)" radius={[6, 6, 0, 0]} />
-                          <Bar dataKey="anomalies" fill="var(--color-anomalies)" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-                <DataTable
-                  columns={auditColumns}
-                  data={filteredAuditEvents}
-                  emptyMessage="No trace logs match current filters."
-                  toolbarActions={
-                    <div className={styles.traceFiltersCardContent}>
-                      <Input
-                        value={traceQuery}
-                        onChange={(event) => setTraceQuery(event.target.value)}
-                        placeholder="Search event type, entity type, or entity id..."
-                        className={styles.traceFiltersInput}
-                      />
-                      <Select value={traceEventFilter} onValueChange={setTraceEventFilter}>
-                        <SelectTrigger className={styles.traceFiltersSelect}>
-                          <SelectValue placeholder="Event type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All event types</SelectItem>
-                          {traceEventOptions.map((eventType) => (
-                            <SelectItem key={eventType} value={eventType}>
-                              {eventType}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={traceEntityFilter} onValueChange={setTraceEntityFilter}>
-                        <SelectTrigger className={styles.traceFiltersSelect}>
-                          <SelectValue placeholder="Entity type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All entity types</SelectItem>
-                          {traceEntityOptions.map((entityType) => (
-                            <SelectItem key={entityType} value={entityType}>
-                              {entityType}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={traceWindowFilter}
-                        onValueChange={(value) => setTraceWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
-                      >
-                        <SelectTrigger className={styles.traceFiltersSelect}>
-                          <SelectValue placeholder="Window" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="today">Today</SelectItem>
-                          <SelectItem value="7d">Last 7 days</SelectItem>
-                          <SelectItem value="30d">Last 30 days</SelectItem>
-                          <SelectItem value="90d">Last 90 days</SelectItem>
-                          <SelectItem value="all">All time</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  }
-                />
-              </>
-            )}
+              }
+            />
           </>
         );
       case "Runs":
@@ -4122,293 +4080,285 @@ export function WorkspaceClient({
               title="Runs"
               description="Heartbeat runs from agent execution, including status, duration, and diagnostics."
             />
-            {heartbeatRuns.length === 0 ? (
-              <EmptyState>No heartbeat runs yet.</EmptyState>
-            ) : (
-              <>
-                <div className={cn("ui-stats", "mt-4")}>
-                  <MetricCard label="Runs in scope" value={runsSummary.total} />
-                  <MetricCard label="Success rate" value={`${runsSummary.successRate.toFixed(1)}%`} />
-                  <MetricCard label="Failed runs" value={runsSummary.failed} />
-                  <MetricCard label="Avg duration" value={runsSummary.avgDuration} hint={`${runsSummary.running} currently running`} />
+            <div className={cn("ui-stats", "mt-4")}>
+              <MetricCard label="Runs in scope" value={runsSummary.total} />
+              <MetricCard label="Success rate" value={`${runsSummary.successRate.toFixed(1)}%`} />
+              <MetricCard label="Failed runs" value={runsSummary.failed} />
+              <MetricCard label="Avg duration" value={runsSummary.avgDuration} hint={`${runsSummary.running} currently running`} />
+            </div>
+            {hasRunsChartData ? (
+              <div className={styles.runTrendChartsGrid}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Run trend</CardTitle>
+                    <CardDescription>Daily completed vs failed runs (last 14 days, based on current filters).</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={runsChartConfig} className={styles.runTrendChartContainer}>
+                      <AreaChart accessibilityLayer data={runsDailyChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                        <defs>
+                          <linearGradient id="runsCompletedGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="10%" stopColor="var(--color-completed)" stopOpacity={0.45} />
+                            <stop offset="90%" stopColor="var(--color-completed)" stopOpacity={0.06} />
+                          </linearGradient>
+                          <linearGradient id="runsFailedGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="10%" stopColor="var(--color-failed)" stopOpacity={0.4} />
+                            <stop offset="90%" stopColor="var(--color-failed)" stopOpacity={0.04} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                        <Area
+                          type="monotone"
+                          dataKey="completed"
+                          stroke="var(--color-completed)"
+                          fill="url(#runsCompletedGradient)"
+                          fillOpacity={1}
+                          strokeWidth={2}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="failed"
+                          stroke="var(--color-failed)"
+                          fill="url(#runsFailedGradient)"
+                          fillOpacity={1}
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top agents by run volume</CardTitle>
+                    <CardDescription>Most active agents in current scope, with failed-run overlay.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={runsTopAgentsChartConfig} className={styles.runInsightsChartContainer}>
+                      <BarChart accessibilityLayer data={runsTopAgentsChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                        <XAxis dataKey="agent" tickLine={false} axisLine={false} tickMargin={10} minTickGap={14} />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent />} cursor={false} />
+                        <Bar dataKey="total" fill="var(--color-total)" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="failed" fill="var(--color-failed)" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
+            <DataTable
+              columns={heartbeatRunColumns}
+              data={filteredHeartbeatRuns}
+              emptyMessage="No heartbeat runs match current filters."
+              toolbarActions={
+                <div className={styles.runFiltersCardContent}>
+                  <Input
+                    value={runsQuery}
+                    onChange={(event) => setRunsQuery(event.target.value)}
+                    placeholder="Search run id, message, status, or agent..."
+                    className={styles.runFiltersInput}
+                  />
+                  <Select value={runsStatusFilter} onValueChange={setRunsStatusFilter}>
+                    <SelectTrigger className={styles.runFiltersSelect}>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      {runStatusOptions.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {formatRunStatusLabel(status)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={runsAgentFilter} onValueChange={setRunsAgentFilter}>
+                    <SelectTrigger className={styles.runFiltersSelect}>
+                      <SelectValue placeholder="Agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All agents</SelectItem>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={runsTypeFilter}
+                    onValueChange={(value) =>
+                      setRunsTypeFilter(value as "all" | "exclude_no_assigned_work" | HeartbeatRunRow["runType"])
+                    }
+                  >
+                    <SelectTrigger className={styles.runFiltersSelect}>
+                      <SelectValue placeholder="Run type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="exclude_no_assigned_work">
+                        {formatRunTypeLabel("exclude_no_assigned_work")}
+                      </SelectItem>
+                      <SelectItem value="all">{formatRunTypeLabel("all")}</SelectItem>
+                      {runTypeOptions.map((runType) => (
+                        <SelectItem key={runType} value={runType}>
+                          {formatRunTypeLabel(runType)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={runsWindowFilter}
+                    onValueChange={(value) => setRunsWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
+                  >
+                    <SelectTrigger className={styles.runFiltersSelect}>
+                      <SelectValue placeholder="Window" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="7d">Last 7 days</SelectItem>
+                      <SelectItem value="30d">Last 30 days</SelectItem>
+                      <SelectItem value="90d">Last 90 days</SelectItem>
+                      <SelectItem value="all">All time</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className={styles.runTrendChartsGrid}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Run trend</CardTitle>
-                      <CardDescription>Daily completed vs failed runs (last 14 days, based on current filters).</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={runsChartConfig} className={styles.runTrendChartContainer}>
-                        <AreaChart accessibilityLayer data={runsDailyChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <defs>
-                            <linearGradient id="runsCompletedGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="10%" stopColor="var(--color-completed)" stopOpacity={0.45} />
-                              <stop offset="90%" stopColor="var(--color-completed)" stopOpacity={0.06} />
-                            </linearGradient>
-                            <linearGradient id="runsFailedGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="10%" stopColor="var(--color-failed)" stopOpacity={0.4} />
-                              <stop offset="90%" stopColor="var(--color-failed)" stopOpacity={0.04} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                          <Area
-                            type="monotone"
-                            dataKey="completed"
-                            stroke="var(--color-completed)"
-                            fill="url(#runsCompletedGradient)"
-                            fillOpacity={1}
-                            strokeWidth={2}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="failed"
-                            stroke="var(--color-failed)"
-                            fill="url(#runsFailedGradient)"
-                            fillOpacity={1}
-                            strokeWidth={2}
-                          />
-                        </AreaChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Top agents by run volume</CardTitle>
-                      <CardDescription>Most active agents in current scope, with failed-run overlay.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={runsTopAgentsChartConfig} className={styles.runInsightsChartContainer}>
-                        <BarChart accessibilityLayer data={runsTopAgentsChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="agent" tickLine={false} axisLine={false} tickMargin={10} minTickGap={14} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent />} cursor={false} />
-                          <Bar dataKey="total" fill="var(--color-total)" radius={[6, 6, 0, 0]} />
-                          <Bar dataKey="failed" fill="var(--color-failed)" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-                <DataTable
-                  columns={heartbeatRunColumns}
-                  data={filteredHeartbeatRuns}
-                  emptyMessage="No heartbeat runs match current filters."
-                  toolbarActions={
-                    <div className={styles.runFiltersCardContent}>
-                      <Input
-                        value={runsQuery}
-                        onChange={(event) => setRunsQuery(event.target.value)}
-                        placeholder="Search run id, message, status, or agent..."
-                        className={styles.runFiltersInput}
-                      />
-                      <Select value={runsStatusFilter} onValueChange={setRunsStatusFilter}>
-                        <SelectTrigger className={styles.runFiltersSelect}>
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All statuses</SelectItem>
-                          {runStatusOptions.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {formatRunStatusLabel(status)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={runsAgentFilter} onValueChange={setRunsAgentFilter}>
-                        <SelectTrigger className={styles.runFiltersSelect}>
-                          <SelectValue placeholder="Agent" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All agents</SelectItem>
-                          {agents.map((agent) => (
-                            <SelectItem key={agent.id} value={agent.id}>
-                              {agent.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={runsTypeFilter}
-                        onValueChange={(value) =>
-                          setRunsTypeFilter(value as "all" | "exclude_no_assigned_work" | HeartbeatRunRow["runType"])
-                        }
-                      >
-                        <SelectTrigger className={styles.runFiltersSelect}>
-                          <SelectValue placeholder="Run type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="exclude_no_assigned_work">
-                            {formatRunTypeLabel("exclude_no_assigned_work")}
-                          </SelectItem>
-                          <SelectItem value="all">{formatRunTypeLabel("all")}</SelectItem>
-                          {runTypeOptions.map((runType) => (
-                            <SelectItem key={runType} value={runType}>
-                              {formatRunTypeLabel(runType)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={runsWindowFilter}
-                        onValueChange={(value) => setRunsWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
-                      >
-                        <SelectTrigger className={styles.runFiltersSelect}>
-                          <SelectValue placeholder="Window" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="today">Today</SelectItem>
-                          <SelectItem value="7d">Last 7 days</SelectItem>
-                          <SelectItem value="30d">Last 30 days</SelectItem>
-                          <SelectItem value="90d">Last 90 days</SelectItem>
-                          <SelectItem value="all">All time</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  }
-                />
-              </>
-            )}
+              }
+            />
           </>
         );
       case "Costs":
         return (
           <>
             <SectionHeading title="Costs" description="Tracked token and cost usage for agents and issue execution." />
-            {costEntries.length === 0 ? (
-              <EmptyState>No runtime cost data yet.</EmptyState>
-            ) : (
-              <>
-                <div className="ui-stats">
-                  <MetricCard
-                    label="Today · Input Tokens"
-                    value={todayCostSummary.input.toLocaleString()}
-                    hint={`${todayCostEntries.length} entries`}
-                  />
-                  <MetricCard
-                    label="Today · Output Tokens"
-                    value={todayCostSummary.output.toLocaleString()}
-                    hint={`${formatUsdCost(todayCostSummary.usd)} spent`}
-                  />
-                  <MetricCard
-                    label={`${selectedMonthLabel} · Total Tokens`}
-                    value={(selectedMonthSummary.input + selectedMonthSummary.output).toLocaleString()}
-                    hint={`${filteredCostEntries.length} entries`}
-                  />
-                  <MetricCard
-                    label={`${selectedMonthLabel} · USD`}
-                    value={formatUsdCost(selectedMonthSummary.usd)}
-                    hint={
-                      activeCostMonth === "all"
-                        ? "Across all recorded entries."
-                        : `${previousMonthSummary.usd > 0 ? ((selectedMonthSummary.usd / previousMonthSummary.usd - 1) * 100).toFixed(1) : "0.0"}% vs previous month`
-                    }
-                  />
-                </div>
-                <div className="ui-cost-charts-grid">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Daily usage</CardTitle>
-                      <CardDescription>
-                        {activeCostMonth === "all"
-                          ? "Showing the latest available month. Change month for a focused view."
-                          : `${selectedMonthLabel} by day`}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={costDailyConfig} className={styles.costLedgerChartContainer}>
-                        <AreaChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <defs>
-                            <linearGradient id="costDailyUsdGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="10%" stopColor="var(--color-usd)" stopOpacity={0.45} />
-                              <stop offset="90%" stopColor="var(--color-usd)" stopOpacity={0.05} />
-                            </linearGradient>
-                            <linearGradient id="costDailyTokensGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="10%" stopColor="var(--color-tokens)" stopOpacity={0.4} />
-                              <stop offset="90%" stopColor="var(--color-tokens)" stopOpacity={0.04} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                          <Area
-                            type="monotone"
-                            dataKey="usd"
-                            stroke="var(--color-usd)"
-                            fill="url(#costDailyUsdGradient)"
-                            fillOpacity={1}
-                            strokeWidth={2}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="tokens"
-                            stroke="var(--color-tokens)"
-                            fill="url(#costDailyTokensGradient)"
-                            fillOpacity={1}
-                            strokeWidth={2}
-                          />
-                        </AreaChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Monthly spend trend</CardTitle>
-                      <CardDescription>Last 6 months total spend in USD.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={costMonthlyConfig} className={styles.costLedgerChartContainer}>
-                        <AreaChart accessibilityLayer data={monthlyCostChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <defs>
-                            <linearGradient id="costMonthlyUsdGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="8%" stopColor="var(--color-usd)" stopOpacity={0.5} />
-                              <stop offset="90%" stopColor="var(--color-usd)" stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.35} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                          <Area
-                            type="monotone"
-                            dataKey="usd"
-                            stroke="var(--color-usd)"
-                            fill="url(#costMonthlyUsdGradient)"
-                            fillOpacity={1}
-                            strokeWidth={2.2}
-                          />
-                        </AreaChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-                <DataTable
-                  columns={costColumns}
-                  data={filteredCostEntries}
-                  emptyMessage="No runtime cost data for the selected scope."
-                  toolbarActions={
-                    <Select value={activeCostMonth} onValueChange={setSelectedCostMonth}>
-                      <SelectTrigger className={styles.costLedgerSelectTrigger}>
-                        <SelectValue placeholder="Select month" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All time</SelectItem>
-                        {costMonthOptions.map((month) => (
-                          <SelectItem key={month} value={month}>
-                            {formatMonthLabel(month)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  }
-                />
-              </>
-            )}
+            <div className="ui-stats">
+              <MetricCard
+                label="Today · Input Tokens"
+                value={todayCostSummary.input.toLocaleString()}
+                hint={`${todayCostEntries.length} entries`}
+              />
+              <MetricCard
+                label="Today · Output Tokens"
+                value={todayCostSummary.output.toLocaleString()}
+                hint={`${formatUsdCost(todayCostSummary.usd)} spent`}
+              />
+              <MetricCard
+                label={`${selectedMonthLabel} · Total Tokens`}
+                value={(selectedMonthSummary.input + selectedMonthSummary.output).toLocaleString()}
+                hint={`${filteredCostEntries.length} entries`}
+              />
+              <MetricCard
+                label={`${selectedMonthLabel} · USD`}
+                value={formatUsdCost(selectedMonthSummary.usd)}
+                hint={
+                  activeCostMonth === "all"
+                    ? "Across all recorded entries."
+                    : `${previousMonthSummary.usd > 0 ? ((selectedMonthSummary.usd / previousMonthSummary.usd - 1) * 100).toFixed(1) : "0.0"}% vs previous month`
+                }
+              />
+            </div>
+            {hasCostChartData ? (
+              <div className="ui-cost-charts-grid">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Daily usage</CardTitle>
+                    <CardDescription>
+                      {activeCostMonth === "all"
+                        ? "Showing the latest available month. Change month for a focused view."
+                        : `${selectedMonthLabel} by day`}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={costDailyConfig} className={styles.costLedgerChartContainer}>
+                      <AreaChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                        <defs>
+                          <linearGradient id="costDailyUsdGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="10%" stopColor="var(--color-usd)" stopOpacity={0.45} />
+                            <stop offset="90%" stopColor="var(--color-usd)" stopOpacity={0.05} />
+                          </linearGradient>
+                          <linearGradient id="costDailyTokensGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="10%" stopColor="var(--color-tokens)" stopOpacity={0.4} />
+                            <stop offset="90%" stopColor="var(--color-tokens)" stopOpacity={0.04} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                        <Area
+                          type="monotone"
+                          dataKey="usd"
+                          stroke="var(--color-usd)"
+                          fill="url(#costDailyUsdGradient)"
+                          fillOpacity={1}
+                          strokeWidth={2}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="tokens"
+                          stroke="var(--color-tokens)"
+                          fill="url(#costDailyTokensGradient)"
+                          fillOpacity={1}
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Monthly spend trend</CardTitle>
+                    <CardDescription>Last 6 months total spend in USD.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={costMonthlyConfig} className={styles.costLedgerChartContainer}>
+                      <AreaChart accessibilityLayer data={monthlyCostChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                        <defs>
+                          <linearGradient id="costMonthlyUsdGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="8%" stopColor="var(--color-usd)" stopOpacity={0.5} />
+                            <stop offset="90%" stopColor="var(--color-usd)" stopOpacity={0.05} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.35} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                        <Area
+                          type="monotone"
+                          dataKey="usd"
+                          stroke="var(--color-usd)"
+                          fill="url(#costMonthlyUsdGradient)"
+                          fillOpacity={1}
+                          strokeWidth={2.2}
+                        />
+                      </AreaChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
+            <DataTable
+              columns={costColumns}
+              data={filteredCostEntries}
+              emptyMessage="No runtime cost data for the selected scope."
+              toolbarActions={
+                <Select value={activeCostMonth} onValueChange={setSelectedCostMonth}>
+                  <SelectTrigger className={styles.costLedgerSelectTrigger}>
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All time</SelectItem>
+                    {costMonthOptions.map((month) => (
+                      <SelectItem key={month} value={month}>
+                        {formatMonthLabel(month)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+            />
           </>
         );
       case "Settings":

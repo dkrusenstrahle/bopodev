@@ -622,7 +622,7 @@ function getModelPresetsForProvider(provider: AgentProvider): string[] {
     return ["gpt-5", "gpt-5-mini", "gpt-4.1"];
   }
   if (provider === "claude_code" || provider === "anthropic_api") {
-    return ["claude-sonnet-4-6", "claude-opus-4-1"];
+    return ["claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-1"];
   }
   if (provider === "gemini_cli") {
     return ["gemini-2.5-pro", "gemini-2.5-flash"];

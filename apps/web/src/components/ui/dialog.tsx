@@ -49,6 +49,7 @@ function DialogContent({
   children,
   size = "md",
   showCloseButton = true,
+  onOpenAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   size?: "sm" | "md" | "lg" | "xl" | "2xl" | "full"
@@ -72,6 +73,12 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn("ui-dialog-content", sizeClassName, className)}
+        onOpenAutoFocus={(event) => {
+          onOpenAutoFocus?.(event)
+          if (!event.defaultPrevented) {
+            event.preventDefault()
+          }
+        }}
         {...props}
       >
         {children}

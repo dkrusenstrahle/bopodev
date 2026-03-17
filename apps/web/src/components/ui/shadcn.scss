@@ -810,7 +810,7 @@ body {
 }
 
 .ui-table-head {
-  @apply px-3 py-3 first:pl-5 last:pr-4 text-left align-middle font-medium text-base capitalize whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
+  @apply px-3 py-3 first:pl-5 last:pr-4 text-left align-middle font-medium text-base capitalize whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
 }
 
 .ui-table-cell {
@@ -842,6 +842,8 @@ body {
 
 .ui-textarea {
   @apply flex field-sizing-content min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base transition-[color,box-shadow] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:ring-destructive/40;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ui-visually-hidden {
@@ -1134,6 +1136,8 @@ body {
 
 .ui-markdown {
   @apply text-base leading-6 text-foreground wrap-break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   @apply [&>*:first-child]:mt-0 [&>*:last-child]:mb-0;
   @apply [&_h1]:mt-5 [&_h1]:text-xl [&_h1]:font-semibold;
   @apply [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold;
@@ -1144,7 +1148,7 @@ body {
   @apply [&_li]:my-1;
   @apply [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2;
   @apply [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3;
-  @apply [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.92em];
+  @apply [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.92em] [&_code]:wrap-break-word;
   @apply [&_pre_code]:bg-transparent [&_pre_code]:p-0;
   @apply [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground;
 }
@@ -1194,7 +1198,7 @@ body {
 }
 
 .ui-issue-comment-copy {
-  @apply space-y-1;
+  @apply min-w-0 space-y-1;
 }
 
 .ui-issue-comment-author {
@@ -1210,7 +1214,7 @@ body {
 }
 
 .ui-issue-action-row {
-  @apply flex flex-wrap gap-4;
+  @apply flex flex-wrap gap-4 shrink-0;
 }
 
 .ui-issue-form-actions {

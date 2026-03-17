@@ -264,7 +264,7 @@ body {
 }
 
 .ui-data-table-empty-cell {
-  @apply h-24 text-center;
+  @apply h-24 text-center text-muted-foreground;
 }
 
 .ui-data-table-column-header {
@@ -582,7 +582,7 @@ body {
 }
 
 .ui-field--horizontal {
-  @apply flex-row items-center [&>[data-slot=field-label]]:flex-auto has-[>[data-slot=field-content]]:items-start has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px;
+  @apply flex-row items-center [&>[data-slot=field-label]]:flex-auto has-[>[data-slot=field-content]]:items-start has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px mt-6;
 }
 
 .ui-field--responsive {

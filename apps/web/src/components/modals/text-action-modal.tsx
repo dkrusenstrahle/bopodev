@@ -100,7 +100,6 @@ export function TextActionModal({
               ) : (
                 <Input id="text-action-value" value={value} onChange={(event) => setValue(event.target.value)} placeholder={placeholder} required />
               )}
-              <FieldDescription>{multiline ? "Enter the full text value to save." : "Enter the updated value."}</FieldDescription>
             </Field>
           </div>
           {error ? <p className={styles.textActionModalText}>{error}</p> : null}

@@ -670,6 +670,40 @@ export function WorkspaceClient({
       runtimeModel: ceo.runtimeModel ?? parseRuntimeModelFromStateBlob(ceo.stateBlob)
     };
   }, [agents]);
+  const deleteCompanyDetails = useMemo(
+    () =>
+      [
+        "This action permanently deletes:",
+        `- Company: ${activeCompany?.name ?? "Current company"}`,
+        `- Projects: ${projects.length}`,
+        `- Goals: ${goals.length}`,
+        `- Agents: ${agents.length}`,
+        `- Issues: ${issues.length}`,
+        `- Approval records: ${approvals.length}`,
+        `- Governance inbox items: ${governanceInbox.length}`,
+        `- Audit events: ${auditEvents.length}`,
+        `- Heartbeat runs: ${heartbeatRuns.length}`,
+        `- Cost ledger entries: ${costEntries.length}`,
+        `- Plugins: ${plugins.length}`,
+        `- Templates: ${templates.length}`,
+        "",
+        "This cannot be undone."
+      ].join("\n"),
+    [
+      activeCompany?.name,
+      projects.length,
+      goals.length,
+      agents.length,
+      issues.length,
+      approvals.length,
+      governanceInbox.length,
+      auditEvents.length,
+      heartbeatRuns.length,
+      costEntries.length,
+      plugins.length,
+      templates.length
+    ]
+  );
   const isDashboardNav = activeNav === "Dashboard";
   const isProjectsNav = activeNav === "Projects";
   const isGoalsNav = activeNav === "Goals";
@@ -4441,6 +4475,7 @@ export function WorkspaceClient({
               companyId={companyId}
               fallbackDefaults={onboardingRuntimeFallback}
               activeCompanyName={activeCompany.name}
+              deleteCompanyDetails={deleteCompanyDetails}
               onDeleteCompany={removeActiveCompanyFromSettings}
               deleteActionPending={isActionPending(`company:${activeCompany.id}:delete:active`)}
             />

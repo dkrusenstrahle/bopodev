@@ -561,10 +561,6 @@ export function IssueDetailPageClient({
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Issue details</CardTitle>
-          <CardDescription>Current metadata for this issue.</CardDescription>
-        </CardHeader>
         <CardContent className={styles.issueSidebarCardContent}>
           {issue.body?.trim() ? (
             <div className="ui-markdown">

@@ -42,6 +42,7 @@ export function AgentRuntimeDefaultsCard({
   companyId,
   fallbackDefaults,
   activeCompanyName,
+  deleteCompanyDetails,
   onDeleteCompany,
   deleteActionPending = false
 }: {
@@ -51,6 +52,7 @@ export function AgentRuntimeDefaultsCard({
     runtimeModel?: string | null;
   };
   activeCompanyName?: string | null;
+  deleteCompanyDetails?: string;
   onDeleteCompany?: () => Promise<void>;
   deleteActionPending?: boolean;
 }) {
@@ -228,7 +230,6 @@ export function AgentRuntimeDefaultsCard({
             <Field>
               <FieldLabel htmlFor="defaults-runtime-args">Runtime args</FieldLabel>
               <Input id="defaults-runtime-args" value={defaults.runtimeArgs} onChange={(event) => update("runtimeArgs", event.target.value)} />
-              <FieldDescription>Arguments are stored as a space-separated string and parsed when the agent is created.</FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="defaults-timeout-sec">Timeout (sec)</FieldLabel>
@@ -277,9 +278,21 @@ export function AgentRuntimeDefaultsCard({
               />
               <FieldContent>
                 <FieldLabel htmlFor="defaults-allow-web-search">Enable web search</FieldLabel>
-                <FieldDescription>Allow runtime web search when provider support is available.</FieldDescription>
               </FieldContent>
             </Field>
+          </FieldGroup>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent Runtime Prompt and Environment Defaults</CardTitle>
+          <CardDescription>
+            These values prefill prompt and environment settings for runtime startup.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup className={styles.runtimeDefaultsStackedFieldGroup}>
             <Field>
               <FieldLabel htmlFor="defaults-bootstrap-prompt">Bootstrap prompt</FieldLabel>
               <Textarea
@@ -306,6 +319,7 @@ export function AgentRuntimeDefaultsCard({
               triggerLabel="Delete company"
               title="Delete company?"
               description={`Delete "${activeCompanyName ?? "this company"}" and all of its resources.`}
+            details={deleteCompanyDetails}
               confirmLabel="Delete company"
               onConfirm={async () => {
                 if (!onDeleteCompany) {

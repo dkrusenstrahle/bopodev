@@ -260,9 +260,6 @@ export function CreateIssueModal({
               <Field>
                 <FieldLabel htmlFor="issue-attachments">Attachments</FieldLabel>
                 <Input id="issue-attachments" type="file" multiple onChange={onFilesSelected} />
-                <FieldDescription>
-                  Attach one or more files. {isEditing ? "Files upload when you save changes." : "Files upload after issue creation."}
-                </FieldDescription>
               </Field>
             </FieldGroup>
           </div>

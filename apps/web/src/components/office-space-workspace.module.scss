@@ -201,3 +201,47 @@
 .legendDescription {
   @apply mt-1 text-base text-muted-foreground;
 }
+
+.occupantPopover {
+  @apply w-[20rem] rounded-xl border-border/80 p-0;
+}
+
+.occupantPopoverBody {
+  @apply space-y-4 p-4;
+}
+
+.occupantPopoverHeader {
+  @apply flex items-center gap-3;
+}
+
+.occupantPopoverAvatar {
+  @apply size-9 rounded-full border border-border/60;
+}
+
+.occupantPopoverIdentity {
+  @apply min-w-0;
+}
+
+.occupantPopoverName {
+  @apply truncate text-base font-semibold;
+}
+
+.occupantPopoverRole {
+  @apply truncate text-sm text-muted-foreground;
+}
+
+.occupantPopoverBadges {
+  @apply flex flex-wrap gap-2;
+}
+
+.occupantPopoverSection {
+  @apply rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5;
+}
+
+.occupantPopoverSectionLabel {
+  @apply text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground;
+}
+
+.occupantPopoverSectionText {
+  @apply mt-1.5 text-sm leading-5;
+}

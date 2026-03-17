@@ -54,6 +54,10 @@
   @apply inline-flex w-[15rem] flex-col rounded-lg border bg-muted-foreground/10 px-5 py-4 text-left;
 }
 
+.orgCardButton {
+  @apply rounded-lg text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+}
+
 .treeContainer {
   @apply inline-block;
 }
@@ -102,4 +106,16 @@
 
 .orgCardDetails {
   @apply truncate text-base text-muted-foreground;
+}
+
+.mobileAgentHeader {
+  @apply flex items-center gap-2;
+}
+
+.mobileAccordionTrigger {
+  @apply flex-1;
+}
+
+.mobileOpenButton {
+  @apply shrink-0;
 }

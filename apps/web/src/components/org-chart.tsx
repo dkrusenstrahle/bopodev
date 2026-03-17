@@ -115,7 +115,13 @@ function formatRole(role: string) {
   return role.replaceAll("_", " ");
 }
 
-export function OrgChart({ agents }: { agents: AgentNode[] }) {
+export function OrgChart({
+  agents,
+  onAgentSelect
+}: {
+  agents: AgentNode[];
+  onAgentSelect?: (agentId: string) => void;
+}) {
   const { roots, orphanCount, cycleCount } = useMemo(() => buildOrgForest(agents), [agents]);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -129,7 +135,8 @@ export function OrgChart({ agents }: { agents: AgentNode[] }) {
   });
 
   function renderAgentCard(agent: AgentNode): ReactNode {
-    return (
+    const clickable = typeof onAgentSelect === "function";
+    const cardContent = (
       <div className={styles.orgCard}>
         <div className={styles.orgCardHeader}>
           <AgentAvatar
@@ -145,6 +152,20 @@ export function OrgChart({ agents }: { agents: AgentNode[] }) {
         </div>
       </div>
     );
+    if (!clickable) {
+      return cardContent;
+    }
+    return (
+      <button
+        type="button"
+        className={styles.orgCardButton}
+        onClick={() => onAgentSelect(agent.id)}
+        onMouseDown={(event) => event.stopPropagation()}
+        aria-label={`Open ${agent.name}`}
+      >
+        {cardContent}
+      </button>
+    );
   }
 
   function renderBranch(node: OrgNode): ReactNode {
@@ -158,17 +179,24 @@ export function OrgChart({ agents }: { agents: AgentNode[] }) {
   function renderMobileBranch(node: OrgNode): ReactNode {
     return (
       <AccordionItem key={node.agent.id} value={node.agent.id}>
-        <AccordionTrigger>
-          <span className="flex items-center gap-2 min-w-0">
-            <AgentAvatar
-              seed={agentAvatarSeed(node.agent.id, node.agent.name, node.agent.avatarSeed)}
-              name={node.agent.name}
-              className="size-6 rounded-full"
-              size={24}
-            />
-            <span className="truncate text-left">{node.agent.name}</span>
-          </span>
-        </AccordionTrigger>
+        <div className={styles.mobileAgentHeader}>
+          <AccordionTrigger className={styles.mobileAccordionTrigger}>
+            <span className="flex items-center gap-2 min-w-0">
+              <AgentAvatar
+                seed={agentAvatarSeed(node.agent.id, node.agent.name, node.agent.avatarSeed)}
+                name={node.agent.name}
+                className="size-6 rounded-full"
+                size={24}
+              />
+              <span className="truncate text-left">{node.agent.name}</span>
+            </span>
+          </AccordionTrigger>
+          {onAgentSelect ? (
+            <Button type="button" size="sm" variant="ghost" className={styles.mobileOpenButton} onClick={() => onAgentSelect(node.agent.id)}>
+              Open
+            </Button>
+          ) : null}
+        </div>
         <AccordionContent>
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">

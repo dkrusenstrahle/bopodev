@@ -675,7 +675,7 @@ export function CreateAgentModal({
             {!isEditing && creationMode === "intro" ? (
               <section className={styles.createAgentModalSection}>
                 <p className={styles.createAgentModalSectionDescription}>
-                  We recommend letting {delegateAgentLabel ?? "your leadership agent"} handle setup. They can align reporting lines, permissions, and runtime defaults.
+                  It's recommended to use {delegateAgentLabel ?? "your leadership agent"} to handle setup. They have the full context of the company and can create the agent with the correct configuration.
                 </p>
                 <Button
                   type="button"
@@ -684,7 +684,7 @@ export function CreateAgentModal({
                     setError(null);
                   }}
                 >
-                  {delegateAgentLabel ? `Ask ${delegateAgentLabel} to create a new agent` : "Ask leadership to create a new agent"}
+                  {delegateAgentLabel ? `Tell ${delegateAgentLabel} to create the agent` : "Ask leadership to create the agent"}
                 </Button>
                 <Button
                   type="button"
@@ -694,7 +694,7 @@ export function CreateAgentModal({
                     setError(null);
                   }}
                 >
-                  I want advanced configuration myself
+                  I'll configure the agent instead
                 </Button>
               </section>
             ) : null}

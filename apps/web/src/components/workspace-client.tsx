@@ -3887,7 +3887,10 @@ export function WorkspaceClient({
               title="Organization"
               description="The org chart of the company's agents."
             />
-            <OrgChart agents={agents} />
+            <OrgChart
+              agents={agents}
+              onAgentSelect={(agentId) => router.push(`/agents/${agentId}?companyId=${companyId || ""}` as Route)}
+            />
           </>
         );
       case "Inbox":

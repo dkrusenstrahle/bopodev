@@ -478,10 +478,11 @@ async function hydrateProjectsWithWorkspaces(
     >;
   }
   const projectIds = projectRows.map((project) => project.id);
+  const companyIds = Array.from(new Set(projectRows.map((project) => project.companyId)));
   const workspaces = await db
     .select()
     .from(projectWorkspaces)
-    .where(inArray(projectWorkspaces.projectId, projectIds))
+    .where(and(inArray(projectWorkspaces.projectId, projectIds), inArray(projectWorkspaces.companyId, companyIds)))
     .orderBy(desc(projectWorkspaces.isPrimary), asc(projectWorkspaces.createdAt), asc(projectWorkspaces.id));
   const workspacesByProject = new Map<string, Array<typeof projectWorkspaces.$inferSelect>>();
   for (const workspace of workspaces) {

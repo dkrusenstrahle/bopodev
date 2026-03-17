@@ -14,6 +14,7 @@ import {
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
+import { requireBoardRole } from "../middleware/request-actor";
 import { deletePluginManifestFromFilesystem, writePluginManifestToFilesystem } from "../services/plugin-manifest-loader";
 import { registerPluginManifest } from "../services/plugin-runtime";
 
@@ -191,7 +192,7 @@ export function createPluginsRouter(ctx: AppContext) {
     return sendOk(res, { ok: true, pluginId, installed: false });
   });
 
-  router.delete("/:pluginId", async (req, res) => {
+  router.delete("/:pluginId", requireBoardRole, async (req, res) => {
     const pluginId = req.params.pluginId;
     const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
     const plugin = catalog.find((item) => item.id === pluginId);

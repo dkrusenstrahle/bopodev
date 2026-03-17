@@ -1,8 +1,10 @@
+import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
 import { createAgent, createCompany, deleteCompany, listCompanies, updateCompany } from "bopodev-db";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
+import { canAccessCompany, requireBoardRole, requirePermission } from "../middleware/request-actor";
 import { ensureCompanyModelPricingDefaults } from "../services/model-pricing";
 import { ensureCompanyBuiltinPluginDefaults } from "../services/plugin-runtime";
 import { ensureCompanyBuiltinTemplateDefaults } from "../services/template-catalog";
@@ -22,12 +24,19 @@ const updateCompanySchema = z
 export function createCompaniesRouter(ctx: AppContext) {
   const router = Router();
 
-  router.get("/", async (_req, res) => {
+  router.get("/", async (req, res) => {
     const companies = await listCompanies(ctx.db);
-    return sendOk(res, companies);
+    if (req.actor?.type === "board") {
+      return sendOk(res, companies);
+    }
+    const visibleCompanyIds = new Set(req.actor?.companyIds ?? []);
+    return sendOk(
+      res,
+      companies.filter((company) => visibleCompanyIds.has(company.id))
+    );
   });
 
-  router.post("/", async (req, res) => {
+  router.post("/", requireBoardRole, async (req, res) => {
     const parsed = createCompanySchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
@@ -50,21 +59,29 @@ export function createCompaniesRouter(ctx: AppContext) {
     return sendOk(res, company);
   });
 
-  router.put("/:companyId", async (req, res) => {
+  router.put("/:companyId", requireCompanyWriteAccess, async (req, res) => {
     const parsed = updateCompanySchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
 
-    const company = await updateCompany(ctx.db, { id: req.params.companyId, ...parsed.data });
+    const companyId = readCompanyIdParam(req);
+    if (!companyId) {
+      return sendError(res, "Missing company id.", 422);
+    }
+    const company = await updateCompany(ctx.db, { id: companyId, ...parsed.data });
     if (!company) {
       return sendError(res, "Company not found.", 404);
     }
     return sendOk(res, company);
   });
 
-  router.delete("/:companyId", async (req, res) => {
-    const deleted = await deleteCompany(ctx.db, req.params.companyId);
+  router.delete("/:companyId", requireCompanyWriteAccess, async (req, res) => {
+    const companyId = readCompanyIdParam(req);
+    if (!companyId) {
+      return sendError(res, "Missing company id.", 422);
+    }
+    const deleted = await deleteCompany(ctx.db, companyId);
     if (!deleted) {
       return sendError(res, "Company not found.", 404);
     }
@@ -72,4 +89,23 @@ export function createCompaniesRouter(ctx: AppContext) {
   });
 
   return router;
+}
+
+function requireCompanyWriteAccess(req: Request, res: Response, next: NextFunction) {
+  const targetCompanyId = readCompanyIdParam(req);
+  if (!targetCompanyId) {
+    return sendError(res, "Missing company id.", 422);
+  }
+  if (!canAccessCompany(req, targetCompanyId)) {
+    return sendError(res, "Actor does not have access to this company.", 403);
+  }
+  if (req.actor?.type === "board") {
+    next();
+    return;
+  }
+  return requirePermission("companies:write")(req, res, next);
+}
+
+function readCompanyIdParam(req: Request) {
+  return typeof req.params.companyId === "string" ? req.params.companyId : null;
 }

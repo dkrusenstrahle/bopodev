@@ -5,7 +5,7 @@
 }
 
 .viewport {
-  @apply relative rounded-2xl border  bg-card h-[calc(100dvh-8.5rem)];
+  @apply relative rounded-2xl border  bg-card h-[calc(100dvh-7.2rem)];
 }
 
 .controls {
@@ -51,7 +51,7 @@
 }
 
 .orgCard {
-  @apply inline-flex w-[220px] flex-col rounded-lg border bg-card px-5 py-4 text-left;
+  @apply inline-flex w-[15rem] flex-col rounded-lg border bg-muted-foreground/10 px-5 py-4 text-left;
 }
 
 .treeContainer {
@@ -70,12 +70,12 @@
 
 .treeContainer :global(li::before),
 .treeContainer :global(li::after) {
-  border-top-width: 2.5px !important;
+  border-top-width: 1px !important;
   border-top-style: solid !important;
 }
 
 .treeContainer :global(ul ul::before) {
-  border-left-width: 2.5px !important;
+  border-left-width: 1px !important;
   border-left-style: solid !important;
   border-color: var(--border) !important;
 }

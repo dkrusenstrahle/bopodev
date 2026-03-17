@@ -33,7 +33,7 @@
 }
 
 .sceneGrid {
-  @apply grid h-[calc(100vh-8.5rem)] min-h-[720px] min-w-[1264px] gap-6;
+  @apply grid h-[calc(100vh-7.2rem)] min-h-[720px] min-w-[1264px] gap-6;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
 }
@@ -86,8 +86,8 @@
 }
 
 .occupantToken {
-  @apply absolute z-10 h-auto min-w-0 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 bg-transparent py-2 text-center transition-transform duration-500 ease-out;
-  width: min(9rem, 20%);
+  @apply absolute z-10 h-auto min-w-0 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 bg-transparent py-2 text-center transition-transform duration-500 ease-out;
+
 }
 
 .occupantToken:hover {
@@ -135,7 +135,7 @@
 }
 
 .occupantName {
-  @apply block max-w-32 text-base font-semibold text-foreground;
+  @apply block w-auto text-base font-semibold text-muted-foreground;
 }
 
 .loadingOverlay {

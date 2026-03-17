@@ -289,7 +289,7 @@ export function OrgChart({ agents }: { agents: AgentNode[] }) {
                       <div key={root.agent.id} className={styles.treeContainer}>
                         <Tree
                           lineHeight="30px"
-                          lineWidth="2.5px"
+                          lineWidth="1px"
                           lineColor={lineColor}
                           lineBorderRadius="8px"
                           nodePadding="14px"

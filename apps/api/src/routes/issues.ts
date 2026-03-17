@@ -37,6 +37,20 @@ const createIssueSchema = z.object({
   parentIssueId: z.string().optional(),
   title: z.string().min(1),
   body: z.string().optional(),
+  metadata: z
+    .object({
+      delegatedHiringIntent: z
+        .object({
+          intentType: z.literal("agent_hiring_request"),
+          requestedRole: z.string().nullable().optional(),
+          requestedName: z.string().nullable().optional(),
+          requestedManagerAgentId: z.string().nullable().optional(),
+          requestedProviderType: z.string().nullable().optional(),
+          requestedRuntimeModel: z.string().nullable().optional()
+        })
+        .optional()
+    })
+    .optional(),
   status: z.enum(["todo", "in_progress", "blocked", "in_review", "done", "canceled"]).default("todo"),
   priority: z.enum(["none", "low", "medium", "high", "urgent"]).default("none"),
   assigneeAgentId: z.string().nullable().optional(),
@@ -165,7 +179,18 @@ export function createIssuesRouter(ctx: AppContext) {
         return sendError(res, assignmentValidation, 422);
       }
     }
-    const issue = await createIssue(ctx.db, { companyId: req.companyId!, ...parsed.data });
+    const issue = await createIssue(ctx.db, {
+      companyId: req.companyId!,
+      projectId: parsed.data.projectId,
+      parentIssueId: parsed.data.parentIssueId,
+      title: parsed.data.title,
+      body: applyIssueMetadataToBody(parsed.data.body, parsed.data.metadata),
+      status: parsed.data.status,
+      priority: parsed.data.priority,
+      assigneeAgentId: parsed.data.assigneeAgentId,
+      labels: parsed.data.labels,
+      tags: parsed.data.tags
+    });
     await appendActivity(ctx.db, {
       companyId: req.companyId!,
       issueId: issue.id,
@@ -616,6 +641,34 @@ export function createIssuesRouter(ctx: AppContext) {
   });
 
   return router;
+}
+
+function applyIssueMetadataToBody(
+  body: string | undefined,
+  metadata:
+    | {
+        delegatedHiringIntent?: {
+          intentType: "agent_hiring_request";
+          requestedRole?: string | null;
+          requestedName?: string | null;
+          requestedManagerAgentId?: string | null;
+          requestedProviderType?: string | null;
+          requestedRuntimeModel?: string | null;
+        };
+      }
+    | undefined
+) {
+  if (!metadata || Object.keys(metadata).length === 0) {
+    return body;
+  }
+  const metadataBlock = [
+    "",
+    "---",
+    "<!-- bopodev:issue-metadata:v1",
+    JSON.stringify(metadata),
+    "-->"
+  ].join("\n");
+  return `${body ?? ""}${metadataBlock}`.trim();
 }
 
 function parsePayload(payloadJson: string) {

@@ -30,6 +30,7 @@ Create one canonical reference for schema-level terminology and behavior.
 - **Agent**
   - role + provider + runtime config + budget + cadence.
   - status: `idle`, `running`, `paused`, `terminated`.
+  - leadership behavior is capability-driven (`canHireAgents`) with policy-based delegate resolution.
 - **Provider type**
   - `claude_code`, `codex`, `cursor`, `opencode`, `http`, `shell`.
 - **Heartbeat run**
@@ -42,8 +43,9 @@ Create one canonical reference for schema-level terminology and behavior.
 
 - **Approval request**
   - action + payload + requester + status lifecycle.
-  - action types: `hire_agent`, `activate_goal`, `override_budget`, `pause_agent`, `terminate_agent`.
+  - action types: `hire_agent`, `activate_goal`, `override_budget`, `pause_agent`, `terminate_agent`, `promote_memory_fact`, `grant_plugin_capabilities`, `apply_template`.
   - statuses: `pending`, `approved`, `rejected`, `overridden`.
+  - hire payloads may include delegated hiring lineage (`sourceIssueIds`, `delegationIntent`).
 - **Governance inbox item**
   - approval plus actor-scoped `seenAt` and `dismissedAt`.
 

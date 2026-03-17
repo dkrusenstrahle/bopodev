@@ -50,6 +50,21 @@ const approvalGatedActions = new Set([
 ]);
 
 const hireAgentPayloadSchema = AgentCreateRequestSchema.extend({
+  sourceIssueId: z.string().min(1).optional(),
+  sourceIssueIds: z.array(z.string().min(1)).default([]),
+  delegationIntent: z
+    .object({
+      intentType: z.literal("agent_hiring_request"),
+      requestedRole: z.string().nullable().optional(),
+      requestedName: z.string().nullable().optional(),
+      requestedManagerAgentId: z.string().nullable().optional(),
+      requestedProviderType: z
+        .enum(["claude_code", "codex", "cursor", "opencode", "gemini_cli", "openai_api", "anthropic_api", "http", "shell"])
+        .nullable()
+        .optional(),
+      requestedRuntimeModel: z.string().nullable().optional()
+    })
+    .optional(),
   runtimeCommand: z.string().optional(),
   runtimeArgs: z.array(z.string()).optional(),
   runtimeCwd: z.string().optional(),
@@ -194,6 +209,13 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
     if (!parsed.success) {
       throw new GovernanceError("Approval payload for agent hiring is invalid.");
     }
+    const sourceIssueIds = Array.from(
+      new Set(
+        [parsed.data.sourceIssueId, ...(parsed.data.sourceIssueIds ?? [])]
+          .map((entry) => entry?.trim())
+          .filter((entry): entry is string => Boolean(entry))
+      )
+    );
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(db, companyId);
     const runtimeConfig = normalizeRuntimeConfig({
       runtimeConfig: parsed.data.runtimeConfig,
@@ -265,7 +287,11 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
       applied: true,
       entityType: "agent" as const,
       entityId: agent.id,
-      entity: agent as Record<string, unknown>
+      entity: {
+        ...(agent as Record<string, unknown>),
+        sourceIssueIds,
+        delegationIntent: parsed.data.delegationIntent ?? null
+      }
     };
   }
 

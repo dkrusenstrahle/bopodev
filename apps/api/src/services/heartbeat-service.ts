@@ -385,6 +385,7 @@ export async function runHeartbeatForAgent(
   let transcriptLiveHighSignalCount = 0;
   let transcriptPersistFailureReported = false;
   let pluginFailureSummary: string[] = [];
+  const seenResultMessages = new Set<string>();
 
   const enqueueTranscriptEvent = (event: {
     kind: string;
@@ -401,6 +402,10 @@ export async function runHeartbeatForAgent(
     const signalLevel = normalizeTranscriptSignalLevel(event.signalLevel, event.kind);
     const groupKey = event.groupKey ?? defaultTranscriptGroupKey(event.kind, event.label);
     const source = event.source ?? "stdout";
+    const normalizedResultText = event.kind === "result" ? normalizeTranscriptResultText(event.text) : "";
+    if (event.kind === "result" && normalizedResultText.length > 0) {
+      seenResultMessages.add(normalizedResultText);
+    }
     transcriptLiveCount += 1;
     if (isUsefulTranscriptSignal(signalLevel)) {
       transcriptLiveUsefulCount += 1;
@@ -478,6 +483,10 @@ export async function runHeartbeatForAgent(
   const emitCanonicalResultEvent = (text: string, label: "completed" | "failed") => {
     const trimmed = text.trim();
     if (!trimmed) {
+      return;
+    }
+    const normalized = normalizeTranscriptResultText(trimmed);
+    if (normalized.length > 0 && seenResultMessages.has(normalized)) {
       return;
     }
     enqueueTranscriptEvent({
@@ -993,6 +1002,20 @@ export async function runHeartbeatForAgent(
         (transcriptLiveHighSignalCount < 2 && fallbackHighSignalCount > transcriptLiveHighSignalCount));
     if (shouldAppendFallback) {
       const createdAt = new Date();
+      const dedupedFallbackMessages = fallbackMessages.filter((message) => {
+        if (message.kind !== "result") {
+          return true;
+        }
+        const normalized = normalizeTranscriptResultText(message.text);
+        if (!normalized) {
+          return true;
+        }
+        if (seenResultMessages.has(normalized)) {
+          return false;
+        }
+        seenResultMessages.add(normalized);
+        return true;
+      });
       const rows: Array<{
         id: string;
         sequence: number;
@@ -1004,7 +1027,7 @@ export async function runHeartbeatForAgent(
         groupKey: string | null;
         source: "trace_fallback";
         createdAt: Date;
-      }> = fallbackMessages.map((message) => ({
+      }> = dedupedFallbackMessages.map((message) => ({
         id: nanoid(14),
         sequence: transcriptSequence++,
         kind: message.kind,
@@ -1711,6 +1734,11 @@ function normalizeTranscriptKind(
   return "system";
 }
 
+function normalizeTranscriptResultText(value: string | undefined) {
+  const normalized = (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  return normalized;
+}
+
 function defaultTranscriptGroupKey(kind: string, label?: string) {
   if (kind === "tool_call" || kind === "tool_result") {
     return `tool:${(label ?? "unknown").trim().toLowerCase()}`;
@@ -2219,7 +2247,7 @@ function buildHeartbeatRuntimeEnv(input: {
   canHireAgents: boolean;
 }) {
   const apiBaseUrl = resolveControlPlaneApiBaseUrl();
-  const actorPermissions = ["issues:write", "agents:write"].join(",");
+  const actorPermissions = ["issues:write", ...(input.canHireAgents ? ["agents:write"] : [])].join(",");
   const actorHeaders = JSON.stringify({
     "x-company-id": input.companyId,
     "x-actor-type": "agent",

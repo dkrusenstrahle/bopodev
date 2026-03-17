@@ -664,6 +664,30 @@ export function WorkspaceClient({
     () => agents.find((entry) => entry.role === "CEO" || entry.name === "CEO") ?? null,
     [agents]
   );
+  const [hiringDelegate, setHiringDelegate] = useState<{ agentId: string; name: string; role: string } | null>(null);
+  useEffect(() => {
+    if (!companyId) {
+      setHiringDelegate(null);
+      return;
+    }
+    let cancelled = false;
+    void apiGet<{ delegate: { agentId: string; name: string; role: string } | null }>("/agents/hiring-delegate", companyId)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setHiringDelegate(result.data.delegate ?? null);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setHiringDelegate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
   const onboardingRuntimeFallback = useMemo(() => {
     if (!ceoAgent || !isRuntimeDefaultsProviderType(ceoAgent.providerType)) {
       return undefined;
@@ -2630,6 +2654,8 @@ export function WorkspaceClient({
               <CreateAgentModal
                 companyId={companyId!}
                 availableAgents={agents.map((entry) => ({ id: entry.id, name: entry.name }))}
+                delegateAgentId={hiringDelegate?.agentId ?? ceoAgent?.id ?? null}
+                delegateAgentLabel={hiringDelegate?.name ?? ceoAgent?.name ?? undefined}
                 suggestedRuntimeCwd={suggestedAgentRuntimeCwd}
                 fallbackDefaults={onboardingRuntimeFallback}
                 agent={{
@@ -3376,7 +3402,8 @@ export function WorkspaceClient({
               companyId={scopedCompanyId}
               availableAgents={agents.map((entry) => ({ id: entry.id, name: entry.name }))}
               projects={projects.map((project) => ({ id: project.id, name: project.name }))}
-              ceoAgentId={ceoAgent?.id ?? null}
+              delegateAgentId={hiringDelegate?.agentId ?? ceoAgent?.id ?? null}
+              delegateAgentLabel={hiringDelegate?.name ?? ceoAgent?.name ?? undefined}
               suggestedRuntimeCwd={suggestedAgentRuntimeCwd}
               fallbackDefaults={onboardingRuntimeFallback}
             />
@@ -3712,7 +3739,8 @@ export function WorkspaceClient({
                   companyId={companyId}
                   availableAgents={agents.map((entry) => ({ id: entry.id, name: entry.name }))}
                   projects={projects.map((project) => ({ id: project.id, name: project.name }))}
-                  ceoAgentId={ceoAgent?.id ?? null}
+                  delegateAgentId={hiringDelegate?.agentId ?? ceoAgent?.id ?? null}
+                  delegateAgentLabel={hiringDelegate?.name ?? ceoAgent?.name ?? undefined}
                   suggestedRuntimeCwd={suggestedAgentRuntimeCwd}
                   fallbackDefaults={onboardingRuntimeFallback}
                 />

@@ -14,6 +14,7 @@ import {
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
+import { requirePermission } from "../middleware/request-actor";
 import { listAgentMemoryFiles, readAgentMemoryFile } from "../services/memory-file-service";
 
 export function createObservabilityRouter(ctx: AppContext) {
@@ -70,6 +71,10 @@ export function createObservabilityRouter(ctx: AppContext) {
   });
 
   router.put("/models/pricing", async (req, res) => {
+    requirePermission("observability:write")(req, res, () => {});
+    if (res.headersSent) {
+      return;
+    }
     const parsed = modelPricingUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);

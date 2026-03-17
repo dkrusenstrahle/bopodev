@@ -1403,6 +1403,7 @@ async function ensureCodexSkillsInjected(skillsSourceDir: string, env: NodeJS.Pr
   const codexHome = resolveCodexHome(env);
   const targetRoot = join(codexHome, SKILLS_DIR_NAME);
   await mkdir(targetRoot, { recursive: true });
+  await pruneBrokenSkillSymlinks(targetRoot);
 
   const entries = await readdir(skillsSourceDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -1505,6 +1506,7 @@ async function withProviderRuntimeIsolation(
 
 async function ensureSkillsInjectedAtHome(skillsSourceDir: string, targetRoot: string) {
   await mkdir(targetRoot, { recursive: true });
+  await pruneBrokenSkillSymlinks(targetRoot);
   const entries = await readdir(skillsSourceDir, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -1514,6 +1516,27 @@ async function ensureSkillsInjectedAtHome(skillsSourceDir: string, targetRoot: s
     const existing = await lstat(target).catch(() => null);
     if (existing) continue;
     await symlink(source, target);
+  }
+}
+
+async function pruneBrokenSkillSymlinks(targetRoot: string) {
+  try {
+    const entries = await readdir(targetRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      const target = join(targetRoot, entry.name);
+      const stats = await lstat(target).catch(() => null);
+      if (!stats?.isSymbolicLink()) {
+        continue;
+      }
+      const resolves = await access(target)
+        .then(() => true)
+        .catch(() => false);
+      if (!resolves) {
+        await rm(target, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+  } catch {
+    return;
   }
 }
 

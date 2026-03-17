@@ -159,9 +159,11 @@ export function createGovernanceRouter(ctx: AppContext) {
       throw error;
     }
 
+    const auditActor = resolveAuditActor(req.actor);
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: auditActor.actorType,
+      actorId: auditActor.actorId,
       eventType: "governance.approval_resolved",
       entityType: "approval_request",
       entityId: parsed.data.approvalId,
@@ -181,7 +183,8 @@ export function createGovernanceRouter(ctx: AppContext) {
             : "memory.promoted_from_approval";
       await appendAuditEvent(ctx.db, {
         companyId: req.companyId!,
-        actorType: "human",
+        actorType: auditActor.actorType,
+        actorId: auditActor.actorId,
         eventType,
         entityType: resolution.execution.entityType,
         entityId: resolution.execution.entityId,
@@ -211,6 +214,16 @@ export function createGovernanceRouter(ctx: AppContext) {
   });
 
   return router;
+}
+
+function resolveAuditActor(actor: { type: "board" | "member" | "agent"; id: string } | undefined) {
+  if (!actor) {
+    return { actorType: "human" as const, actorId: null as string | null };
+  }
+  if (actor.type === "agent") {
+    return { actorType: "agent" as const, actorId: actor.id };
+  }
+  return { actorType: "human" as const, actorId: actor.id };
 }
 
 function parsePayload(payloadJson: string) {

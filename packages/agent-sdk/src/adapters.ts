@@ -25,7 +25,7 @@ import {
   type DirectApiProvider
 } from "./runtime-http";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 function summarizeWork(context: HeartbeatContext) {
   if (context.workItems.length === 0) {
@@ -660,6 +660,21 @@ export async function testAdapterEnvironment(
     level: "info",
     message: `Command is executable: ${command}`
   });
+  const providerMismatch = detectProviderCommandMismatch(providerType, command);
+  if (providerMismatch) {
+    checks.push({
+      code: "command_provider_mismatch",
+      level: "error",
+      message: `Command '${command}' does not match selected provider '${providerType}'.`,
+      detail: `The command appears to be for provider '${providerMismatch}'. Select the matching provider or change the command.`
+    });
+    return {
+      providerType,
+      status: "fail",
+      testedAt: new Date().toISOString(),
+      checks
+    };
+  }
 
   if (providerType === "http") {
     return { providerType, status: "pass", testedAt: new Date().toISOString(), checks };
@@ -687,12 +702,12 @@ export async function testAdapterEnvironment(
       message: "Environment probe succeeded."
     });
   } else {
-    const detail = `${probe.stderr}\n${probe.stdout}`.trim().slice(0, 500);
-    const normalizedDetail = detail.toLowerCase();
+    const detail = summarizeProbeFailureDetail(probe.stdout, probe.stderr);
+    const rawEvidence = `${probe.stderr}\n${probe.stdout}`.toLowerCase();
     if (
       providerType === "codex" &&
-      normalizedDetail.includes("401 unauthorized") &&
-      (normalizedDetail.includes("missing bearer") || normalizedDetail.includes("authentication"))
+      rawEvidence.includes("401 unauthorized") &&
+      (rawEvidence.includes("missing bearer") || rawEvidence.includes("authentication"))
     ) {
       checks.push({
         code: "codex_auth_required",
@@ -722,6 +737,77 @@ export async function testAdapterEnvironment(
     testedAt: new Date().toISOString(),
     checks
   };
+}
+
+function detectProviderCommandMismatch(providerType: AgentProviderType, command: string) {
+  const normalized = basename(command).toLowerCase();
+  const known: Record<Exclude<AgentProviderType, "http" | "shell" | "openai_api" | "anthropic_api">, string[]> = {
+    claude_code: ["claude", "claude.exe", "claude.cmd"],
+    codex: ["codex", "codex.exe", "codex.cmd"],
+    cursor: ["cursor", "cursor.exe", "cursor.cmd"],
+    opencode: ["opencode", "opencode.exe", "opencode.cmd"],
+    gemini_cli: ["gemini", "gemini.exe", "gemini.cmd"]
+  };
+  const expected = known[providerType as keyof typeof known];
+  if (!expected) {
+    return null;
+  }
+  if (expected.includes(normalized)) {
+    return null;
+  }
+  for (const [candidateProvider, aliases] of Object.entries(known)) {
+    if (candidateProvider === providerType) {
+      continue;
+    }
+    if (aliases.includes(normalized)) {
+      return candidateProvider;
+    }
+  }
+  return null;
+}
+
+function summarizeProbeFailureDetail(stdout: string, stderr: string) {
+  const lines = [...stderr.split(/\r?\n/), ...stdout.split(/\r?\n/)].map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const parsed = parseJsonRecord(line);
+    if (!parsed) {
+      return line.replace(/\s+/g, " ").slice(0, 500);
+    }
+    const type = asString(parsed.type);
+    const subtype = asString(parsed.subtype);
+    if (
+      type === "thread.started" ||
+      type === "item.started" ||
+      type === "item.completed" ||
+      (type === "system" && subtype === "init")
+    ) {
+      continue;
+    }
+    if (type === "turn.failed") {
+      const failed = asString(parsed.error) || asString(parsed.message) || asString(parsed.result);
+      if (failed) {
+        return failed.replace(/\s+/g, " ").slice(0, 500);
+      }
+    }
+    const message = asString(parsed.message) || asString(parsed.result) || asString(parsed.error);
+    if (message) {
+      return message.replace(/\s+/g, " ").slice(0, 500);
+    }
+  }
+  return "";
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function parseJsonRecord(line: string) {
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createSkippedResult(providerLabel: string, providerKey: string, context: HeartbeatContext): AdapterExecutionResult {

@@ -26,6 +26,11 @@ From `agents` and related modals, you can:
 - set run policy (`workspace_write` or `full_access`, optional web search),
 - pause, resume, or terminate agents.
 
+Leadership delegation:
+
+- Agent hiring delegation resolves through policy (hiring-capable leadership) rather than only a `CEO` name/role string match.
+- Delegated “create agent” requests can carry typed intent metadata for downstream governance and audit linkage.
+
 ## Provider Types
 
 Built-in adapters:
@@ -48,6 +53,11 @@ Run paths:
 - **Run controls**: stop, resume, and redo supported for run lifecycle management.
 
 Run status values include `started`, `completed`, `failed`, and `skipped`.
+
+Runtime permission model:
+
+- Heartbeats always run with issue-write capability.
+- Agent-write capability is injected only when the running agent can hire agents.
 
 ## File Memory
 

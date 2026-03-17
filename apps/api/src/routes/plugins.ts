@@ -14,7 +14,7 @@ import {
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
-import { requireBoardRole } from "../middleware/request-actor";
+import { requireBoardRole, requirePermission } from "../middleware/request-actor";
 import { deletePluginManifestFromFilesystem, writePluginManifestToFilesystem } from "../services/plugin-manifest-loader";
 import { registerPluginManifest } from "../services/plugin-runtime";
 
@@ -74,11 +74,18 @@ export function createPluginsRouter(ctx: AppContext) {
   });
 
   router.put("/:pluginId", async (req, res) => {
+    requirePermission("plugins:write")(req, res, () => {});
+    if (res.headersSent) {
+      return;
+    }
     const parsed = pluginConfigSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
-    const pluginId = req.params.pluginId;
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
     const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
     const pluginExists = catalog.some((plugin) => plugin.id === pluginId);
     if (!pluginExists) {
@@ -116,6 +123,10 @@ export function createPluginsRouter(ctx: AppContext) {
   });
 
   router.post("/install-from-json", async (req, res) => {
+    requirePermission("plugins:write")(req, res, () => {});
+    if (res.headersSent) {
+      return;
+    }
     const parsed = pluginManifestCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
@@ -153,7 +164,14 @@ export function createPluginsRouter(ctx: AppContext) {
   });
 
   router.post("/:pluginId/install", async (req, res) => {
-    const pluginId = req.params.pluginId;
+    requirePermission("plugins:write")(req, res, () => {});
+    if (res.headersSent) {
+      return;
+    }
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
     const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
     const plugin = catalog.find((item) => item.id === pluginId);
     if (!plugin) {
@@ -175,7 +193,14 @@ export function createPluginsRouter(ctx: AppContext) {
   });
 
   router.delete("/:pluginId/install", async (req, res) => {
-    const pluginId = req.params.pluginId;
+    requirePermission("plugins:write")(req, res, () => {});
+    if (res.headersSent) {
+      return;
+    }
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
     const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
     const plugin = catalog.find((item) => item.id === pluginId);
     if (!plugin) {
@@ -193,7 +218,10 @@ export function createPluginsRouter(ctx: AppContext) {
   });
 
   router.delete("/:pluginId", requireBoardRole, async (req, res) => {
-    const pluginId = req.params.pluginId;
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
     const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
     const plugin = catalog.find((item) => item.id === pluginId);
     if (!plugin) {
@@ -231,6 +259,10 @@ export function createPluginsRouter(ctx: AppContext) {
   });
 
   return router;
+}
+
+function readPluginIdParam(value: string | string[] | undefined) {
+  return typeof value === "string" ? value : null;
 }
 
 function safeParseStringArray(value: string | null | undefined) {

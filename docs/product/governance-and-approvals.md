@@ -34,6 +34,13 @@ Current action types:
 - `pause_agent`
 - `terminate_agent`
 - `promote_memory_fact`
+- `grant_plugin_capabilities`
+- `apply_template`
+
+Delegated hiring traceability:
+
+- Delegated hiring requests can include typed intent and source issue linkage.
+- Hire approvals preserve requester/source metadata so operators can trace issue -> approval -> hired agent.
 
 ## Governance Surfaces
 

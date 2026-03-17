@@ -97,7 +97,8 @@ export function CreateAgentModal({
   agent,
   availableAgents,
   projects,
-  ceoAgentId,
+  delegateAgentId,
+  delegateAgentLabel,
   suggestedRuntimeCwd,
   fallbackDefaults,
   triggerLabel,
@@ -128,7 +129,8 @@ export function CreateAgentModal({
   };
   availableAgents?: Array<{ id: string; name: string }>;
   projects?: ProjectOption[];
-  ceoAgentId?: string | null;
+  delegateAgentId?: string | null;
+  delegateAgentLabel?: string;
   suggestedRuntimeCwd?: string | null;
   fallbackDefaults?: {
     providerType?: ProviderType | null;
@@ -141,7 +143,7 @@ export function CreateAgentModal({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(agent?.name ?? "");
-  const [role, setRole] = useState(agent?.role ?? "Engineer");
+  const [role, setRole] = useState(agent?.role ?? "");
   const [managerAgentId, setManagerAgentId] = useState<string | null>(agent?.managerAgentId ?? null);
   const [budget, setBudget] = useState(agent?.monthlyBudgetUsd?.toString() ?? "30");
   const [providerType, setProviderType] = useState<ProviderType>(agent?.providerType ?? "claude_code");
@@ -416,7 +418,7 @@ export function CreateAgentModal({
           }
         : defaults;
     setName("");
-    setRole("Engineer");
+    setRole("");
     setManagerAgentId(null);
     setProviderType(effectiveDefaults.providerType);
     setHeartbeatIntervalSec(effectiveDefaults.heartbeatIntervalSec);
@@ -507,8 +509,8 @@ export function CreateAgentModal({
         return;
       }
       if (!isEditing && creationMode === "delegate") {
-        if (!ceoAgentId) {
-          setError("No CEO agent found. Create a CEO agent first, then ask the CEO to create agents.");
+        if (!delegateAgentId) {
+          setError("No hiring delegate found. Assign at least one hiring-capable agent first.");
           return;
         }
         if (!delegateProjectId) {
@@ -517,24 +519,37 @@ export function CreateAgentModal({
         }
         const requestNotes = delegateRequest.trim();
         const managerName = managerOptions.find((entry) => entry.id === managerAgentId)?.name ?? "No manager";
+        const requestedRole = role.trim();
+        const requestedName = name.trim();
+        const requestedModel = runtimeModel.trim();
         const issueBody = [
           "Please create a new agent with the following profile:",
           "",
-          `- Name: ${name || "(decide best fit)"}`,
-          `- Role: ${role || "Engineer"}`,
+          `- Name: ${requestedName || "(decide best fit)"}`,
+          `- Role: ${requestedRole || "(not specified)"}`,
           `- Reports to: ${managerName}`,
           `- Preferred provider: ${providerType}`,
-          `- Preferred model: ${runtimeModel || "(CEO choose best model)"}`,
+          `- Preferred model: ${requestedModel || "(delegate chooses best model)"}`,
           "",
           "Additional request details:",
           requestNotes || "- None provided."
         ].join("\n");
         await apiPost("/issues", companyId, {
           projectId: delegateProjectId,
-          title: `Create a new agent: ${role || "Engineer"}`,
+          title: requestedRole ? `Create a new ${requestedRole} agent` : "Create a new agent",
           body: issueBody,
+          metadata: {
+            delegatedHiringIntent: {
+              intentType: "agent_hiring_request",
+              requestedRole: requestedRole || null,
+              requestedName: requestedName || null,
+              requestedManagerAgentId: managerAgentId ?? null,
+              requestedProviderType: providerType,
+              requestedRuntimeModel: requestedModel || null
+            }
+          },
           status: "todo",
-          assigneeAgentId: ceoAgentId,
+          assigneeAgentId: delegateAgentId,
           labels: ["agent-hiring", "delegated"]
         });
         setOpen(false);
@@ -660,7 +675,7 @@ export function CreateAgentModal({
             {!isEditing && creationMode === "intro" ? (
               <section className={styles.createAgentModalSection}>
                 <p className={styles.createAgentModalSectionDescription}>
-                  We recommend letting your CEO handle agent setup. They can align reporting lines, permissions, and runtime defaults.
+                  We recommend letting {delegateAgentLabel ?? "your leadership agent"} handle setup. They can align reporting lines, permissions, and runtime defaults.
                 </p>
                 <Button
                   type="button"
@@ -669,7 +684,7 @@ export function CreateAgentModal({
                     setError(null);
                   }}
                 >
-                  Ask the CEO to create a new agent
+                  {delegateAgentLabel ? `Ask ${delegateAgentLabel} to create a new agent` : "Ask leadership to create a new agent"}
                 </Button>
                 <Button
                   type="button"

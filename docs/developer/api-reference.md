@@ -68,6 +68,10 @@ Attachments:
 - `GET /issues/:issueId/attachments/:attachmentId/download`
 - `DELETE /issues/:issueId/attachments/:attachmentId`
 
+Delegated hiring metadata:
+
+- `POST /issues` accepts optional `metadata.delegatedHiringIntent` for typed hiring delegation context.
+
 ## Goals
 
 - `GET /goals`
@@ -78,6 +82,8 @@ Attachments:
 ## Agents
 
 - `GET /agents`
+- `GET /agents/hiring-delegate`
+- `GET /agents/leadership-diagnostics`
 - `POST /agents`
 - `PUT /agents/:agentId`
 - `DELETE /agents/:agentId`
@@ -91,6 +97,11 @@ Adapter and runtime support:
 - `GET /agents/adapter-metadata`
 - `GET /agents/adapter-models/:providerType`
 - `POST /agents/runtime-preflight`
+
+Hiring request lineage:
+
+- `POST /agents` supports optional `sourceIssueId`, `sourceIssueIds`, and `delegationIntent`.
+- Agent-originated hire requests are forced through approval flow when approval is required.
 
 ## Governance
 
@@ -108,6 +119,10 @@ Adapter and runtime support:
 - `POST /plugins/install-from-json`
 - `PUT /plugins/:pluginId`
 - `GET /plugins/runs`
+
+Mutation permission:
+
+- Plugin install/config mutation routes require `plugins:write`.
 
 ## Heartbeats
 
@@ -127,6 +142,10 @@ Adapter and runtime support:
 - `GET /observability/plugins/runs` (supports `pluginId`, `runId`, `limit`)
 - `GET /observability/memory` (supports `agentId` and `limit` query filters)
 - `GET /observability/memory/:agentId/file?path=...`
+
+Mutation permission:
+
+- `PUT /observability/models/pricing` requires `observability:write`.
 
 For endpoint usage patterns and memory semantics, see
 [`../product/agent-memory-workflow.md`](../product/agent-memory-workflow.md).

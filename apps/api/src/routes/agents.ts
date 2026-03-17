@@ -27,6 +27,7 @@ import {
   runtimeConfigToDb,
   runtimeConfigToStateBlobPatch
 } from "../lib/agent-config";
+import { resolveHiringDelegate } from "../lib/hiring-delegate";
 import { resolveOpencodeRuntimeModel } from "../lib/opencode-model";
 import { assertRuntimeCwdForCompany, hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { requireCompanyScope } from "../middleware/company-scope";
@@ -144,6 +145,53 @@ export function createAgentsRouter(ctx: AppContext) {
     return sendOk(
       res,
       rows.map((row) => toAgentResponse(row as unknown as Record<string, unknown>))
+    );
+  });
+
+  router.get("/hiring-delegate", async (req, res) => {
+    const rows = await listAgents(ctx.db, req.companyId!);
+    const resolution = resolveHiringDelegate(
+      rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        role: row.role,
+        status: row.status,
+        canHireAgents: row.canHireAgents
+      }))
+    );
+    return sendOk(res, {
+      delegate: resolution.delegate,
+      reason: resolution.reason
+    });
+  });
+
+  router.get("/leadership-diagnostics", async (req, res) => {
+    const rows = await listAgents(ctx.db, req.companyId!);
+    return sendOk(
+      res,
+      rows.map((row) => {
+        const normalizedRole = row.role.trim().toLowerCase();
+        const isLeadership = normalizedRole === "ceo" || Boolean(row.canHireAgents);
+        const issues: string[] = [];
+        const hasBootstrapPrompt = hasText(row.bootstrapPrompt);
+        if (isLeadership && !hasBootstrapPrompt) {
+          issues.push("missing_bootstrap_prompt");
+        }
+        if (isLeadership && !providerSupportsSkillInjection(row.providerType)) {
+          issues.push("provider_without_runtime_skill_injection");
+        }
+        return {
+          agentId: row.id,
+          name: row.name,
+          role: row.role,
+          providerType: row.providerType,
+          canHireAgents: Boolean(row.canHireAgents),
+          isLeadership,
+          hasBootstrapPrompt,
+          supportsSkillInjection: providerSupportsSkillInjection(row.providerType),
+          issues
+        };
+      })
     );
   });
 
@@ -314,7 +362,9 @@ export function createAgentsRouter(ctx: AppContext) {
       await mkdir(runtimeConfig.runtimeCwd!, { recursive: true });
     }
 
-    if (parsed.data.requestApproval && isApprovalRequired("hire_agent")) {
+    const sourceIssueIds = normalizeSourceIssueIds(parsed.data.sourceIssueId, parsed.data.sourceIssueIds);
+    const shouldRequestApproval = (parsed.data.requestApproval || req.actor?.type === "agent") && isApprovalRequired("hire_agent");
+    if (shouldRequestApproval) {
       const duplicate = await findDuplicateHireRequest(ctx.db, req.companyId!, {
         role: parsed.data.role,
         managerAgentId: parsed.data.managerAgentId ?? null
@@ -330,10 +380,12 @@ export function createAgentsRouter(ctx: AppContext) {
       }
       const approvalId = await createApprovalRequest(ctx.db, {
         companyId: req.companyId!,
+        requestedByAgentId: req.actor?.type === "agent" ? req.actor.id : null,
         action: "hire_agent",
         payload: {
           ...parsed.data,
-          runtimeConfig
+          runtimeConfig,
+          sourceIssueIds
         }
       });
       const approval = await getApprovalRequest(ctx.db, req.companyId!, approvalId);
@@ -361,14 +413,18 @@ export function createAgentsRouter(ctx: AppContext) {
       ...runtimeConfigToDb(runtimeConfig),
       initialState: runtimeConfigToStateBlobPatch(runtimeConfig)
     });
-
+    const auditActor = resolveAuditActor(req.actor);
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: auditActor.actorType,
+      actorId: auditActor.actorId,
       eventType: "agent.hired",
       entityType: "agent",
       entityId: agent.id,
-      payload: agent
+      payload: {
+        ...agent,
+        sourceIssueIds
+      }
     });
     await publishOfficeOccupantForAgent(ctx.db, ctx.realtimeHub, req.companyId!, agent.id);
     return sendOk(res, toAgentResponse(agent as unknown as Record<string, unknown>));
@@ -397,6 +453,34 @@ export function createAgentsRouter(ctx: AppContext) {
     const existingAgent = (await listAgents(ctx.db, req.companyId!)).find((row) => row.id === req.params.agentId);
     if (!existingAgent) {
       return sendError(res, "Agent not found.", 404);
+    }
+    if (req.actor?.type === "agent") {
+      if (req.actor.id !== req.params.agentId) {
+        return sendError(res, "Agents can only update their own record.", 403);
+      }
+      const forbiddenFieldUpdates: string[] = [];
+      if (parsed.data.canHireAgents !== undefined) {
+        forbiddenFieldUpdates.push("canHireAgents");
+      }
+      if (parsed.data.status !== undefined) {
+        forbiddenFieldUpdates.push("status");
+      }
+      if (parsed.data.monthlyBudgetUsd !== undefined) {
+        forbiddenFieldUpdates.push("monthlyBudgetUsd");
+      }
+      if (parsed.data.providerType !== undefined) {
+        forbiddenFieldUpdates.push("providerType");
+      }
+      if (parsed.data.managerAgentId !== undefined) {
+        forbiddenFieldUpdates.push("managerAgentId");
+      }
+      if (forbiddenFieldUpdates.length > 0) {
+        return sendError(
+          res,
+          `Agents cannot update restricted fields: ${forbiddenFieldUpdates.join(", ")}.`,
+          403
+        );
+      }
     }
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(ctx.db, req.companyId!);
     const existingRuntime = parseRuntimeConfigFromAgentRow(existingAgent as unknown as Record<string, unknown>);
@@ -474,9 +558,11 @@ export function createAgentsRouter(ctx: AppContext) {
         return sendError(res, "Agent not found.", 404);
       }
 
+      const auditActor = resolveAuditActor(req.actor);
       await appendAuditEvent(ctx.db, {
         companyId: req.companyId!,
-        actorType: "human",
+        actorType: auditActor.actorType,
+        actorId: auditActor.actorId,
         eventType: "agent.updated",
         entityType: "agent",
         entityId: agent.id,
@@ -499,9 +585,11 @@ export function createAgentsRouter(ctx: AppContext) {
       return sendError(res, "Agent not found.", 404);
     }
 
+    const auditActor = resolveAuditActor(req.actor);
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: auditActor.actorType,
+      actorId: auditActor.actorId,
       eventType: "agent.deleted",
       entityType: "agent",
       entityId: req.params.agentId,
@@ -524,9 +612,11 @@ export function createAgentsRouter(ctx: AppContext) {
     if (!agent) {
       return sendError(res, "Agent not found.", 404);
     }
+    const auditActor = resolveAuditActor(req.actor);
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: auditActor.actorType,
+      actorId: auditActor.actorId,
       eventType: "agent.paused",
       entityType: "agent",
       entityId: agent.id,
@@ -549,9 +639,11 @@ export function createAgentsRouter(ctx: AppContext) {
     if (!agent) {
       return sendError(res, "Agent not found.", 404);
     }
+    const auditActor = resolveAuditActor(req.actor);
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: auditActor.actorType,
+      actorId: auditActor.actorId,
       eventType: "agent.resumed",
       entityType: "agent",
       entityId: agent.id,
@@ -574,9 +666,11 @@ export function createAgentsRouter(ctx: AppContext) {
     if (!agent) {
       return sendError(res, "Agent not found.", 404);
     }
+    const auditActor = resolveAuditActor(req.actor);
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: auditActor.actorType,
+      actorId: auditActor.actorId,
       eventType: "agent.terminated",
       entityType: "agent",
       entityId: agent.id,
@@ -669,4 +763,29 @@ function duplicateMessage(input: { existingAgentId: string | null; pendingApprov
     return `Duplicate hire request blocked: existing agent ${input.existingAgentId}.`;
   }
   return `Duplicate hire request blocked: pending approval ${input.pendingApprovalId}.`;
+}
+
+function normalizeSourceIssueIds(sourceIssueId: string | undefined, sourceIssueIds: string[] | undefined) {
+  const merged = new Set<string>();
+  for (const value of [sourceIssueId, ...(sourceIssueIds ?? [])]) {
+    const normalized = value?.trim();
+    if (normalized) {
+      merged.add(normalized);
+    }
+  }
+  return Array.from(merged);
+}
+
+function providerSupportsSkillInjection(providerType: string) {
+  return providerType === "codex" || providerType === "cursor" || providerType === "opencode" || providerType === "claude_code";
+}
+
+function resolveAuditActor(actor: { type: "board" | "member" | "agent"; id: string } | undefined) {
+  if (!actor) {
+    return { actorType: "human" as const, actorId: null as string | null };
+  }
+  if (actor.type === "agent") {
+    return { actorType: "agent" as const, actorId: actor.id };
+  }
+  return { actorType: "human" as const, actorId: actor.id };
 }

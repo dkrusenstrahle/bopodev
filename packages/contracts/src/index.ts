@@ -561,6 +561,18 @@ export const AgentCreateRequestSchema = z.object({
   heartbeatCron: z.string().min(1),
   monthlyBudgetUsd: z.number().nonnegative(),
   canHireAgents: z.boolean().default(false),
+  sourceIssueId: z.string().min(1).optional(),
+  sourceIssueIds: z.array(z.string().min(1)).default([]),
+  delegationIntent: z
+    .object({
+      intentType: z.literal("agent_hiring_request"),
+      requestedRole: z.string().nullable().optional(),
+      requestedName: z.string().nullable().optional(),
+      requestedManagerAgentId: z.string().nullable().optional(),
+      requestedProviderType: ProviderTypeSchema.nullable().optional(),
+      requestedRuntimeModel: z.string().nullable().optional()
+    })
+    .optional(),
   requestApproval: z.boolean().default(true),
   runtimeConfig: AgentRuntimeConfigSchema.partial().default({})
 });

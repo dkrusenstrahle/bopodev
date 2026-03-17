@@ -144,43 +144,7 @@ export function AgentRuntimeDefaultsCard({
               </SelectContent>
             </Select>
           </Field>
-          <Field>
-            <FieldLabel htmlFor="defaults-heartbeat-interval">Heartbeat interval (sec)</FieldLabel>
-            <Input
-              id="defaults-heartbeat-interval"
-              type="number"
-              min={60}
-              step="1"
-              value={defaults.heartbeatIntervalSec}
-              onChange={(event) => update("heartbeatIntervalSec", event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="defaults-budget">Monthly budget (USD)</FieldLabel>
-            <Input
-              id="defaults-budget"
-              type="number"
-              min={0}
-              step="1"
-              value={defaults.monthlyBudgetUsd}
-              onChange={(event) => update("monthlyBudgetUsd", event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="defaults-runtime-cwd">Runtime cwd</FieldLabel>
-            <Input id="defaults-runtime-cwd" value={defaults.runtimeCwd} onChange={(event) => update("runtimeCwd", event.target.value)} />
-          </Field>
-        </FieldGroup>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="defaults-runtime-command">Runtime command</FieldLabel>
-            <Input id="defaults-runtime-command" value={defaults.runtimeCommand} onChange={(event) => update("runtimeCommand", event.target.value)} />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="defaults-runtime-args">Runtime args</FieldLabel>
-            <Input id="defaults-runtime-args" value={defaults.runtimeArgs} onChange={(event) => update("runtimeArgs", event.target.value)} />
-            <FieldDescription>Arguments are stored as a space-separated string and parsed when the agent is created.</FieldDescription>
-          </Field>
+
           <Field>
             <FieldLabel htmlFor="defaults-runtime-model">Model</FieldLabel>
             <Select
@@ -216,6 +180,55 @@ export function AgentRuntimeDefaultsCard({
               </SelectContent>
             </Select>
           </Field>
+
+
+          <Field>
+            <FieldLabel htmlFor="defaults-budget">Monthly budget (USD)</FieldLabel>
+            <Input
+              id="defaults-budget"
+              type="number"
+              min={0}
+              step="1"
+              value={defaults.monthlyBudgetUsd}
+              onChange={(event) => update("monthlyBudgetUsd", event.target.value)}
+            />
+          </Field>
+          
+          <Field>
+            <FieldLabel htmlFor="defaults-heartbeat-interval">Heartbeat interval (sec)</FieldLabel>
+            <Input
+              id="defaults-heartbeat-interval"
+              type="number"
+              min={60}
+              step="1"
+              value={defaults.heartbeatIntervalSec}
+              onChange={(event) => update("heartbeatIntervalSec", event.target.value)}
+            />
+          </Field>
+
+
+
+
+
+          <Field>
+            <FieldLabel htmlFor="defaults-runtime-cwd">Runtime cwd</FieldLabel>
+            <Input id="defaults-runtime-cwd" value={defaults.runtimeCwd} onChange={(event) => update("runtimeCwd", event.target.value)} />
+          </Field>
+        </FieldGroup>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="defaults-runtime-command">Runtime command</FieldLabel>
+            <Input id="defaults-runtime-command" value={defaults.runtimeCommand} onChange={(event) => update("runtimeCommand", event.target.value)} />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="defaults-runtime-args">Runtime args</FieldLabel>
+            <Input id="defaults-runtime-args" value={defaults.runtimeArgs} onChange={(event) => update("runtimeArgs", event.target.value)} />
+            <FieldDescription>Arguments are stored as a space-separated string and parsed when the agent is created.</FieldDescription>
+          </Field>
+
+
+
+          
           <Field>
             <FieldLabel htmlFor="defaults-timeout-sec">Timeout (sec)</FieldLabel>
             <Input

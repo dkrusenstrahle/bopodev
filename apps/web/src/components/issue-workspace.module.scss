@@ -49,7 +49,7 @@
 }
 
 .issueCardContainer2 {
-  @apply cursor-pointer space-y-1;
+  @apply flex flex-col items-start justify-start cursor-pointer space-y-1 text-left text-sidebar-foreground;
 }
 
 .issueCardContainer3 {
@@ -57,7 +57,7 @@
 }
 
 .issueCardContainer4 {
-  @apply text-base text-muted-foreground;
+  @apply text-base text-sidebar-foreground/50 capitalize;
 }
 
 .issueCardContainer5 {
@@ -146,7 +146,11 @@
 }
 
 .issueViewToggleButton {
-  @apply h-8 rounded-md px-3;
+  @apply h-8 rounded-md px-3 text-muted-foreground;
+}
+
+.issueViewToggleButton[data-variant="outline"].issueViewToggleButtonActive {
+  @apply border-border/60 bg-sidebar-foreground text-background hover:bg-sidebar-foreground/90;
 }
 
 .issueFiltersInput {

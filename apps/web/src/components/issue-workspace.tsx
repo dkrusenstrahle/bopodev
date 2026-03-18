@@ -286,7 +286,7 @@ export function IssueWorkspace({
               <button type="button" className={styles.issueCardContainer2} onClick={() => openIssue(issue.id)}>
                 <div className={styles.issueCardContainer3}>{issue.title}</div>
                 <div className={styles.issueCardContainer4}>
-                  {issue.priority} · {selectedProjectNameFor(issue.projectId, projects)} · {formatDateTime(issue.updatedAt)}
+                  {issue.priority} · {selectedProjectNameFor(issue.projectId, projects)}
                 </div>
               </button>
             </div>
@@ -419,17 +419,17 @@ export function IssueWorkspace({
   const issueViewToggle = (
     <ButtonGroup className={styles.issueViewToggleGroup}>
       <Button
-        variant={viewMode === "list" ? "default" : "outline"}
+        variant="outline"
         size="xs"
-        className={styles.issueViewToggleButton}
+        className={cn(styles.issueViewToggleButton, viewMode === "list" ? styles.issueViewToggleButtonActive : undefined)}
         onClick={() => setViewMode("list")}
       >
         List
       </Button>
       <Button
-        variant={viewMode === "board" ? "default" : "outline"}
+        variant="outline"
         size="xs"
-        className={styles.issueViewToggleButton}
+        className={cn(styles.issueViewToggleButton, viewMode === "board" ? styles.issueViewToggleButtonActive : undefined)}
         onClick={() => setViewMode("board")}
       >
         Board
@@ -498,7 +498,6 @@ export function IssueWorkspace({
                   </div>
                 </DndContext>
               </div>
-              {draggingIssueId ? <div className={styles.issueBoardHint}>Release to move issue to a new status column.</div> : null}
             </div>
           )}
         </div>

@@ -1,11 +1,11 @@
 import { runDoctorChecks } from "../lib/checks";
-import { resolveWorkspaceRoot } from "../lib/process";
+import { resolveWorkspaceRootOrManaged } from "../lib/process";
 import { printBanner, printCheck, printDivider, printLine, printSection, printSummaryCard } from "../lib/ui";
 
 export async function runDoctorCommand(cwd: string) {
-  const workspaceRoot = await resolveWorkspaceRoot(cwd);
+  const workspaceRoot = await resolveWorkspaceRootOrManaged(cwd);
   if (!workspaceRoot) {
-    throw new Error("Could not find a pnpm workspace root. Run this command from inside the Bopodev repo.");
+    throw new Error("Could not find a Bopodev workspace root. Run `bopodev onboard` first.");
   }
 
   printBanner();

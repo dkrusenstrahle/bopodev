@@ -6,13 +6,55 @@ import { runOnboardFlow } from "../../packages/cli/src/commands/onboard";
 
 describe("bopo onboard flow", () => {
   const cleanup: Array<() => void> = [];
+  const originalEnv = {
+    BOPO_CLI_WORKSPACE_ROOT: process.env.BOPO_CLI_WORKSPACE_ROOT,
+    BOPO_INSTANCE_ROOT: process.env.BOPO_INSTANCE_ROOT,
+    BOPO_HOME: process.env.BOPO_HOME,
+    BOPO_INSTANCE_ID: process.env.BOPO_INSTANCE_ID,
+    BOPO_REPO_URL: process.env.BOPO_REPO_URL,
+    BOPO_REPO_REF: process.env.BOPO_REPO_REF
+  };
 
   afterEach(() => {
     while (cleanup.length > 0) {
       const fn = cleanup.pop();
       fn?.();
     }
+    restoreManagedWorkspaceEnv();
   });
+
+  function restoreManagedWorkspaceEnv() {
+    if (originalEnv.BOPO_CLI_WORKSPACE_ROOT === undefined) {
+      delete process.env.BOPO_CLI_WORKSPACE_ROOT;
+    } else {
+      process.env.BOPO_CLI_WORKSPACE_ROOT = originalEnv.BOPO_CLI_WORKSPACE_ROOT;
+    }
+    if (originalEnv.BOPO_INSTANCE_ROOT === undefined) {
+      delete process.env.BOPO_INSTANCE_ROOT;
+    } else {
+      process.env.BOPO_INSTANCE_ROOT = originalEnv.BOPO_INSTANCE_ROOT;
+    }
+    if (originalEnv.BOPO_HOME === undefined) {
+      delete process.env.BOPO_HOME;
+    } else {
+      process.env.BOPO_HOME = originalEnv.BOPO_HOME;
+    }
+    if (originalEnv.BOPO_INSTANCE_ID === undefined) {
+      delete process.env.BOPO_INSTANCE_ID;
+    } else {
+      process.env.BOPO_INSTANCE_ID = originalEnv.BOPO_INSTANCE_ID;
+    }
+    if (originalEnv.BOPO_REPO_URL === undefined) {
+      delete process.env.BOPO_REPO_URL;
+    } else {
+      process.env.BOPO_REPO_URL = originalEnv.BOPO_REPO_URL;
+    }
+    if (originalEnv.BOPO_REPO_REF === undefined) {
+      delete process.env.BOPO_REPO_REF;
+    } else {
+      process.env.BOPO_REPO_REF = originalEnv.BOPO_REPO_REF;
+    }
+  }
 
   test("bootstraps workspace and prints doctor summary", async () => {
     const workspace = await createWorkspace();
@@ -341,6 +383,48 @@ describe("bopo onboard flow", () => {
         }
       )
     ).rejects.toThrow("missing-template");
+  });
+
+  test("uses managed workspace fallback when launched outside a repo", async () => {
+    const managedWorkspace = await createWorkspace();
+    const nonWorkspaceCwd = await mkdtemp(join(tmpdir(), "bopo-cli-cwd-"));
+    process.env.BOPO_CLI_WORKSPACE_ROOT = managedWorkspace;
+
+    const installDependencies = vi.fn(async () => {});
+    const initializeDatabase = vi.fn(async () => {});
+    const seedOnboardingDatabase = vi.fn(async () => ({
+      companyId: "company-123",
+      companyName: "Acme AI",
+      companyCreated: true,
+      ceoCreated: true,
+      ceoProviderType: "codex" as const,
+      ceoRuntimeModel: "gpt-5",
+      ceoMigrated: false
+    }));
+
+    const result = await runOnboardFlow(
+      { cwd: nonWorkspaceCwd, yes: true, start: false, forceInstall: false },
+      {
+        installDependencies,
+        initializeDatabase,
+        seedOnboardingDatabase,
+        startServices: async () => 0,
+        runDoctor: async () => [],
+        promptForCompanyName: async () => "Acme AI",
+        promptForAgentProvider: async () => "codex" as const,
+        promptForAgentModel: async () => "gpt-5"
+      }
+    );
+
+    expect(result.workspaceRoot).toBe(managedWorkspace);
+    expect(installDependencies).toHaveBeenCalledTimes(1);
+    expect(initializeDatabase).toHaveBeenCalledTimes(1);
+    expect(seedOnboardingDatabase).toHaveBeenCalledWith(managedWorkspace, {
+      dbPath: undefined,
+      companyName: "Acme AI",
+      companyId: undefined,
+      agentProvider: "codex"
+    });
   });
 });
 

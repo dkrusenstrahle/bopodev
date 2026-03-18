@@ -1,9 +1,9 @@
-import { resolveWorkspaceRoot, runCommandStreaming } from "../lib/process";
+import { resolveWorkspaceRootOrManaged, runCommandStreaming } from "../lib/process";
 
 export async function runStartCommand(cwd: string, options?: { quiet?: boolean }) {
-  const workspaceRoot = await resolveWorkspaceRoot(cwd);
+  const workspaceRoot = await resolveWorkspaceRootOrManaged(cwd);
   if (!workspaceRoot) {
-    throw new Error("Could not find a pnpm workspace root. Run this command from inside the Bopodev repo.");
+    throw new Error("Could not find a Bopodev workspace root. Run `bopodev onboard` first.");
   }
 
   const script = options?.quiet === false ? "start" : "start:quiet";

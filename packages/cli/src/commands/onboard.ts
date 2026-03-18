@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { confirm, isCancel, log, select, spinner, text } from "@clack/prompts";
 import dotenv from "dotenv";
 import { runDoctorChecks, type DoctorCheck } from "../lib/checks";
-import { resolveWorkspaceRoot, runCommandCapture, runCommandStreaming } from "../lib/process";
+import { resolveWorkspaceRootOrManaged, runCommandCapture, runCommandStreaming } from "../lib/process";
 import { printBanner, printCheck, printDivider, printLine, printSection, printSummaryCard } from "../lib/ui";
 
 export interface OnboardOptions {
@@ -210,9 +210,9 @@ const defaultDeps: OnboardDeps = {
 };
 
 export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps = defaultDeps): Promise<OnboardFlowResult> {
-  const workspaceRoot = await resolveWorkspaceRoot(options.cwd);
+  const workspaceRoot = await resolveWorkspaceRootOrManaged(options.cwd, { bootstrapIfMissing: true });
   if (!workspaceRoot) {
-    throw new Error("Could not find a pnpm workspace root. Run this command from inside the Bopodev repo.");
+    throw new Error("Could not find or bootstrap a Bopodev workspace root.");
   }
 
   printBanner();

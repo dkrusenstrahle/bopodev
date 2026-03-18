@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 export interface CommandResult {
@@ -104,6 +105,91 @@ export async function resolveWorkspaceRoot(startDir: string): Promise<string | n
     }
     cursor = parent;
   }
+}
+
+export interface ResolveManagedWorkspaceOptions {
+  bootstrapIfMissing?: boolean;
+}
+
+export async function resolveWorkspaceRootOrManaged(
+  startDir: string,
+  options?: ResolveManagedWorkspaceOptions
+): Promise<string | null> {
+  const directWorkspace = await resolveWorkspaceRoot(startDir);
+  if (directWorkspace) {
+    return directWorkspace;
+  }
+
+  const managedWorkspace = resolveManagedWorkspacePath();
+  const managedResolved = await resolveWorkspaceRoot(managedWorkspace);
+  if (managedResolved) {
+    return managedResolved;
+  }
+
+  if (!options?.bootstrapIfMissing) {
+    return null;
+  }
+
+  await bootstrapManagedWorkspace(managedWorkspace);
+  return await resolveWorkspaceRoot(managedWorkspace);
+}
+
+export function resolveManagedWorkspacePath(): string {
+  if (process.env.BOPO_CLI_WORKSPACE_ROOT?.trim()) {
+    return resolve(expandHomePrefix(process.env.BOPO_CLI_WORKSPACE_ROOT.trim()));
+  }
+  const instanceRoot = resolveInstanceRoot();
+  return join(instanceRoot, "workspace", "bopodev");
+}
+
+async function bootstrapManagedWorkspace(workspacePath: string): Promise<void> {
+  const parent = resolve(workspacePath, "..");
+  await mkdir(parent, { recursive: true });
+
+  if (await fileExists(workspacePath)) {
+    const managedResolved = await resolveWorkspaceRoot(workspacePath);
+    if (managedResolved) {
+      return;
+    }
+    throw new Error(
+      `Managed workspace path exists but is not a valid Bopodev workspace: ${workspacePath}\n` +
+        "Set BOPO_CLI_WORKSPACE_ROOT to another empty path or remove the existing directory and rerun onboarding."
+    );
+  }
+
+  const repository = process.env.BOPO_REPO_URL?.trim() || "https://github.com/dkrusenstrahle/bopodev.git";
+  const requestedRef = process.env.BOPO_REPO_REF?.trim();
+  const cloneArgs = requestedRef
+    ? ["clone", "--depth", "1", "--branch", requestedRef, repository, workspacePath]
+    : ["clone", "--depth", "1", repository, workspacePath];
+  const cloneResult = await runCommandCapture("git", cloneArgs, { timeoutMs: 180_000 });
+  if (!cloneResult.ok) {
+    const details = [cloneResult.stderr, cloneResult.stdout].filter((value) => value.trim().length > 0).join("\n").trim();
+    throw new Error(
+      details.length > 0
+        ? details
+        : `Failed to bootstrap managed workspace from ${repository} (exit code: ${String(cloneResult.code)}).`
+    );
+  }
+}
+
+function resolveInstanceRoot(): string {
+  if (process.env.BOPO_INSTANCE_ROOT?.trim()) {
+    return resolve(expandHomePrefix(process.env.BOPO_INSTANCE_ROOT.trim()));
+  }
+  const bopoHome = process.env.BOPO_HOME?.trim() ? expandHomePrefix(process.env.BOPO_HOME.trim()) : join(homedir(), ".bopodev");
+  const instanceId = process.env.BOPO_INSTANCE_ID?.trim() || "default";
+  return resolve(bopoHome, "instances", instanceId);
+}
+
+function expandHomePrefix(value: string): string {
+  if (value === "~") {
+    return homedir();
+  }
+  if (value.startsWith("~/")) {
+    return resolve(homedir(), value.slice(2));
+  }
+  return value;
 }
 
 async function fileExists(path: string): Promise<boolean> {

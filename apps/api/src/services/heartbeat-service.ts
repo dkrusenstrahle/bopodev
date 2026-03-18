@@ -87,7 +87,15 @@ export async function claimIssuesForAgent(
         AND assignee_agent_id = ${agentId}
         AND status IN ('todo', 'in_progress')
         AND is_claimed = false
-      ORDER BY updated_at ASC
+      ORDER BY
+        CASE priority
+          WHEN 'urgent' THEN 0
+          WHEN 'high' THEN 1
+          WHEN 'medium' THEN 2
+          WHEN 'low' THEN 3
+          ELSE 4
+        END ASC,
+        updated_at ASC
       LIMIT ${maxItems}
       FOR UPDATE SKIP LOCKED
     )

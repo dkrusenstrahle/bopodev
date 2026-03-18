@@ -5,7 +5,7 @@
 }
 
 .propertyRowContainer1 {
-  @apply space-y-1.5 py-1 text-base leading-6;
+  @apply space-y-1.5 py-1 text-base leading-6 mb-2;
 }
 
 .propertyRowContainer2 {
@@ -102,7 +102,7 @@
 }
 
 .issueSidebarCardContent {
-  @apply space-y-2;
+  @apply space-y-6;
 }
 
 .issueSidebarStats {

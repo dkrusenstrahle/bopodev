@@ -2,7 +2,7 @@
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import type { IssueStatus } from "bopodev-contracts";
+import type { IssuePriority, IssueStatus } from "bopodev-contracts";
 import { ApiError, apiPost, apiPostFormData, apiPut } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +52,19 @@ const issueStatusOptions: Array<{ value: IssueStatus; label: string }> = [
   { value: "done", label: "Done" },
   { value: "canceled", label: "Canceled" }
 ];
+const issuePriorityOptions: Array<{ value: IssuePriority; label: string }> = [
+  { value: "none", label: "None" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" }
+];
+function normalizeIssuePriority(value: string | null | undefined): IssuePriority {
+  if (value === "low" || value === "medium" || value === "high" || value === "urgent") {
+    return value;
+  }
+  return "none";
+}
 
 export function CreateIssueModal({
   companyId,
@@ -73,6 +86,7 @@ export function CreateIssueModal({
     title: string;
     body?: string | null;
     status: IssueStatus;
+    priority?: string | null;
     assigneeAgentId?: string | null;
     labels?: string[];
   };
@@ -88,6 +102,7 @@ export function CreateIssueModal({
   const [title, setTitle] = useState(issue?.title ?? "");
   const [body, setBody] = useState(issue?.body ?? "");
   const [status, setStatus] = useState<IssueStatus>(issue?.status ?? "todo");
+  const [priority, setPriority] = useState<IssuePriority>(normalizeIssuePriority(issue?.priority));
   const [assigneeAgentId, setAssigneeAgentId] = useState<string>(issue?.assigneeAgentId ?? "unassigned");
   const [labels, setLabels] = useState(issue?.labels?.join(", ") ?? "");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -100,6 +115,7 @@ export function CreateIssueModal({
     setTitle(issue?.title ?? "");
     setBody(issue?.body ?? "");
     setStatus(issue?.status ?? "todo");
+    setPriority(normalizeIssuePriority(issue?.priority));
     setAssigneeAgentId(issue?.assigneeAgentId ?? "unassigned");
     setLabels(issue?.labels?.join(", ") ?? "");
     setSelectedFiles([]);
@@ -127,6 +143,7 @@ export function CreateIssueModal({
         title,
         body,
         status,
+        priority,
         assigneeAgentId: assigneeAgentId === "unassigned" ? null : assigneeAgentId,
         labels: labels
           .split(",")
@@ -152,6 +169,7 @@ export function CreateIssueModal({
         setTitle("");
         setBody("");
         setStatus("todo");
+        setPriority("none");
         setAssigneeAgentId("unassigned");
         setLabels("");
       }
@@ -224,6 +242,21 @@ export function CreateIssueModal({
                   </SelectTrigger>
                   <SelectContent>
                     {issueStatusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel>Priority</FieldLabel>
+                <Select value={priority} onValueChange={(value) => setPriority(value as IssuePriority)}>
+                  <SelectTrigger className={styles.createIssueModalSelectTrigger}>
+                    <SelectValue placeholder="Select a priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {issuePriorityOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>

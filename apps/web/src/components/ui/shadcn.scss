@@ -1171,7 +1171,7 @@ body {
   @apply [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold;
   @apply [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold;
   @apply [&_p]:my-2;
-  @apply [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5;
+  @apply [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-10 [&_ul]:pt-1;
   @apply [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5;
   @apply [&_li]:my-1;
   @apply [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2;

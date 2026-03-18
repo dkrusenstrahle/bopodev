@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import type { IssueStatus } from "bopodev-contracts";
+import type { IssuePriority, IssueStatus } from "bopodev-contracts";
 import { AGENT_ROLE_LABELS, AGENT_ROLE_KEYS, type AgentRoleKey } from "bopodev-contracts";
 import { ChevronDownIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -131,8 +131,22 @@ const issueStatusOptions = [
   { value: "done", label: "Done" },
   { value: "canceled", label: "Canceled" }
 ] as const;
+const issuePriorityOptions = [
+  { value: "none", label: "None" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" }
+] as const;
 const boardRecipientKey = "board:all";
 const boardRecipientLabel = "Board";
+
+function normalizeIssuePriority(value: string | null | undefined): IssuePriority {
+  if (value === "low" || value === "medium" || value === "high" || value === "urgent") {
+    return value;
+  }
+  return "none";
+}
 
 function makeRecipientKey(recipientType: "agent" | "board" | "member", recipientId: string | null) {
   return `${recipientType}:${recipientId ?? "all"}`;
@@ -626,6 +640,7 @@ export function IssueDetailPageClient({
     title?: string;
     body?: string | null;
     status?: IssueStatus;
+    priority?: IssuePriority;
     assigneeAgentId?: string | null;
     labels?: string[];
   }) {
@@ -1075,8 +1090,27 @@ export function IssueDetailPageClient({
               </SelectContent>
             </Select>
           </Field>
+          
+          <Field>
+            <FieldLabel>Priority</FieldLabel>
+            <Select
+              value={normalizeIssuePriority(issue.priority)}
+              onValueChange={(value) => void updateIssue({ priority: value as IssuePriority })}
+            >
+              <SelectTrigger className={styles.issueDetailSelectTrigger}>
+                <SelectValue placeholder="Select a priority" />
+              </SelectTrigger>
+              <SelectContent>
+                {issuePriorityOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
-          <Field className="mt-6">
+          <Field>
             <FieldLabel>Assigned agent</FieldLabel>
             <Select
               value={issue.assigneeAgentId ?? "unassigned"}
@@ -1100,7 +1134,6 @@ export function IssueDetailPageClient({
 
       <Card>
         <CardContent className={styles.issueSidebarCardContent}>
-          <PropertyRow label="Priority" value={issue.priority} />
           <PropertyRow label="Labels" value={issue.labels.length > 0 ? issue.labels.join(", ") : "No labels"} />
           <PropertyRow label="Assignee" value={selectedAssignee ? `${selectedAssignee.name}` : "Unassigned"} />
           <PropertyRow

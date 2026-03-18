@@ -507,6 +507,10 @@ export async function bootstrapDatabase(dbPath?: string) {
       ON issues (company_id, status, updated_at);
   `);
   await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_issues_assignee_claim_priority
+      ON issues (company_id, assignee_agent_id, is_claimed, status, priority, updated_at);
+  `);
+  await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_issue_attachments_company_issue
       ON issue_attachments (company_id, issue_id, created_at DESC);
   `);

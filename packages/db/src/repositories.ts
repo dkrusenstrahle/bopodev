@@ -4,6 +4,7 @@ import type { BopoDb } from "./client";
 import {
   activityLogs,
   agents,
+  attentionInboxStates,
   approvalInboxStates,
   approvalRequests,
   auditEvents,
@@ -1307,6 +1308,147 @@ export async function clearApprovalInboxDismissed(
       target: [approvalInboxStates.companyId, approvalInboxStates.actorId, approvalInboxStates.approvalId],
       set: {
         dismissedAt: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`
+      }
+    });
+}
+
+export async function listAttentionInboxStates(db: BopoDb, companyId: string, actorId: string) {
+  return db
+    .select()
+    .from(attentionInboxStates)
+    .where(and(eq(attentionInboxStates.companyId, companyId), eq(attentionInboxStates.actorId, actorId)))
+    .orderBy(desc(attentionInboxStates.updatedAt));
+}
+
+export async function markAttentionInboxSeen(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    actorId: string;
+    itemKey: string;
+    seenAt?: Date;
+  }
+) {
+  const seenAt = input.seenAt ?? new Date();
+  await db
+    .insert(attentionInboxStates)
+    .values({
+      companyId: input.companyId,
+      actorId: input.actorId,
+      itemKey: input.itemKey,
+      seenAt
+    })
+    .onConflictDoUpdate({
+      target: [attentionInboxStates.companyId, attentionInboxStates.actorId, attentionInboxStates.itemKey],
+      set: {
+        seenAt,
+        updatedAt: sql`CURRENT_TIMESTAMP`
+      }
+    });
+}
+
+export async function markAttentionInboxAcknowledged(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    actorId: string;
+    itemKey: string;
+    acknowledgedAt?: Date;
+  }
+) {
+  const acknowledgedAt = input.acknowledgedAt ?? new Date();
+  await db
+    .insert(attentionInboxStates)
+    .values({
+      companyId: input.companyId,
+      actorId: input.actorId,
+      itemKey: input.itemKey,
+      acknowledgedAt
+    })
+    .onConflictDoUpdate({
+      target: [attentionInboxStates.companyId, attentionInboxStates.actorId, attentionInboxStates.itemKey],
+      set: {
+        acknowledgedAt,
+        updatedAt: sql`CURRENT_TIMESTAMP`
+      }
+    });
+}
+
+export async function markAttentionInboxDismissed(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    actorId: string;
+    itemKey: string;
+    dismissedAt?: Date;
+  }
+) {
+  const dismissedAt = input.dismissedAt ?? new Date();
+  await db
+    .insert(attentionInboxStates)
+    .values({
+      companyId: input.companyId,
+      actorId: input.actorId,
+      itemKey: input.itemKey,
+      dismissedAt
+    })
+    .onConflictDoUpdate({
+      target: [attentionInboxStates.companyId, attentionInboxStates.actorId, attentionInboxStates.itemKey],
+      set: {
+        dismissedAt,
+        updatedAt: sql`CURRENT_TIMESTAMP`
+      }
+    });
+}
+
+export async function clearAttentionInboxDismissed(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    actorId: string;
+    itemKey: string;
+  }
+) {
+  await db
+    .insert(attentionInboxStates)
+    .values({
+      companyId: input.companyId,
+      actorId: input.actorId,
+      itemKey: input.itemKey,
+      dismissedAt: null
+    })
+    .onConflictDoUpdate({
+      target: [attentionInboxStates.companyId, attentionInboxStates.actorId, attentionInboxStates.itemKey],
+      set: {
+        dismissedAt: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`
+      }
+    });
+}
+
+export async function markAttentionInboxResolved(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    actorId: string;
+    itemKey: string;
+    resolvedAt?: Date;
+  }
+) {
+  const resolvedAt = input.resolvedAt ?? new Date();
+  await db
+    .insert(attentionInboxStates)
+    .values({
+      companyId: input.companyId,
+      actorId: input.actorId,
+      itemKey: input.itemKey,
+      resolvedAt
+    })
+    .onConflictDoUpdate({
+      target: [attentionInboxStates.companyId, attentionInboxStates.actorId, attentionInboxStates.itemKey],
+      set: {
+        resolvedAt,
         updatedAt: sql`CURRENT_TIMESTAMP`
       }
     });

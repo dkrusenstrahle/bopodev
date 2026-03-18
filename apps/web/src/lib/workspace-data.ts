@@ -5,6 +5,7 @@ import {
   AuditEventSchema,
   CompanySchema,
   CostLedgerEntrySchema,
+  BoardAttentionListResponseSchema,
   GoalSchema,
   HeartbeatRunDetailSchema,
   IssueSchema,
@@ -110,6 +111,37 @@ export interface WorkspaceData {
     dismissedAt: string | null;
     isPending: boolean;
   }>;
+  attentionItems: Array<{
+    key: string;
+    category:
+      | "approval_required"
+      | "blocker_escalation"
+      | "budget_hard_stop"
+      | "stalled_work"
+      | "run_failure_spike"
+      | "board_mentioned_comment";
+    severity: "info" | "warning" | "critical";
+    requiredActor: "board" | "member" | "agent" | "system";
+    title: string;
+    contextSummary: string;
+    actionLabel: string;
+    actionHref: string;
+    impactSummary: string;
+    evidence: {
+      issueId?: string;
+      runId?: string;
+      projectId?: string;
+      approvalId?: string;
+      commentId?: string;
+      agentId?: string;
+    };
+    sourceTimestamp: string;
+    state: "open" | "acknowledged" | "resolved" | "dismissed";
+    seenAt: string | null;
+    acknowledgedAt: string | null;
+    dismissedAt: string | null;
+    resolvedAt: string | null;
+  }>;
   auditEvents: Array<{
     id: string;
     eventType: string;
@@ -202,6 +234,7 @@ type WorkspaceDataSection =
   | "goals"
   | "approvals"
   | "governanceInbox"
+  | "attentionItems"
   | "auditEvents"
   | "costEntries"
   | "projects"
@@ -289,6 +322,14 @@ async function loadGovernanceInbox(companyId: string) {
   return parseApiData("governance inbox", GovernanceInboxResponseSchema, result.data).items;
 }
 
+async function loadAttentionItems(companyId: string) {
+  const result = (await apiGet("/attention", companyId)) as ApiResult<{
+    actorId: string;
+    items: WorkspaceData["attentionItems"];
+  }>;
+  return parseApiData("board attention", BoardAttentionListResponseSchema, result.data).items;
+}
+
 async function loadAuditEvents(companyId: string) {
   const result = (await apiGet("/observability/logs", companyId)) as ApiResult<WorkspaceData["auditEvents"]>;
   return parseApiData("audit events", AuditEventSchema.array(), result.data);
@@ -339,6 +380,7 @@ export async function loadWorkspaceData(
     goals: true,
     approvals: true,
     governanceInbox: false,
+    attentionItems: false,
     auditEvents: true,
     costEntries: true,
     projects: true,
@@ -355,6 +397,7 @@ export async function loadWorkspaceData(
     goals: [],
     approvals: [],
     governanceInbox: [],
+    attentionItems: [],
     auditEvents: [],
     costEntries: [],
     projects: [],
@@ -381,7 +424,7 @@ export async function loadWorkspaceData(
   }
 
   const companyId = activeCompany.id;
-  const [issues, agents, heartbeatRuns, goals, approvals, governanceInbox, auditEvents, costEntries, projects, templates] = await Promise.all(
+  const [issues, agents, heartbeatRuns, goals, approvals, governanceInbox, attentionItems, auditEvents, costEntries, projects, templates] = await Promise.all(
     [
       include.issues ? loadIssues(companyId) : Promise.resolve([]),
       include.agents ? loadAgents(companyId) : Promise.resolve([]),
@@ -389,6 +432,7 @@ export async function loadWorkspaceData(
       include.goals ? loadGoals(companyId) : Promise.resolve([]),
       include.approvals ? loadApprovals(companyId) : Promise.resolve([]),
       include.governanceInbox ? loadGovernanceInbox(companyId) : Promise.resolve([]),
+      include.attentionItems ? loadAttentionItems(companyId) : Promise.resolve([]),
       include.auditEvents ? loadAuditEvents(companyId) : Promise.resolve([]),
       include.costEntries ? loadCostEntries(companyId) : Promise.resolve([]),
       include.projects ? loadProjects(companyId) : Promise.resolve([]),
@@ -406,6 +450,7 @@ export async function loadWorkspaceData(
     goals,
     approvals,
     governanceInbox,
+    attentionItems,
     auditEvents,
     costEntries,
     projects,

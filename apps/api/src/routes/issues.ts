@@ -40,6 +40,7 @@ import { isInsidePath, normalizeCompanyWorkspacePath, resolveProjectWorkspacePat
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
 import { triggerIssueCommentDispatchWorker } from "../services/comment-recipient-dispatch-service";
+import { publishAttentionSnapshot } from "../realtime/attention";
 
 const createIssueSchema = z.object({
   projectId: z.string().min(1),
@@ -755,6 +756,9 @@ async function createIssueCommentWithRecipients(
     entityId: comment.id,
     payload: comment
   });
+  if (normalizedRecipients.some((recipient) => recipient.recipientType === "board")) {
+    await publishAttentionSnapshot(ctx.db, ctx.realtimeHub, req.companyId!);
+  }
   triggerIssueCommentDispatchWorker(ctx.db, req.companyId!, {
     requestId: req.requestId,
     realtimeHub: ctx.realtimeHub,

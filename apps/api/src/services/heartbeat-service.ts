@@ -34,6 +34,7 @@ import { isInsidePath, normalizeCompanyWorkspacePath, resolveProjectWorkspacePat
 import { assertRuntimeCwdForCompany, getProjectWorkspaceContextMap, hasText, resolveAgentFallbackWorkspace } from "../lib/workspace-policy";
 import type { RealtimeHub } from "../realtime/hub";
 import { createHeartbeatRunsRealtimeEvent } from "../realtime/heartbeat-runs";
+import { publishAttentionSnapshot } from "../realtime/attention";
 import { publishOfficeOccupantForAgent } from "../realtime/office-space";
 import { appendProjectBudgetUsage, checkAgentBudget, checkProjectBudget } from "./budget-service";
 import { appendDurableFact, loadAgentMemoryContext, persistHeartbeatMemory } from "./memory-file-service";
@@ -347,7 +348,7 @@ export async function runHeartbeatForAgent(
       message
     });
     for (const blockedProject of blockedProjectBudgetChecks) {
-      await ensureProjectBudgetOverrideApprovalRequest(db, {
+      const approvalId = await ensureProjectBudgetOverrideApprovalRequest(db, {
         companyId,
         projectId: blockedProject.projectId,
         utilizationPct: blockedProject.utilizationPct,
@@ -355,6 +356,9 @@ export async function runHeartbeatForAgent(
         usedBudgetUsd: blockedProject.usedBudgetUsd,
         runId
       });
+      if (approvalId && options?.realtimeHub) {
+        await publishAttentionSnapshot(db, options.realtimeHub, companyId);
+      }
       await appendAuditEvent(db, {
         companyId,
         actorType: "system",
@@ -450,7 +454,7 @@ export async function runHeartbeatForAgent(
   }
 
   if (!budgetCheck.allowed) {
-    await ensureBudgetOverrideApprovalRequest(db, {
+    const approvalId = await ensureBudgetOverrideApprovalRequest(db, {
       companyId,
       agentId,
       utilizationPct: budgetCheck.utilizationPct,
@@ -458,6 +462,9 @@ export async function runHeartbeatForAgent(
       monthlyBudgetUsd: Number(agent.monthlyBudgetUsd),
       runId
     });
+    if (approvalId && options?.realtimeHub) {
+      await publishAttentionSnapshot(db, options.realtimeHub, companyId);
+    }
     await appendAuditEvent(db, {
       companyId,
       actorType: "system",
@@ -2057,7 +2064,7 @@ async function ensureBudgetOverrideApprovalRequest(
     monthlyBudgetUsd: number;
     runId: string;
   }
-) {
+): Promise<string | null> {
   const pendingOverrides = await db
     .select({ id: approvalRequests.id, payloadJson: approvalRequests.payloadJson })
     .from(approvalRequests)
@@ -2077,7 +2084,7 @@ async function ensureBudgetOverrideApprovalRequest(
     }
   });
   if (alreadyPending) {
-    return;
+    return null;
   }
   const recommendedAdditionalBudgetUsd = Math.max(1, Math.ceil(Math.max(input.monthlyBudgetUsd * 0.25, 1)));
   const approvalId = await createApprovalRequest(db, {
@@ -2110,6 +2117,7 @@ async function ensureBudgetOverrideApprovalRequest(
       additionalBudgetUsd: recommendedAdditionalBudgetUsd
     }
   });
+  return approvalId;
 }
 
 async function ensureProjectBudgetOverrideApprovalRequest(
@@ -2122,7 +2130,7 @@ async function ensureProjectBudgetOverrideApprovalRequest(
     monthlyBudgetUsd: number;
     runId: string;
   }
-) {
+): Promise<string | null> {
   const pendingOverrides = await db
     .select({ id: approvalRequests.id, payloadJson: approvalRequests.payloadJson })
     .from(approvalRequests)
@@ -2142,7 +2150,7 @@ async function ensureProjectBudgetOverrideApprovalRequest(
     }
   });
   if (alreadyPending) {
-    return;
+    return null;
   }
   const recommendedAdditionalBudgetUsd = Math.max(1, Math.ceil(Math.max(input.monthlyBudgetUsd * 0.25, 1)));
   const approvalId = await createApprovalRequest(db, {
@@ -2175,6 +2183,7 @@ async function ensureProjectBudgetOverrideApprovalRequest(
       additionalBudgetUsd: recommendedAdditionalBudgetUsd
     }
   });
+  return approvalId;
 }
 
 function sanitizeAgentSummaryCommentBody(body: string) {

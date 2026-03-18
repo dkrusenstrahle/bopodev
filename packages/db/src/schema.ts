@@ -257,6 +257,24 @@ export const approvalInboxStates = pgTable(
   (table) => [primaryKey({ columns: [table.companyId, table.actorId, table.approvalId] })]
 );
 
+export const attentionInboxStates = pgTable(
+  "attention_inbox_states",
+  {
+    companyId: text("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").notNull(),
+    itemKey: text("item_key").notNull(),
+    seenAt: timestamp("seen_at", { mode: "date" }),
+    acknowledgedAt: timestamp("acknowledged_at", { mode: "date" }),
+    dismissedAt: timestamp("dismissed_at", { mode: "date" }),
+    resolvedAt: timestamp("resolved_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
+  },
+  (table) => [primaryKey({ columns: [table.companyId, table.actorId, table.itemKey] })]
+);
+
 export const costLedger = pgTable("cost_ledger", {
   id: text("id").primaryKey(),
   companyId: text("company_id")
@@ -429,6 +447,7 @@ export const schema = {
   heartbeatRunMessages,
   approvalRequests,
   approvalInboxStates,
+  attentionInboxStates,
   costLedger,
   auditEvents,
   plugins,

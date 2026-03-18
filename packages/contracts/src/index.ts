@@ -742,6 +742,77 @@ export const GovernanceInboxResponseSchema = z.object({
 });
 export type GovernanceInboxResponse = z.infer<typeof GovernanceInboxResponseSchema>;
 
+export const BoardAttentionCategorySchema = z.enum([
+  "approval_required",
+  "blocker_escalation",
+  "budget_hard_stop",
+  "stalled_work",
+  "run_failure_spike",
+  "board_mentioned_comment"
+]);
+export type BoardAttentionCategory = z.infer<typeof BoardAttentionCategorySchema>;
+
+export const BoardAttentionSeveritySchema = z.enum(["info", "warning", "critical"]);
+export type BoardAttentionSeverity = z.infer<typeof BoardAttentionSeveritySchema>;
+
+export const BoardAttentionRequiredActorSchema = z.enum(["board", "member", "agent", "system"]);
+export type BoardAttentionRequiredActor = z.infer<typeof BoardAttentionRequiredActorSchema>;
+
+export const BoardAttentionStateSchema = z.enum(["open", "acknowledged", "resolved", "dismissed"]);
+export type BoardAttentionState = z.infer<typeof BoardAttentionStateSchema>;
+
+export const BoardAttentionEvidenceSchema = z.object({
+  issueId: EntityIdSchema.optional(),
+  runId: EntityIdSchema.optional(),
+  projectId: EntityIdSchema.optional(),
+  approvalId: EntityIdSchema.optional(),
+  commentId: EntityIdSchema.optional(),
+  agentId: EntityIdSchema.optional()
+});
+export type BoardAttentionEvidence = z.infer<typeof BoardAttentionEvidenceSchema>;
+
+export const BoardAttentionItemSchema = z.object({
+  key: z.string().min(1),
+  category: BoardAttentionCategorySchema,
+  severity: BoardAttentionSeveritySchema,
+  requiredActor: BoardAttentionRequiredActorSchema,
+  title: z.string().min(1),
+  contextSummary: z.string().min(1),
+  actionLabel: z.string().min(1),
+  actionHref: z.string().min(1),
+  impactSummary: z.string().min(1),
+  evidence: BoardAttentionEvidenceSchema.default({}),
+  sourceTimestamp: z.string(),
+  state: BoardAttentionStateSchema,
+  seenAt: z.string().nullable(),
+  acknowledgedAt: z.string().nullable(),
+  dismissedAt: z.string().nullable(),
+  resolvedAt: z.string().nullable()
+});
+export type BoardAttentionItem = z.infer<typeof BoardAttentionItemSchema>;
+
+export const BoardAttentionListResponseSchema = z.object({
+  actorId: z.string().min(1),
+  items: z.array(BoardAttentionItemSchema)
+});
+export type BoardAttentionListResponse = z.infer<typeof BoardAttentionListResponseSchema>;
+
+export const BoardAttentionNotificationEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("attention.snapshot"),
+    items: z.array(BoardAttentionItemSchema)
+  }),
+  z.object({
+    type: z.literal("attention.updated"),
+    item: BoardAttentionItemSchema
+  }),
+  z.object({
+    type: z.literal("attention.resolved"),
+    key: z.string().min(1)
+  })
+]);
+export type BoardAttentionNotificationEvent = z.infer<typeof BoardAttentionNotificationEventSchema>;
+
 export const OfficeRoomSchema = z.enum(["waiting_room", "work_space", "security"]);
 export type OfficeRoom = z.infer<typeof OfficeRoomSchema>;
 
@@ -885,7 +956,7 @@ export const HeartbeatRunRealtimeEventSchema = z.discriminatedUnion("type", [
 ]);
 export type HeartbeatRunRealtimeEvent = z.infer<typeof HeartbeatRunRealtimeEventSchema>;
 
-export const RealtimeChannelSchema = z.enum(["governance", "office-space", "heartbeat-runs"]);
+export const RealtimeChannelSchema = z.enum(["governance", "office-space", "heartbeat-runs", "attention"]);
 export type RealtimeChannel = z.infer<typeof RealtimeChannelSchema>;
 
 export const RealtimeEventEnvelopeSchema = z.discriminatedUnion("channel", [
@@ -900,6 +971,10 @@ export const RealtimeEventEnvelopeSchema = z.discriminatedUnion("channel", [
   z.object({
     channel: z.literal("heartbeat-runs"),
     event: HeartbeatRunRealtimeEventSchema
+  }),
+  z.object({
+    channel: z.literal("attention"),
+    event: BoardAttentionNotificationEventSchema
   })
 ]);
 export type RealtimeEventEnvelope = z.infer<typeof RealtimeEventEnvelopeSchema>;
@@ -928,6 +1003,12 @@ export const RealtimeEventMessageSchema = z.discriminatedUnion("channel", [
     companyId: EntityIdSchema,
     channel: z.literal("heartbeat-runs"),
     event: HeartbeatRunRealtimeEventSchema
+  }),
+  z.object({
+    kind: z.literal("event"),
+    companyId: EntityIdSchema,
+    channel: z.literal("attention"),
+    event: BoardAttentionNotificationEventSchema
   })
 ]);
 

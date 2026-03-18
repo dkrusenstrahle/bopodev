@@ -167,7 +167,7 @@ function resolveAgentRoleText(
   }
   const roleKey = normalizeRoleKey(roleKeyInput);
   if (roleKey) {
-    return AGENT_ROLE_LABELS[roleKey];
+    return AGENT_ROLE_LABELS[roleKey as keyof typeof AGENT_ROLE_LABELS];
   }
   return AGENT_ROLE_LABELS.general;
 }

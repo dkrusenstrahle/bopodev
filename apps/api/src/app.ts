@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import type { AppContext } from "./context";
 import { createAgentsRouter } from "./routes/agents";
 import { createAuthRouter } from "./routes/auth";
+import { createAttentionRouter } from "./routes/attention";
 import { createCompaniesRouter } from "./routes/companies";
 import { createGoalsRouter } from "./routes/goals";
 import { createGovernanceRouter } from "./routes/governance";
@@ -114,6 +115,7 @@ export function createApp(ctx: AppContext) {
   });
 
   app.use("/auth", createAuthRouter(ctx));
+  app.use("/attention", createAttentionRouter(ctx));
   app.use("/companies", createCompaniesRouter(ctx));
   app.use("/projects", createProjectsRouter(ctx));
   app.use("/issues", createIssuesRouter(ctx));

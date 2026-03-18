@@ -10,6 +10,7 @@ import { createApp } from "./app";
 import { loadGovernanceRealtimeSnapshot } from "./realtime/governance";
 import { loadOfficeSpaceRealtimeSnapshot } from "./realtime/office-space";
 import { loadHeartbeatRunsRealtimeSnapshot } from "./realtime/heartbeat-runs";
+import { loadAttentionRealtimeSnapshot } from "./realtime/attention";
 import { attachRealtimeHub } from "./realtime/hub";
 import {
   isAuthenticatedMode,
@@ -106,7 +107,8 @@ async function main() {
     bootstrapLoaders: {
       governance: (companyId) => loadGovernanceRealtimeSnapshot(db, companyId),
       "office-space": (companyId) => loadOfficeSpaceRealtimeSnapshot(db, companyId),
-      "heartbeat-runs": (companyId) => loadHeartbeatRunsRealtimeSnapshot(db, companyId)
+      "heartbeat-runs": (companyId) => loadHeartbeatRunsRealtimeSnapshot(db, companyId),
+      attention: (companyId) => loadAttentionRealtimeSnapshot(db, companyId)
     }
   });
   const app = createApp({ db, deploymentMode, allowedOrigins, getRuntimeHealth, realtimeHub });

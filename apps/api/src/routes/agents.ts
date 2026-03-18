@@ -39,6 +39,7 @@ import { assertRuntimeCwdForCompany, hasText, resolveDefaultRuntimeCwdForCompany
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requireBoardRole, requirePermission } from "../middleware/request-actor";
 import { createGovernanceRealtimeEvent, serializeStoredApproval } from "../realtime/governance";
+import { publishAttentionSnapshot } from "../realtime/attention";
 import {
   publishOfficeOccupantForAgent,
   publishOfficeOccupantForApproval
@@ -413,6 +414,7 @@ export function createAgentsRouter(ctx: AppContext) {
           })
         );
         await publishOfficeOccupantForApproval(ctx.db, ctx.realtimeHub, req.companyId!, approvalId);
+        await publishAttentionSnapshot(ctx.db, ctx.realtimeHub, req.companyId!);
       }
       return sendOk(res, { queuedForApproval: true, approvalId });
     }

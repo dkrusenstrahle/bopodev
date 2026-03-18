@@ -28,7 +28,7 @@ interface ProjectRow {
   plannedStartAt: string | null;
   monthlyBudgetUsd: number;
   usedBudgetUsd: number;
-  budgetWindowStartAt: string | null;
+  budgetWindowStartAt?: string | null;
   executionWorkspacePolicy?: Record<string, unknown> | null;
   workspaces: Array<{
     id: string;

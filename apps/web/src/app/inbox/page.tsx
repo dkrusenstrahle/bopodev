@@ -9,7 +9,8 @@ export default async function InboxPage({
   const { companyId } = await searchParams;
   const workspaceData = await loadWorkspaceData(companyId, {
     include: {
-      governanceInbox: true
+      governanceInbox: true,
+      attentionItems: true
     }
   });
 
@@ -24,6 +25,7 @@ export default async function InboxPage({
       goals={workspaceData.goals}
       approvals={workspaceData.approvals}
       governanceInbox={workspaceData.governanceInbox}
+      attentionItems={workspaceData.attentionItems}
       auditEvents={workspaceData.auditEvents}
       costEntries={workspaceData.costEntries}
       projects={workspaceData.projects}

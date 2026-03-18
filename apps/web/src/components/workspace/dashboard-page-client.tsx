@@ -29,7 +29,7 @@ export function DashboardPageClient(props: WorkspacePageProps) {
 
     const unsubscribe = subscribeToRealtime({
       companyId: props.companyId,
-      channels: ["governance", "office-space", "heartbeat-runs"],
+      channels: ["governance", "office-space", "heartbeat-runs", "attention"],
       onMessage: (message) => {
         if (message.kind !== "event") {
           return;
@@ -37,7 +37,8 @@ export function DashboardPageClient(props: WorkspacePageProps) {
         if (
           message.channel === "governance" ||
           message.channel === "office-space" ||
-          message.channel === "heartbeat-runs"
+          message.channel === "heartbeat-runs" ||
+          message.channel === "attention"
         ) {
           scheduleRefresh();
         }

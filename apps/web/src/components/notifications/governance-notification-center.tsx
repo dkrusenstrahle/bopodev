@@ -4,7 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ApprovalRequest } from "bopodev-contracts";
+import type { ApprovalRequest, BoardAttentionItem } from "bopodev-contracts";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ type GovernanceNotificationTestDetail = {
 export function GovernanceNotificationCenter({ companyId }: { companyId: string | null }) {
   const router = useRouter();
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [attentionItems, setAttentionItems] = useState<BoardAttentionItem[]>([]);
   const [dismissedApprovalIds, setDismissedApprovalIds] = useState<Set<string>>(new Set());
   const dismissedApprovalIdsRef = useRef<Set<string>>(new Set());
   const seenApprovalIdsRef = useRef(new Set<string>());
@@ -78,6 +79,28 @@ export function GovernanceNotificationCenter({ companyId }: { companyId: string 
 
   useEffect(() => {
     if (!companyId) {
+      setAttentionItems([]);
+      return;
+    }
+    let cancelled = false;
+    void apiGet<{ actorId: string; items: BoardAttentionItem[] }>("/attention", companyId)
+      .then((response) => {
+        if (!cancelled) {
+          setAttentionItems(response.data.items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAttentionItems([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId) {
       setApprovals([]);
       return;
     }
@@ -101,28 +124,45 @@ export function GovernanceNotificationCenter({ companyId }: { companyId: string 
 
     const unsubscribe = subscribeToRealtime({
       companyId,
-      channels: ["governance"],
+      channels: ["governance", "attention"],
       onMessage: (message) => {
-        if (message.kind !== "event" || message.channel !== "governance") {
+        if (message.kind !== "event") {
           return;
         }
-
-        const governanceEvent = message.event;
-
-        switch (governanceEvent.type) {
-          case "approvals.snapshot":
-            setApprovals(applyVisibleApprovals(governanceEvent.approvals));
-            return;
-          case "approval.created":
-            setApprovals((current) =>
-              applyVisibleApprovals([governanceEvent.approval, ...current.filter((approval) => approval.id !== governanceEvent.approval.id)])
-            );
+        if (message.channel === "governance") {
+          const governanceEvent = message.event;
+          switch (governanceEvent.type) {
+            case "approvals.snapshot":
+              setApprovals(applyVisibleApprovals(governanceEvent.approvals));
+              return;
+            case "approval.created":
+              setApprovals((current) =>
+                applyVisibleApprovals([governanceEvent.approval, ...current.filter((approval) => approval.id !== governanceEvent.approval.id)])
+              );
+              scheduleRefresh();
+              return;
+            case "approval.resolved":
+              setApprovals((current) => current.filter((approval) => approval.id !== governanceEvent.approval.id));
+              scheduleRefresh();
+              return;
+          }
+        }
+        if (message.channel === "attention") {
+          const event = message.event;
+          if (event.type === "attention.snapshot") {
+            setAttentionItems(event.items);
             scheduleRefresh();
             return;
-          case "approval.resolved":
-            setApprovals((current) => current.filter((approval) => approval.id !== governanceEvent.approval.id));
+          }
+          if (event.type === "attention.updated") {
+            setAttentionItems((current) => [event.item, ...current.filter((item) => item.key !== event.item.key)]);
             scheduleRefresh();
             return;
+          }
+          if (event.type === "attention.resolved") {
+            setAttentionItems((current) => current.map((item) => (item.key === event.key ? { ...item, state: "resolved" } : item)));
+            scheduleRefresh();
+          }
         }
       }
     });
@@ -219,6 +259,66 @@ export function GovernanceNotificationCenter({ companyId }: { companyId: string 
       }
     }
   }, [approvals, companyId]);
+
+  useEffect(() => {
+    if (!companyId) {
+      return;
+    }
+    const openItems = attentionItems.filter(
+      (item) =>
+        item.category !== "approval_required" &&
+        (item.state === "open" || item.state === "acknowledged") &&
+        item.severity !== "info"
+    );
+    for (const item of openItems) {
+      const toastId = `attention:${companyId}:${item.key}`;
+      toast.custom(
+        () => (
+          <div className="pointer-events-auto w-88 rounded-md border bg-background p-4 text-foreground">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-2">
+                <div className="text-sm font-semibold leading-5">{item.title}</div>
+                <div className="text-sm leading-5 text-muted-foreground">{item.contextSummary}</div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                aria-label="Dismiss notification"
+                className="shrink-0"
+                onClick={() => {
+                  toast.dismiss(toastId);
+                  void apiPost(`/attention/${encodeURIComponent(item.key)}/dismiss`, companyId, {});
+                }}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href={`${item.actionHref}?companyId=${encodeURIComponent(companyId)}`}>{item.actionLabel}</a>
+              </Button>
+              {!item.seenAt ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void apiPost(`/attention/${encodeURIComponent(item.key)}/seen`, companyId, {});
+                  }}
+                >
+                  Mark seen
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ),
+        {
+          id: toastId,
+          duration: Infinity
+        }
+      );
+    }
+  }, [attentionItems, companyId]);
 
   useEffect(() => {
     return () => {

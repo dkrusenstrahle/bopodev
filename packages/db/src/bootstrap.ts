@@ -354,6 +354,20 @@ export async function bootstrapDatabase(dbPath?: string) {
     );
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS attention_inbox_states (
+      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      actor_id TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      seen_at TIMESTAMP,
+      acknowledged_at TIMESTAMP,
+      dismissed_at TIMESTAMP,
+      resolved_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (company_id, actor_id, item_key)
+    );
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS cost_ledger (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -555,6 +569,10 @@ export async function bootstrapDatabase(dbPath?: string) {
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_approval_inbox_states_company_actor_updated
       ON approval_inbox_states (company_id, actor_id, updated_at DESC);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_attention_inbox_states_company_actor_updated
+      ON attention_inbox_states (company_id, actor_id, updated_at DESC);
   `);
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_plugin_configs_company_enabled_priority

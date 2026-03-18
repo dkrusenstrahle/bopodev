@@ -7,6 +7,7 @@ import { sendError, sendOk, sendOkValidated } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
 import { createGovernanceRealtimeEvent, serializeStoredApproval } from "../realtime/governance";
+import { publishAttentionSnapshot } from "../realtime/attention";
 import { isApprovalRequired } from "../services/governance-service";
 
 const createGoalSchema = z.object({
@@ -66,6 +67,7 @@ export function createGoalsRouter(ctx: AppContext) {
             approval: serializeStoredApproval(approval)
           })
         );
+        await publishAttentionSnapshot(ctx.db, ctx.realtimeHub, req.companyId!);
       }
       return sendOk(res, { queuedForApproval: true, approvalId });
     }

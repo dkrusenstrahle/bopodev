@@ -15,6 +15,7 @@ import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
 import { createGovernanceRealtimeEvent, serializeStoredApproval } from "../realtime/governance";
+import { publishAttentionSnapshot } from "../realtime/attention";
 import {
   publishOfficeOccupantForAgent,
   publishOfficeOccupantForApproval
@@ -200,6 +201,7 @@ export function createGovernanceRouter(ctx: AppContext) {
           approval: serializeStoredApproval(approval)
         })
       );
+      await publishAttentionSnapshot(ctx.db, ctx.realtimeHub, req.companyId!);
       await publishOfficeOccupantForApproval(ctx.db, ctx.realtimeHub, req.companyId!, approval.id);
       if (approval.requestedByAgentId) {
         await publishOfficeOccupantForAgent(ctx.db, ctx.realtimeHub, req.companyId!, approval.requestedByAgentId);

@@ -6,6 +6,7 @@ import type {
   CostRow,
   GoalRow,
   GovernanceInboxRow,
+  AttentionRow,
   HeartbeatRunRow,
   IssueRow,
   PluginRow,
@@ -23,6 +24,7 @@ export interface WorkspacePageProps {
   goals: GoalRow[];
   approvals: ApprovalRow[];
   governanceInbox?: GovernanceInboxRow[];
+  attentionItems?: AttentionRow[];
   auditEvents: AuditRow[];
   costEntries: CostRow[];
   projects: ProjectRow[];

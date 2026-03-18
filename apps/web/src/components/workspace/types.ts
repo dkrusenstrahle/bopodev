@@ -117,6 +117,38 @@ export interface GovernanceInboxRow {
   isPending: boolean;
 }
 
+export interface AttentionRow {
+  key: string;
+  category:
+    | "approval_required"
+    | "blocker_escalation"
+    | "budget_hard_stop"
+    | "stalled_work"
+    | "run_failure_spike"
+    | "board_mentioned_comment";
+  severity: "info" | "warning" | "critical";
+  requiredActor: "board" | "member" | "agent" | "system";
+  title: string;
+  contextSummary: string;
+  actionLabel: string;
+  actionHref: string;
+  impactSummary: string;
+  evidence: {
+    issueId?: string;
+    runId?: string;
+    projectId?: string;
+    approvalId?: string;
+    commentId?: string;
+    agentId?: string;
+  };
+  sourceTimestamp: string;
+  state: "open" | "acknowledged" | "resolved" | "dismissed";
+  seenAt: string | null;
+  acknowledgedAt: string | null;
+  dismissedAt: string | null;
+  resolvedAt: string | null;
+}
+
 export interface AuditRow {
   id: string;
   eventType: string;
@@ -160,6 +192,7 @@ export interface ProjectRow {
   description: string | null;
   status: "planned" | "active" | "paused" | "blocked" | "completed" | "archived";
   plannedStartAt: string | null;
+  budgetWindowStartAt?: string | null;
   executionWorkspacePolicy?: Record<string, unknown> | null;
   workspaces: Array<{
     id: string;

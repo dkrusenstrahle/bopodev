@@ -292,6 +292,32 @@ interface GovernanceInboxRow {
   isPending: boolean;
 }
 
+interface AttentionRow {
+  key: string;
+  category: "approval_required" | "blocker_escalation" | "budget_hard_stop" | "stalled_work" | "run_failure_spike" | "board_mentioned_comment";
+  severity: "info" | "warning" | "critical";
+  requiredActor: "board" | "member" | "agent" | "system";
+  title: string;
+  contextSummary: string;
+  actionLabel: string;
+  actionHref: string;
+  impactSummary: string;
+  evidence: {
+    issueId?: string;
+    runId?: string;
+    projectId?: string;
+    approvalId?: string;
+    commentId?: string;
+    agentId?: string;
+  };
+  sourceTimestamp: string;
+  state: "open" | "acknowledged" | "resolved" | "dismissed";
+  seenAt: string | null;
+  acknowledgedAt: string | null;
+  dismissedAt: string | null;
+  resolvedAt: string | null;
+}
+
 function describeApprovalPayload(payload: Record<string, unknown> | undefined) {
   if (!payload) {
     return "No payload";
@@ -549,6 +575,10 @@ function formatApprovalActionLabel(action: string) {
   return action.replaceAll("_", " ");
 }
 
+function formatAttentionCategoryLabel(category: AttentionRow["category"]) {
+  return category.replaceAll("_", " ");
+}
+
 function formatRelativeAgeCompact(timestamp: string | null) {
   if (!timestamp) {
     return "n/a";
@@ -618,6 +648,7 @@ export function WorkspaceClient({
   goals,
   approvals,
   governanceInbox = [],
+  attentionItems = [],
   auditEvents,
   costEntries,
   projects,
@@ -634,6 +665,7 @@ export function WorkspaceClient({
   goals: GoalRow[];
   approvals: ApprovalRow[];
   governanceInbox?: GovernanceInboxRow[];
+  attentionItems?: AttentionRow[];
   auditEvents: AuditRow[];
   costEntries: CostRow[];
   projects: ProjectRow[];
@@ -672,6 +704,8 @@ export function WorkspaceClient({
   const [inboxStateFilter, setInboxStateFilter] = useState<"all" | "pending" | "resolved">("all");
   const [inboxSeenFilter, setInboxSeenFilter] = useState<"all" | "seen" | "unseen">("all");
   const [inboxDismissedFilter, setInboxDismissedFilter] = useState<"all" | "active" | "dismissed">("all");
+  const [attentionSeverityFilter, setAttentionSeverityFilter] = useState<"all" | "critical" | "warning" | "info">("all");
+  const [attentionStateFilter, setAttentionStateFilter] = useState<"all" | "open" | "acknowledged" | "dismissed" | "resolved">("open");
   const [pluginsQuery, setPluginsQuery] = useState("");
   const [pluginsStatusFilter, setPluginsStatusFilter] = useState<"all" | "active" | "installed" | "not_installed">("all");
   const [pluginsKindFilter, setPluginsKindFilter] = useState<string>("all");
@@ -753,6 +787,7 @@ export function WorkspaceClient({
         `- Issues: ${issues.length}`,
         `- Approval records: ${approvals.length}`,
         `- Governance inbox items: ${governanceInbox.length}`,
+        `- Board attention items: ${attentionItems.length}`,
         `- Audit events: ${auditEvents.length}`,
         `- Heartbeat runs: ${heartbeatRuns.length}`,
         `- Cost ledger entries: ${costEntries.length}`,
@@ -769,6 +804,7 @@ export function WorkspaceClient({
       issues.length,
       approvals.length,
       governanceInbox.length,
+      attentionItems.length,
       auditEvents.length,
       heartbeatRuns.length,
       costEntries.length,
@@ -901,6 +937,36 @@ export function WorkspaceClient({
     await runCrudAction(async () => {
       await apiPost(`/governance/inbox/${approvalId}/undismiss`, companyId!, {});
     }, "Failed to restore inbox item.", `inbox:${approvalId}:undismiss`);
+  }
+
+  async function markAttentionSeen(itemKey: string) {
+    await runCrudAction(async () => {
+      await apiPost(`/attention/${encodeURIComponent(itemKey)}/seen`, companyId!, {});
+    }, "Failed to mark attention item as seen.", `attention:${itemKey}:seen`);
+  }
+
+  async function acknowledgeAttention(itemKey: string) {
+    await runCrudAction(async () => {
+      await apiPost(`/attention/${encodeURIComponent(itemKey)}/acknowledge`, companyId!, {});
+    }, "Failed to acknowledge attention item.", `attention:${itemKey}:acknowledge`);
+  }
+
+  async function dismissAttention(itemKey: string) {
+    await runCrudAction(async () => {
+      await apiPost(`/attention/${encodeURIComponent(itemKey)}/dismiss`, companyId!, {});
+    }, "Failed to dismiss attention item.", `attention:${itemKey}:dismiss`);
+  }
+
+  async function undismissAttention(itemKey: string) {
+    await runCrudAction(async () => {
+      await apiPost(`/attention/${encodeURIComponent(itemKey)}/undismiss`, companyId!, {});
+    }, "Failed to restore attention item.", `attention:${itemKey}:undismiss`);
+  }
+
+  async function resolveAttention(itemKey: string) {
+    await runCrudAction(async () => {
+      await apiPost(`/attention/${encodeURIComponent(itemKey)}/resolve`, companyId!, {});
+    }, "Failed to resolve attention item.", `attention:${itemKey}:resolve`);
   }
 
   async function installPlugin(pluginId: string) {
@@ -1053,6 +1119,79 @@ export function WorkspaceClient({
     const unseen = governanceInbox.filter((item) => !item.seenAt).length;
     return { total, pending, resolved, dismissed, unseen };
   }, [governanceInbox]);
+  const sortedAttentionItems = useMemo(() => {
+    if (!isInboxNav) {
+      return [];
+    }
+    return [...attentionItems].sort((a, b) => {
+      const stateRank = (state: AttentionRow["state"]) =>
+        state === "open" ? 0 : state === "acknowledged" ? 1 : state === "dismissed" ? 2 : 3;
+      const severityRank = (severity: AttentionRow["severity"]) =>
+        severity === "critical" ? 0 : severity === "warning" ? 1 : 2;
+      const byState = stateRank(a.state) - stateRank(b.state);
+      if (byState !== 0) {
+        return byState;
+      }
+      const bySeverity = severityRank(a.severity) - severityRank(b.severity);
+      if (bySeverity !== 0) {
+        return bySeverity;
+      }
+      return new Date(b.sourceTimestamp).getTime() - new Date(a.sourceTimestamp).getTime();
+    });
+  }, [attentionItems, isInboxNav]);
+  const filteredAttentionItems = useMemo(() => {
+    if (!isInboxNav) {
+      return [];
+    }
+    const normalizedQuery = inboxQuery.trim().toLowerCase();
+    return sortedAttentionItems.filter((item) => {
+      if (attentionStateFilter !== "all" && item.state !== attentionStateFilter) {
+        return false;
+      }
+      if (attentionSeverityFilter !== "all" && item.severity !== attentionSeverityFilter) {
+        return false;
+      }
+      if (inboxSeenFilter === "seen" && !item.seenAt) {
+        return false;
+      }
+      if (inboxSeenFilter === "unseen" && item.seenAt) {
+        return false;
+      }
+      if (inboxDismissedFilter === "active" && item.state === "dismissed") {
+        return false;
+      }
+      if (inboxDismissedFilter === "dismissed" && item.state !== "dismissed") {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+      return (
+        item.title.toLowerCase().includes(normalizedQuery) ||
+        item.contextSummary.toLowerCase().includes(normalizedQuery) ||
+        item.category.toLowerCase().includes(normalizedQuery) ||
+        item.actionLabel.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [
+    attentionSeverityFilter,
+    attentionStateFilter,
+    inboxDismissedFilter,
+    inboxQuery,
+    inboxSeenFilter,
+    isInboxNav,
+    sortedAttentionItems
+  ]);
+  const attentionSummary = useMemo(() => {
+    const total = attentionItems.length;
+    const open = attentionItems.filter((item) => item.state === "open" || item.state === "acknowledged").length;
+    const critical = attentionItems.filter((item) => item.severity === "critical" && item.state !== "resolved").length;
+    const unresolved = attentionItems.filter((item) => item.state === "open").length;
+    const unresolvedWarnings = attentionItems.filter(
+      (item) => item.severity === "warning" && (item.state === "open" || item.state === "acknowledged")
+    ).length;
+    return { total, open, critical, unresolved, unresolvedWarnings };
+  }, [attentionItems]);
   const agentNameById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.name])), [agents]);
   const costMonthOptions = useMemo(() => {
     if (!includeCostAggregations) {
@@ -2186,6 +2325,27 @@ export function WorkspaceClient({
       failedRuns7d
     };
   }, [heartbeatRuns, isDashboardNav, issues, staleIssueCount]);
+  const dashboardAttentionSummary = useMemo(() => {
+    if (!isDashboardNav) {
+      return { open: 0, critical: 0, warning: 0 };
+    }
+    const active = attentionItems.filter((item) => item.state === "open" || item.state === "acknowledged");
+    return {
+      open: active.length,
+      critical: active.filter((item) => item.severity === "critical").length,
+      warning: active.filter((item) => item.severity === "warning").length
+    };
+  }, [attentionItems, isDashboardNav]);
+  const dashboardAttentionPreview = useMemo(
+    () =>
+      isDashboardNav
+        ? attentionItems
+            .filter((item) => item.state === "open" || item.state === "acknowledged")
+            .sort((a, b) => new Date(b.sourceTimestamp).getTime() - new Date(a.sourceTimestamp).getTime())
+            .slice(0, 5)
+        : [],
+    [attentionItems, isDashboardNav]
+  );
   const topCostAgent = useMemo(() => {
     if (!isDashboardNav) {
       return "No agent spend yet";
@@ -2873,6 +3033,123 @@ export function WorkspaceClient({
     [companyId, isActionPending]
   );
 
+  const attentionColumns = useMemo<ColumnDef<AttentionRow>[]>(
+    () => [
+      {
+        accessorKey: "title",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Item" />,
+        cell: ({ row }) => (
+          <div className={styles.formatDurationContainer5}>
+            <div className={styles.formatDurationContainer1}>{row.original.title}</div>
+            <div>{row.original.contextSummary}</div>
+          </div>
+        )
+      },
+      {
+        id: "category",
+        accessorFn: (row) => row.category,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
+        cell: ({ row }) => <Badge variant="outline">{formatAttentionCategoryLabel(row.original.category)}</Badge>
+      },
+      {
+        id: "severity",
+        accessorFn: (row) => row.severity,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Severity" />,
+        cell: ({ row }) => (
+          <Badge variant="outline" className={getStatusBadgeClassName(row.original.severity === "critical" ? "failed" : row.original.severity)}>
+            {row.original.severity}
+          </Badge>
+        )
+      },
+      {
+        id: "state",
+        accessorFn: (row) => row.state,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
+        cell: ({ row }) => (
+          <div className={styles.formatDurationContainer3}>
+            <Badge variant="outline">{row.original.state.replaceAll("_", " ")}</Badge>
+            {!row.original.seenAt ? <Badge variant="outline">Unseen</Badge> : null}
+          </div>
+        )
+      },
+      {
+        id: "source",
+        accessorFn: (row) => row.sourceTimestamp,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Updated" />,
+        cell: ({ row }) => <div className={styles.formatDurationContainer5}>{formatDateTime(row.original.sourceTimestamp)}</div>
+      },
+      {
+        id: "actions",
+        header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className={styles.formatDurationContainer3}>
+            {!row.original.seenAt ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => markAttentionSeen(row.original.key)}
+                disabled={isActionPending(`attention:${row.original.key}:seen`)}
+              >
+                Mark seen
+              </Button>
+            ) : null}
+            {row.original.state === "open" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => acknowledgeAttention(row.original.key)}
+                disabled={isActionPending(`attention:${row.original.key}:acknowledge`)}
+              >
+                Acknowledge
+              </Button>
+            ) : null}
+            {row.original.state !== "dismissed" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => dismissAttention(row.original.key)}
+                disabled={isActionPending(`attention:${row.original.key}:dismiss`)}
+              >
+                Dismiss
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => undismissAttention(row.original.key)}
+                disabled={isActionPending(`attention:${row.original.key}:undismiss`)}
+              >
+                Restore
+              </Button>
+            )}
+            {row.original.state !== "resolved" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => resolveAttention(row.original.key)}
+                disabled={isActionPending(`attention:${row.original.key}:resolve`)}
+              >
+                Resolve
+              </Button>
+            ) : null}
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={{
+                  pathname: row.original.actionHref as Route,
+                  query: { companyId: companyId ?? undefined }
+                }}
+              >
+                {row.original.actionLabel}
+              </Link>
+            </Button>
+          </div>
+        )
+      }
+    ],
+    [companyId, isActionPending]
+  );
+
   const auditColumns = useMemo<ColumnDef<AuditRow>[]>(
     () => [
       {
@@ -3471,6 +3748,18 @@ export function WorkspaceClient({
               title="Dashboard"
               description="Birds-eye snapshot of company execution, workforce, governance, and spend."
             />
+            <Alert variant={dashboardAttentionSummary.critical > 0 ? "destructive" : "default"}>
+              <AlertTitle>
+                {dashboardAttentionSummary.open === 0
+                  ? "All clear"
+                  : `Needs attention (${dashboardAttentionSummary.critical} critical / ${dashboardAttentionSummary.warning} warning)`}
+              </AlertTitle>
+              <AlertDescription>
+                {dashboardAttentionSummary.open === 0
+                  ? "No active board-level blockers right now."
+                  : "Action queue is active. Review top attention items below to keep delivery smooth."}
+              </AlertDescription>
+            </Alert>
             <div className={styles.dashboardSummaryStats}>
               <MetricCard label="Open work" value={dashboardOpenIssues.length} hint={`${staleIssueCount} stale over 7d`} />
               <MetricCard
@@ -3550,6 +3839,37 @@ export function WorkspaceClient({
               </div>
             ) : null}
             <div className={styles.dashboardAttentionGrid}>
+              <Card className={styles.dashboardAttentionCard}>
+                <CardHeader>
+                  <CardTitle>Board action queue</CardTitle>
+                  <CardDescription>Prioritized items that need ownership and response.</CardDescription>
+                </CardHeader>
+                <CardContent className={styles.dashboardActionQueueContent}>
+                  {dashboardAttentionPreview.length > 0 ? (
+                    <ul className={styles.dashboardApprovalPreviewList}>
+                      {dashboardAttentionPreview.map((item) => (
+                        <li key={item.key} className={styles.dashboardApprovalPreviewItem}>
+                          <div className={styles.dashboardApprovalPreviewTitle}>
+                            <span>{item.title}</span>
+                            <span>{item.severity}</span>
+                          </div>
+                          <div className={styles.dashboardApprovalPreviewMeta}>
+                            <span>{item.contextSummary}</span>
+                            <span>{formatRelativeAgeCompact(item.sourceTimestamp)} ago</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className={styles.dashboardActionQueueEmpty}>No active attention items right now.</div>
+                  )}
+                  <div className={styles.dashboardActionQueueActions}>
+                    <Button asChild size="sm">
+                      <Link href={{ pathname: "/inbox", query: { companyId: companyId! } }}>Open inbox queue</Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
               <Card className={styles.dashboardAttentionCard}>
                 <CardHeader>
                   <CardTitle>Needs attention now</CardTitle>
@@ -3859,34 +4179,55 @@ export function WorkspaceClient({
           <>
             <SectionHeading
               title="Inbox"
-              description="Incoming items to approve or dismiss for the board."
+              description="Unified board action queue for approvals, blockers, budget hard-stops, and escalations."
             />
             <div className="ui-stats">
-              <MetricCard label="Items in inbox" value={inboxSummary.total} />
-              <MetricCard label="Pending actions" value={inboxSummary.pending} />
-              <MetricCard label="Resolved history" value={inboxSummary.resolved} />
-              <MetricCard label="Unseen / Dismissed" value={`${inboxSummary.unseen} / ${inboxSummary.dismissed}`} />
+              <MetricCard label="Attention items" value={attentionSummary.total} />
+              <MetricCard label="Open queue" value={attentionSummary.open} />
+              <MetricCard label="Critical / Warnings" value={`${attentionSummary.critical} / ${attentionSummary.unresolvedWarnings}`} />
+              <MetricCard label="Unresolved now" value={attentionSummary.unresolved} />
             </div>
             <DataTable
-              columns={inboxColumns}
-              data={filteredInboxItems}
-              emptyMessage="No inbox items match current filters."
+              columns={attentionColumns}
+              data={filteredAttentionItems}
+              emptyMessage="No attention items match current filters."
               toolbarActions={
                 <div className={styles.governanceFiltersCardContent}>
                   <Input
                     value={inboxQuery}
                     onChange={(event) => setInboxQuery(event.target.value)}
-                    placeholder="Search action, status, or payload..."
+                    placeholder="Search title, context, category, or action..."
                     className={styles.governanceFiltersInput}
                   />
-                  <Select value={inboxStateFilter} onValueChange={(value) => setInboxStateFilter(value as "all" | "pending" | "resolved")}>
+                  <Select
+                    value={attentionStateFilter}
+                    onValueChange={(value) =>
+                      setAttentionStateFilter(value as "all" | "open" | "acknowledged" | "dismissed" | "resolved")
+                    }
+                  >
                     <SelectTrigger className={styles.governanceFiltersSelect}>
-                      <SelectValue placeholder="Scope" />
+                      <SelectValue placeholder="State" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All items</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="all">All states</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="acknowledged">Acknowledged</SelectItem>
+                      <SelectItem value="dismissed">Dismissed</SelectItem>
                       <SelectItem value="resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={attentionSeverityFilter}
+                    onValueChange={(value) => setAttentionSeverityFilter(value as "all" | "critical" | "warning" | "info")}
+                  >
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Severity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All severities</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                      <SelectItem value="warning">Warning</SelectItem>
+                      <SelectItem value="info">Info</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={inboxSeenFilter} onValueChange={(value) => setInboxSeenFilter(value as "all" | "seen" | "unseen")}>

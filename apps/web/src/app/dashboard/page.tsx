@@ -7,7 +7,12 @@ export default async function DashboardPage({
   searchParams: Promise<{ companyId?: string }>;
 }) {
   const { companyId } = await searchParams;
-  const workspaceData = await loadWorkspaceData(companyId);
+  const workspaceData = await loadWorkspaceData(companyId, {
+    include: {
+      attentionItems: true,
+      governanceInbox: true
+    }
+  });
 
   return (
     <DashboardPageClient
@@ -19,6 +24,8 @@ export default async function DashboardPage({
       heartbeatRuns={workspaceData.heartbeatRuns}
       goals={workspaceData.goals}
       approvals={workspaceData.approvals}
+      governanceInbox={workspaceData.governanceInbox}
+      attentionItems={workspaceData.attentionItems}
       auditEvents={workspaceData.auditEvents}
       costEntries={workspaceData.costEntries}
       projects={workspaceData.projects}

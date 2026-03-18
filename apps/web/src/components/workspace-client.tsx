@@ -121,7 +121,7 @@ function resolveNamedModelForAgent(agent: {
 const AgentRuntimeDefaultsCard = dynamic(
   () => import("@/components/agent-runtime-defaults-card").then((module) => module.AgentRuntimeDefaultsCard),
   {
-    loading: () => <div>Loading runtime defaults...</div>
+    loading: () => null
   }
 );
 const OrgChart = dynamic(() => import("@/components/org-chart").then((module) => module.OrgChart), {
@@ -5413,16 +5413,6 @@ export function WorkspaceClient({
               <EmptyState>Create or select a company to configure model pricing.</EmptyState>
             ) : (
               <>
-                {missingModelPricingPairs.length > 0 ? (
-                  <Alert>
-                    <AlertTitle>Missing pricing rows detected</AlertTitle>
-                    <AlertDescription>
-                      {missingModelPricingPairs.length} observed model
-                      {missingModelPricingPairs.length === 1 ? "" : "s"} do not have an exact pricing row yet.
-                      Runs are allowed, but those costs will be marked as missing pricing until rows are added.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
                 <DataTable
                   columns={modelPricingColumns}
                   data={filteredModelPricing}

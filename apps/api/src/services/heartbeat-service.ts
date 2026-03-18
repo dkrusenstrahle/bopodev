@@ -1750,6 +1750,7 @@ async function buildHeartbeatContext(
   const activeAgentGoals = goalRows
     .filter((goal) => goal.status === "active" && goal.level === "agent")
     .map((goal) => goal.title);
+  const isCommentOrderWake = input.wakeContext?.reason === "issue_comment_recipient";
 
   return {
     companyId,
@@ -1786,12 +1787,13 @@ async function buildHeartbeatContext(
       projectId: item.project_id,
       projectName: projectNameById.get(item.project_id) ?? null,
       title: item.title,
-      body: item.body,
+      // Comment-order runs should treat linked issues as context-only, not as a full issue execution order.
+      body: isCommentOrderWake ? null : item.body,
       status: item.status,
       priority: item.priority,
       labels: parseStringArray(item.labels_json),
       tags: parseStringArray(item.tags_json),
-      attachments: attachmentsByIssue.get(item.id) ?? []
+      attachments: isCommentOrderWake ? [] : (attachmentsByIssue.get(item.id) ?? [])
     }))
   };
 }
@@ -1814,9 +1816,60 @@ function sanitizeAgentSummaryCommentBody(body: string) {
 }
 
 function buildRunSummaryCommentBody(input: { status: "completed" | "failed"; executionSummary: string }) {
-  const summary = sanitizeAgentSummaryCommentBody(input.executionSummary);
-  const heading = input.status === "completed" ? "Run summary" : "Run failure summary";
-  return `${heading}: ${summary}`;
+  const summary = sanitizeAgentSummaryCommentBody(extractNaturalRunUpdate(input.executionSummary));
+  if (input.status === "failed") {
+    return summary.toLowerCase().startsWith("couldn't")
+      ? summary
+      : `Couldn't complete this run: ${summary.charAt(0).toLowerCase()}${summary.slice(1)}`;
+  }
+  return summary;
+}
+
+function extractNaturalRunUpdate(executionSummary: string) {
+  const normalized = executionSummary.trim();
+  const jsonSummary = extractSummaryFromJsonLikeText(normalized);
+  const source = jsonSummary ?? normalized;
+  const lines = source
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !line.startsWith("{") && !line.startsWith("}"));
+  const compact = (lines.length > 0 ? lines.slice(0, 2).join(" ") : source)
+    .replace(/^run (failure )?summary\s*:\s*/i, "")
+    .replace(/^completed all assigned issue steps\s*:\s*/i, "")
+    .replace(/^issue status\s*:\s*/i, "")
+    .replace(/`+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const bounded = compact.length > 260 ? `${compact.slice(0, 257).trimEnd()}...` : compact;
+  if (!bounded) {
+    return "Run update.";
+  }
+  return /[.!?]$/.test(bounded) ? bounded : `${bounded}.`;
+}
+
+function extractSummaryFromJsonLikeText(input: string) {
+  const fencedMatch = input.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1]?.trim() ?? input.match(/\{[\s\S]*\}\s*$/)?.[0]?.trim();
+  if (!candidate) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    const summary = parsed.summary;
+    if (typeof summary === "string" && summary.trim().length > 0) {
+      return summary.trim();
+    }
+  } catch {
+    // Fall through to regex extraction for loosely-formatted JSON.
+  }
+  const summaryMatch = candidate.match(/"summary"\s*:\s*"([\s\S]*?)"/);
+  const summary = summaryMatch?.[1]
+    ?.replace(/\\"/g, "\"")
+    .replace(/\\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return summary && summary.length > 0 ? summary : null;
 }
 
 async function appendRunSummaryComments(

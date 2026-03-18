@@ -806,7 +806,42 @@ function sanitizeCommentBodyForAuthor(body: string, authorType: "human" | "agent
     return body;
   }
   const withoutEmoji = body.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "");
-  return withoutEmoji.trim();
+  const trimmed = withoutEmoji.trim();
+  const extractedSummary = extractSummaryFromJsonLikeText(trimmed);
+  const isPureJsonLike =
+    /^\s*\{[\s\S]*\}\s*$/m.test(trimmed) || /^\s*```(?:json)?[\s\S]*```\s*$/im.test(trimmed);
+  if (isPureJsonLike && extractedSummary) {
+    return extractedSummary;
+  }
+  const trailingJsonSummary = trimmed.match(/^(?<main>[\s\S]*?)\n+\{[\s\S]*"summary"\s*:\s*"[\s\S]*?"[\s\S]*\}\s*$/);
+  if (trailingJsonSummary?.groups?.main) {
+    return trailingJsonSummary.groups.main.trim();
+  }
+  return trimmed;
+}
+
+function extractSummaryFromJsonLikeText(input: string) {
+  const fencedMatch = input.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1]?.trim() ?? input.match(/\{[\s\S]*\}\s*$/)?.[0]?.trim();
+  if (!candidate) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    const summary = parsed.summary;
+    if (typeof summary === "string" && summary.trim().length > 0) {
+      return summary.trim();
+    }
+  } catch {
+    // Fall through to regex extraction for loosely-formatted JSON.
+  }
+  const summaryMatch = candidate.match(/"summary"\s*:\s*"([\s\S]*?)"/);
+  const summary = summaryMatch?.[1]
+    ?.replace(/\\"/g, "\"")
+    .replace(/\\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return summary && summary.length > 0 ? summary : null;
 }
 
 async function resolveIssueCommentRunId(

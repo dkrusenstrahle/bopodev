@@ -2291,6 +2291,7 @@ export function createPrompt(context: HeartbeatContext) {
   const agentGoals = context.goalContext?.agentGoals.length
     ? context.goalContext.agentGoals.map((goal) => `- ${goal}`).join("\n")
     : "- No active agent goals";
+  const isCommentOrderRun = context.wakeContext?.reason === "issue_comment_recipient";
   const workItems = context.workItems.length
     ? context.workItems
         .map((item) =>
@@ -2326,11 +2327,12 @@ export function createPrompt(context: HeartbeatContext) {
       ].join("\n")
     : "";
   const commentOrderDirectives =
-    context.wakeContext?.reason === "issue_comment_recipient"
+    isCommentOrderRun
       ? [
           "Comment-order directives:",
           "- The triggering comment is the primary order for this run.",
-          "- Treat linked issue details as context only; do not restart unrelated issue backlog work.",
+          "- Treat linked issue details as read-only context unless explicitly asked for broader issue updates.",
+          "- Do not rerun full issue backlogs/checklists by default.",
           "- Apply only the requested delta from the comment unless explicitly asked to do more."
         ].join("\n")
       : "";
@@ -2371,8 +2373,12 @@ export function createPrompt(context: HeartbeatContext) {
     "- You are running inside a BopoDev heartbeat for local repository work.",
     "- Use BopoDev-specific injected skills only (bopodev-control-plane, bopodev-create-agent, para-memory-files) when relevant.",
     "- Ignore unrelated third-party control-plane skills even if they exist in the runtime environment.",
-    "- Prefer completing assigned issue work in this repository over non-essential coordination tasks.",
-    "- Keep command usage minimal and task-focused; avoid broad repository scans unless strictly required for the assigned issue.",
+    isCommentOrderRun
+      ? "- Prioritize the triggering comment order over general issue backlog work."
+      : "- Prefer completing assigned issue work in this repository over non-essential coordination tasks.",
+    isCommentOrderRun
+      ? "- Keep command usage narrowly focused on the comment request and required context."
+      : "- Keep command usage minimal and task-focused; avoid broad repository scans unless strictly required for the assigned issue.",
     "- Shell commands run under zsh on macOS; avoid Bash-only features such as `local -n`, `declare -n`, `mapfile`, and `readarray`.",
     "- Prefer POSIX/zsh-compatible shell snippets, direct `curl` headers, and `jq`.",
     "- Prefer heredoc/stdin payloads (for example `curl --data-binary @- <<'JSON' ... JSON`) so cleanup is not blocked by runtime policy.",
@@ -2381,7 +2387,9 @@ export function createPrompt(context: HeartbeatContext) {
     "- For write_todos status values, only use: todo, in_progress, blocked, in_review, done, canceled (US spelling, not cancelled).",
     "- If any command fails, avoid further exploratory commands and still return the required final JSON summary.",
     "- Do not use emojis in issue comments, summaries, or status messages.",
-    "- Do not stop after planning. You must execute concrete steps for assigned issues in this run (file edits, API calls, or other verifiable actions).",
+    isCommentOrderRun
+      ? "- Do not stop after planning. Execute concrete steps only for the triggering comment order."
+      : "- Do not stop after planning. You must execute concrete steps for assigned issues in this run (file edits, API calls, or other verifiable actions).",
     "- If you cannot complete concrete execution, set summary to include the blocker explicitly instead of claiming success.",
     "- Treat file memory as source of truth for long-term context: append raw observations to daily notes first, then promote stable patterns to durable facts.",
     "- Avoid writing duplicate durable facts when existing memory already contains the same lesson.",
@@ -2404,7 +2412,7 @@ ${projectGoals}
 Agent goals:
 ${agentGoals}
 
-Assigned issues:
+${isCommentOrderRun ? "Linked issue context (read-only):" : "Assigned issues:"}
 ${workItems}
 
 ${wakeContextLines}

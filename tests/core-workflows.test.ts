@@ -417,7 +417,8 @@ describe("BopoDev core workflows", () => {
       (comment) =>
         comment.runId === latestRecipientRun?.id && comment.authorType === "agent" && comment.authorId === recipientAgent.id
     );
-    expect(runSummaryComment?.body).toContain("Run summary:");
+    expect((runSummaryComment?.body ?? "").length).toBeGreaterThan(0);
+    expect(runSummaryComment?.body).not.toContain("{\"summary\"");
   });
 
   it("keeps comment recipient pending while agent is busy and retries once free", async () => {

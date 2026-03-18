@@ -8,6 +8,7 @@ import { ChevronDownIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AppShell } from "@/components/app-shell";
+import { AgentAvatar } from "@/components/agent-avatar";
 import { ConfirmActionModal } from "@/components/modals/confirm-action-modal";
 import { CreateIssueModal } from "@/components/modals/create-issue-modal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -32,6 +33,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiDelete, apiGet, apiPost, apiPostFormData, apiPut } from "@/lib/api";
+import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
 import styles from "./issue-detail-page-client.module.scss";
 import { MetricCard, SectionHeading } from "./workspace/shared";
@@ -55,6 +57,7 @@ interface AgentRow {
   id: string;
   name: string;
   role: string;
+  avatarSeed?: string | null;
   managerAgentId?: string | null;
   status?: string;
 }
@@ -204,6 +207,31 @@ function formatEventType(eventType: string) {
   return eventType.replace(/[._]/g, " ");
 }
 
+function formatCommentAuthorLabel(
+  comment: Pick<IssueCommentRow, "authorType" | "authorId">,
+  agents: AgentRow[]
+) {
+  if (comment.authorType === "agent") {
+    return agents.find((agent) => agent.id === comment.authorId)?.name ?? "Agent";
+  }
+  if (comment.authorType === "human") {
+    return "Board";
+  }
+  return "System";
+}
+
+function formatCommentAuthorBadgeLabel(
+  comment: Pick<IssueCommentRow, "authorType">
+) {
+  if (comment.authorType === "human") {
+    return "B";
+  }
+  if (comment.authorType === "system") {
+    return "S";
+  }
+  return "A";
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -250,6 +278,24 @@ function normalizePayloadText(value: unknown) {
     .replace(/```/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeAgentCommentBodyForDisplay(body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return body;
+  }
+  const extractedSummary = extractSummaryFromJsonLikeText(trimmed);
+  const isPureJsonLike =
+    /^\s*\{[\s\S]*\}\s*$/m.test(trimmed) || /^\s*```(?:json)?[\s\S]*```\s*$/im.test(trimmed);
+  if (isPureJsonLike && extractedSummary) {
+    return extractedSummary;
+  }
+  const trailingJsonSummary = trimmed.match(/^(?<main>[\s\S]*?)\n+\{[\s\S]*"summary"\s*:\s*"[\s\S]*?"[\s\S]*\}\s*$/);
+  if (trailingJsonSummary?.groups?.main) {
+    return trailingJsonSummary.groups.main.trim();
+  }
+  return body;
 }
 
 function summarizeActivityPayload(payload: Record<string, unknown>) {
@@ -741,19 +787,35 @@ export function IssueDetailPageClient({
                 <div key={comment.id} className="ui-issue-comment-card">
                   <div className="ui-issue-comment-row">
                     <div className="ui-issue-comment-copy">
-                      <div className="ui-issue-comment-author">
-                        {comment.authorType === "agent"
-                          ? agents.find((agent) => agent.id === comment.authorId)?.name ?? "Agent"
-                          : comment.authorType}
+                      <div className={styles.commentAuthorRow}>
+                        {comment.authorType === "agent" ? (
+                          <AgentAvatar
+                            seed={agentAvatarSeed(
+                              comment.authorId ?? "agent",
+                              formatCommentAuthorLabel(comment, agents),
+                              agents.find((agent) => agent.id === comment.authorId)?.avatarSeed
+                            )}
+                            name={formatCommentAuthorLabel(comment, agents)}
+                            size={32}
+                            className={styles.commentAuthorAvatar}
+                          />
+                        ) : (
+                          <div className={styles.commentAuthorFallbackAvatar} aria-hidden>
+                            {formatCommentAuthorBadgeLabel(comment)}
+                          </div>
+                        )}
+                        <div className="ui-issue-comment-author">{formatCommentAuthorLabel(comment, agents)}</div>
                       </div>
                       <div className="ui-issue-comment-body ui-markdown ui-markdown-compact">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {comment.authorType === "agent" ? normalizeAgentCommentBodyForDisplay(comment.body) : comment.body}
+                        </ReactMarkdown>
                       </div>
                       {(comment.recipients ?? []).length > 0 ? (
                         <div className={styles.commentMetadataRow}>
                           {(comment.recipients ?? []).map((recipient) => (
                             <Badge key={`${comment.id}-${recipient.recipientType}-${recipient.recipientId ?? "all"}`} variant="outline">
-                              {formatRecipientDisplay(recipient)} ({formatRecipientDeliveryStatus(recipient)})
+                              {formatRecipientDisplay(recipient)}
                             </Badge>
                           ))}
                           {(comment.recipients ?? [])

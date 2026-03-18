@@ -9,7 +9,7 @@
 }
 
 .propertyRowContainer2 {
-  @apply text-base text-sidebar-foreground/50 font-medium;
+  @apply text-base text-sidebar-foreground/50 font-normal;
 }
 
 .propertyRowValue {
@@ -143,6 +143,19 @@
 
 .commentMetadataRow {
   @apply flex flex-wrap items-center gap-4 mt-4;
+}
+
+.commentAuthorRow {
+  @apply flex items-start gap-4;
+}
+
+.commentAuthorAvatar {
+  @apply h-5 w-5 mt-1 rounded-full;
+}
+
+.commentAuthorFallbackAvatar {
+  @apply mt-1 flex h-5 w-5 items-center justify-center rounded-full border border-border/50 bg-muted/50;
+  @apply text-[10px] font-semibold leading-none text-muted-foreground;
 }
 
 .commentRecipientChevron {

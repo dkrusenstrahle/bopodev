@@ -189,6 +189,10 @@ function formatRunStatusLabel(status: string) {
   return status === "started" ? "running" : status;
 }
 
+function isRunActive(run: Pick<HeartbeatRunRow, "status" | "finishedAt">) {
+  return !run.finishedAt || run.status === "started" || run.status === "running";
+}
+
 function formatHeartbeatInterval(seconds: number) {
   if (seconds <= 60) {
     return "Every minute";
@@ -428,7 +432,10 @@ export function AgentDetailPageClient({
   );
 
   const latestRun = agentRuns[0] ?? null;
+  const activeRun = agentRuns.find((run) => isRunActive(run)) ?? null;
   const recentRuns = agentRuns.slice(0, 6);
+  const liveStatus = activeRun ? "running" : agent.status;
+  const liveStatusDetail = activeRun ? `Run ${shortId(activeRun.id)} started ${formatRelative(activeRun.startedAt)}` : undefined;
 
   const agentCosts = useMemo(() => costEntries.filter((entry) => entry.agentId === agent.id), [agent.id, costEntries]);
 
@@ -1038,8 +1045,7 @@ export function AgentDetailPageClient({
       <Card>
         <CardContent className={styles.configCardContent}>
           <ConfigRow label="Agent ID" value={agent.id} />
-          <ConfigRow label="Adapter" value={getProviderLabel(agent.providerType)} />
-          <ConfigRow label="Status" value={agent.status} />
+          <ConfigRow label="Status" value={liveStatus} detail={liveStatusDetail} />
           <ConfigRow label="Heartbeat" value={formatHeartbeatCadence(agent.heartbeatCron)} />
         </CardContent>
       </Card>

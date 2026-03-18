@@ -592,6 +592,36 @@ function formatAttentionCategoryLabel(category: AttentionRow["category"]) {
   return category.replaceAll("_", " ");
 }
 
+function formatRunMessage(message: string | null | undefined) {
+  if (!message) {
+    return "No message";
+  }
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return "No message";
+  }
+
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = fencedMatch ? fencedMatch[1]!.trim() : trimmed;
+
+  try {
+    const parsed = JSON.parse(candidate) as { summary?: unknown; message?: unknown };
+    if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+      return parsed.summary.trim();
+    }
+    if (typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+  } catch {
+    const summaryMatch = candidate.match(/"summary"\s*:\s*"([^"]+)"/i);
+    if (summaryMatch?.[1]?.trim()) {
+      return summaryMatch[1].trim();
+    }
+  }
+
+  return candidate.replace(/\s+/g, " ").trim();
+}
+
 function formatRelativeAgeCompact(timestamp: string | null) {
   if (!timestamp) {
     return "n/a";
@@ -1320,6 +1350,7 @@ export function WorkspaceClient({
     ).length;
     return { total, open, critical, unresolved, unresolvedWarnings };
   }, [attentionItems]);
+  const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const agentNameById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.name])), [agents]);
   const costMonthOptions = useMemo(() => {
     if (!includeCostAggregations) {
@@ -3356,9 +3387,20 @@ export function WorkspaceClient({
       {
         id: "agent",
         header: "Agent",
-        cell: ({ row }) => (
-          <div className={styles.formatDurationContainer5}>{agentNameById.get(row.original.agentId) ?? shortId(row.original.agentId)}</div>
-        )
+        cell: ({ row }) => {
+          const runAgent = agentById.get(row.original.agentId);
+          const runAgentName = runAgent?.name ?? agentNameById.get(row.original.agentId) ?? shortId(row.original.agentId);
+          return (
+            <div className={styles.agentTableIdentity}>
+              <AgentAvatar
+                seed={agentAvatarSeed(row.original.agentId, runAgentName, runAgent?.avatarSeed)}
+                name={runAgentName}
+                className={styles.agentTableAvatar}
+              />
+              <span className={styles.formatDurationContainer5}>{runAgentName}</span>
+            </div>
+          );
+        }
       },
       {
         accessorKey: "status",
@@ -3384,11 +3426,15 @@ export function WorkspaceClient({
       {
         accessorKey: "message",
         header: "Message",
-        cell: ({ row }) => (
-          <div className={styles.runMessageCellContainer} title={row.original.message ?? "No message"}>
-            {row.original.message ?? "No message"}
-          </div>
-        )
+        cell: ({ row }) => {
+          const displayMessage = formatRunMessage(row.original.message);
+          const previewMessage = displayMessage.length > 88 ? `${displayMessage.slice(0, 85)}...` : displayMessage;
+          return (
+            <div className={styles.runMessageCellContainer} title={displayMessage}>
+              {previewMessage}
+            </div>
+          );
+        }
       },
       {
         id: "actions",
@@ -3441,7 +3487,7 @@ export function WorkspaceClient({
         )
       }
     ],
-    [agentNameById, isActionPending, runDetailsByRunId]
+    [agentById, agentNameById, isActionPending, runDetailsByRunId]
   );
 
   const costColumns = useMemo<ColumnDef<CostRow>[]>(

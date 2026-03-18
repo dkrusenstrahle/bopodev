@@ -118,7 +118,10 @@ export function CreateAgentModal({
   fallbackDefaults,
   triggerLabel,
   triggerVariant = "default",
-  triggerSize = "sm"
+  triggerSize = "sm",
+  open,
+  onOpenChange,
+  hideTrigger = false
 }: {
   companyId: string;
   agent?: {
@@ -156,9 +159,19 @@ export function CreateAgentModal({
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "secondary" | "ghost" | "destructive";
   triggerSize?: "default" | "sm" | "lg" | "icon";
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const dialogOpen = open ?? internalOpen;
+  const setDialogOpen = (nextOpen: boolean) => {
+    if (open === undefined) {
+      setInternalOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+  };
   const [name, setName] = useState(agent?.name ?? "");
   const [roleKey, setRoleKey] = useState<AgentRoleKey>(normalizeRoleKey(agent?.roleKey, agent?.role));
   const [title, setTitle] = useState(agent?.title ?? "");
@@ -577,7 +590,7 @@ export function CreateAgentModal({
           assigneeAgentId: delegateAgentId,
           labels: ["agent-hiring", "delegated"]
         });
-        setOpen(false);
+        setDialogOpen(false);
         router.refresh();
         return;
       }
@@ -672,7 +685,7 @@ export function CreateAgentModal({
           runtimeConfig
         });
       }
-      setOpen(false);
+      setDialogOpen(false);
       router.refresh();
     } catch (submitError) {
       if (submitError instanceof ApiError) {
@@ -693,7 +706,7 @@ export function CreateAgentModal({
     setIsDeleting(true);
     try {
       await apiDelete(`/agents/${agent.id}`, companyId);
-      setOpen(false);
+      setDialogOpen(false);
       router.push(`/agents?companyId=${companyId}` as Parameters<typeof router.push>[0]);
     } catch (deleteError) {
       if (deleteError instanceof ApiError) {
@@ -707,12 +720,14 @@ export function CreateAgentModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant={triggerVariant} size={triggerSize}>
-          {triggerLabel ?? (isEditing ? "Edit" : "Hire Agent")}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {!hideTrigger ? (
+        <DialogTrigger asChild>
+          <Button variant={triggerVariant} size={triggerSize}>
+            {triggerLabel ?? (isEditing ? "Edit" : "Hire Agent")}
+          </Button>
+        </DialogTrigger>
+      ) : null}
       <DialogContent className={styles.createAgentModalDialogContent}>
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit agent" : "Hire AI agent"}</DialogTitle>

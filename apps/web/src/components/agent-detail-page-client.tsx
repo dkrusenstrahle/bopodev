@@ -9,14 +9,13 @@ import { AppShell } from "@/components/app-shell";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { ConfirmActionModal } from "@/components/modals/confirm-action-modal";
 import { CreateAgentModal } from "@/components/modals/create-agent-modal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api";
@@ -26,7 +25,7 @@ import { getModelOptionsForProvider, heartbeatCronToIntervalSec } from "@/lib/ag
 import { getDefaultModelForProvider, type RuntimeProviderType } from "@/lib/model-registry-options";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
 import { isSkippedRun } from "@/lib/workspace-logic";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { MoreHorizontal } from "lucide-react";
 import styles from "./agent-detail-page-client.module.scss";
 import { MetricCard, SectionHeading } from "./workspace/shared";
 
@@ -351,83 +350,6 @@ function parseStateBlob(raw: string | undefined) {
   }
 }
 
-function dateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildLastNDaysSeries<T>(days: number, rows: T[], getDateValue: (row: T) => string) {
-  const now = new Date();
-  const buckets = new Map<string, number>();
-  for (let index = days - 1; index >= 0; index -= 1) {
-    const day = new Date(now);
-    day.setHours(0, 0, 0, 0);
-    day.setDate(day.getDate() - index);
-    buckets.set(dateKey(day), 0);
-  }
-  for (const row of rows) {
-    const value = getDateValue(row);
-    const key = dateKey(new Date(value));
-    if (buckets.has(key)) {
-      buckets.set(key, (buckets.get(key) ?? 0) + 1);
-    }
-  }
-  return Array.from(buckets.entries()).map(([label, value]) => ({ label, value }));
-}
-
-function BarMetricChart({
-  data,
-  label,
-  colorToken,
-  valueDomain
-}: {
-  data: Array<{ label: string; value: number }>;
-  label: string;
-  colorToken: string;
-  valueDomain?: [number, number];
-}) {
-  const config = {
-    value: {
-      label,
-      color: colorToken
-    }
-  } satisfies ChartConfig;
-  const gradientId = `agent-metric-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-
-  return (
-    <ChartContainer config={config} className={styles.chartContainer}>
-      <BarChart accessibilityLayer data={data} margin={{ top: 8, right: -8, left: -8, bottom: 0 }}>
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.95} />
-            <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.65} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          tickMargin={10}
-          minTickGap={20}
-          tickFormatter={(value) => {
-            const text = String(value);
-            if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-              return text.slice(5);
-            }
-            return text.replaceAll("_", " ").slice(0, 10);
-          }}
-        />
-        <YAxis hide domain={valueDomain} />
-        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-        <Bar dataKey="value" fill={`url(#${gradientId})`} radius={[8, 8, 0, 0]} maxBarSize={34} />
-      </BarChart>
-    </ChartContainer>
-  );
-}
-
 function ConfigRow({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className={styles.configRowContainer1}>
@@ -470,6 +392,8 @@ export function AgentDetailPageClient({
   const [compiledContextPreview, setCompiledContextPreview] = useState<string>("");
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
   const managerNameById = useMemo(() => new Map(agents.map((entry) => [entry.id, entry.name])), [agents]);
 
   const agentRuns = useMemo(
@@ -528,6 +452,39 @@ export function AgentDetailPageClient({
       return provider ? getDefaultModelForProvider(provider) ?? "" : "";
     })();
   const configuredModelLabel = configuredModelId ? getModelLabel(agent.providerType, configuredModelId) : "Not configured";
+  const completedIssues = useMemo(
+    () =>
+      issues
+        .filter((issue) => issue.assigneeAgentId === agent.id && issue.status === "done")
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [agent.id, issues]
+  );
+  const recentDeliveryIssues = useMemo(
+    () =>
+      issues
+        .filter((issue) => issue.assigneeAgentId === agent.id && (issue.status === "in_review" || issue.status === "done"))
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [agent.id, issues]
+  );
+  const openAssignedIssueCount = useMemo(
+    () =>
+      issues.filter(
+        (issue) => issue.assigneeAgentId === agent.id && issue.status !== "done" && issue.status !== "canceled"
+      ).length,
+    [agent.id, issues]
+  );
+  const blockedIssueCount = useMemo(
+    () => issues.filter((issue) => issue.assigneeAgentId === agent.id && issue.status === "blocked").length,
+    [agent.id, issues]
+  );
+  const runHealth = useMemo(() => {
+    const completed = agentRuns.filter((run) => run.status === "completed").length;
+    const failed = agentRuns.filter((run) => run.status === "failed").length;
+    const relevant = completed + failed;
+    const successRate = relevant > 0 ? (completed / relevant) * 100 : 0;
+    return { completed, failed, successRate };
+  }, [agentRuns]);
+  const avgCostPerCompletedIssue = completedIssues.length > 0 ? costSummary.usd / completedIssues.length : 0;
   const [selectedProviderType, setSelectedProviderType] = useState(agent.providerType);
   const [selectedModelId, setSelectedModelId] = useState(configuredModelId);
   const providerOptions = useMemo(() => {
@@ -547,6 +504,30 @@ export function AgentDetailPageClient({
     }
     return getModelOptionsForProvider(provider, selectedModelId).filter((option) => option.value.trim().length > 0);
   }, [selectedProviderType, selectedModelId]);
+  const completedIssueColumns = useMemo<ColumnDef<IssueRow>[]>(
+    () => [
+      {
+        accessorKey: "title",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Issue" />,
+        cell: ({ row }) => (
+          <Link href={`/issues/${row.original.id}?companyId=${companyId}`} className={styles.runIdLink}>
+            {row.original.title}
+          </Link>
+        )
+      },
+      {
+        accessorKey: "priority",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Priority" />,
+        cell: ({ row }) => <Badge variant="outline">{row.original.priority}</Badge>
+      },
+      {
+        accessorKey: "updatedAt",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Last updated" />,
+        cell: ({ row }) => <div className={styles.runTableCellMuted}>{formatDateTime(row.original.updatedAt)}</div>
+      }
+    ],
+    [companyId]
+  );
   const agentRunColumns = useMemo<ColumnDef<HeartbeatRunRow>[]>(
     () => [
       {
@@ -614,36 +595,6 @@ export function AgentDetailPageClient({
     configuredThinkingEffort
   );
   const [selectedManagerAgentId, setSelectedManagerAgentId] = useState(agent.managerAgentId ?? "__none");
-  const runActivityBars = useMemo(() => buildLastNDaysSeries(14, agentRuns, (run) => run.startedAt), [agentRuns]);
-  const successRateBars = useMemo(() => {
-    const now = new Date();
-    const keys: string[] = [];
-    for (let index = 13; index >= 0; index -= 1) {
-      const day = new Date(now);
-      day.setHours(0, 0, 0, 0);
-      day.setDate(day.getDate() - index);
-      keys.push(dateKey(day));
-    }
-    const byDay = new Map<string, { total: number; success: number }>();
-    for (const key of keys) {
-      byDay.set(key, { total: 0, success: 0 });
-    }
-    for (const run of agentRuns) {
-      const key = dateKey(new Date(run.startedAt));
-      if (!byDay.has(key)) {
-        continue;
-      }
-      const current = byDay.get(key)!;
-      current.total += 1;
-      if (run.status === "completed") {
-        current.success += 1;
-      }
-    }
-    return keys.map((key) => {
-      const entry = byDay.get(key)!;
-      return { label: key, value: entry.total > 0 ? Math.round((entry.success / entry.total) * 100) : 0 };
-    });
-  }, [agentRuns]);
 
   const capabilityHints = useMemo(() => {
     const capabilities = new Set<string>();
@@ -960,80 +911,68 @@ export function AgentDetailPageClient({
           >
             {isActionPending(invokeActionKey) ? "Running..." : "Invoke"}
           </Button>
-          {agent.status === "paused" ? (
-            <ConfirmActionModal
-              triggerLabel="Resume"
-              triggerVariant="primary"
-              triggerSize="sm"
-              title="Resume agent?"
-              description={`Resume "${agent.name}" so heartbeats can run again.`}
-              confirmLabel="Resume"
-              onConfirm={resumeAgent}
-              triggerDisabled={isActionPending(`agent:${agent.id}:resume`)}
-            />
-          ) : (
-            <ConfirmActionModal
-              triggerLabel="Pause"
-              triggerVariant="outline"
-              triggerSize="sm"
-              title="Pause agent?"
-              description={`Pause "${agent.name}" and block new heartbeat runs.`}
-              confirmLabel="Pause"
-              onConfirm={pauseAgent}
-              triggerDisabled={isActionPending(`agent:${agent.id}:pause`)}
-            />
-          )}
-          {agent.status !== "terminated" ? (
-            <ConfirmActionModal
-              triggerLabel="Terminate"
-              triggerVariant="outline"
-              triggerSize="sm"
-              title="Terminate agent?"
-              description={`Terminate "${agent.name}". This blocks all future runs.`}
-              confirmLabel="Terminate"
-              onConfirm={terminateAgent}
-              triggerDisabled={isActionPending(`agent:${agent.id}:terminate`)}
-            />
-          ) : null}
-          <CreateAgentModal
-            companyId={companyId}
-            availableAgents={agents.map((entry) => ({ id: entry.id, name: entry.name }))}
-            agent={{
-              id: agent.id,
-              name: agent.name,
-              role: agent.role,
-              managerAgentId: agent.managerAgentId,
-              providerType: agent.providerType as
-                | "claude_code"
-                | "codex"
-                | "cursor"
-                | "opencode"
-                | "openai_api"
-                | "anthropic_api"
-                | "http"
-                | "shell",
-              heartbeatCron: agent.heartbeatCron,
-              monthlyBudgetUsd: agent.monthlyBudgetUsd,
-              canHireAgents: agent.canHireAgents,
-              runtimeCommand: agent.runtimeCommand,
-              runtimeArgsJson: agent.runtimeArgsJson,
-              runtimeCwd: agent.runtimeCwd,
-              runtimeEnvJson: agent.runtimeEnvJson,
-              runtimeModel: agent.runtimeModel,
-              runtimeThinkingEffort: agent.runtimeThinkingEffort,
-              bootstrapPrompt: agent.bootstrapPrompt,
-              runtimeTimeoutSec: agent.runtimeTimeoutSec,
-              interruptGraceSec: agent.interruptGraceSec,
-              runPolicyJson: agent.runPolicyJson,
-              stateBlob: agent.stateBlob
-            }}
-            triggerLabel="Edit"
-            triggerVariant="outline"
-            triggerSize="sm"
-          />
-          <Button size="sm" variant="outline" onClick={() => setMemoryDialogOpen(true)}>
-            Memory
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" aria-label="Open more actions">
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {agent.status === "paused" ? (
+                <DropdownMenuItem
+                  disabled={isActionPending(`agent:${agent.id}:resume`)}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    if (window.confirm(`Resume "${agent.name}" so heartbeats can run again?`)) {
+                      void resumeAgent();
+                    }
+                  }}
+                >
+                  Resume
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  disabled={isActionPending(`agent:${agent.id}:pause`)}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    if (window.confirm(`Pause "${agent.name}" and block new heartbeat runs?`)) {
+                      void pauseAgent();
+                    }
+                  }}
+                >
+                  Pause
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setEditDialogOpen(true);
+                }}
+              >
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setMemoryDialogOpen(true);
+                }}
+              >
+                Memory
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={agent.status === "terminated" || isActionPending(`agent:${agent.id}:terminate`)}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setTerminateDialogOpen(true);
+                }}
+              >
+                Terminate
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       {invokeDisabledReason ? (
@@ -1052,27 +991,12 @@ export function AgentDetailPageClient({
           />
           <MetricCard label="Budget used (month)" value={`$${usedBudgetUsd.toFixed(2)}`} />
         </div>
-      </div>
-
-      <div className={styles.chartGridContainer}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Run Activity</CardTitle>
-            <CardDescription>Last 14 days</CardDescription>
-          </CardHeader>
-          <CardContent className={styles.chartCardContent}>
-            <BarMetricChart data={runActivityBars} label="Runs" colorToken="var(--chart-1)" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Success Rate</CardTitle>
-            <CardDescription>Daily completion percentage</CardDescription>
-          </CardHeader>
-          <CardContent className={styles.chartCardContent}>
-            <BarMetricChart data={successRateBars} label="Success %" colorToken="var(--chart-5)" valueDomain={[0, 100]} />
-          </CardContent>
-        </Card>
+        <div className={styles.costGridCardContent}>
+          <MetricCard label="Open issues" value={openAssignedIssueCount.toLocaleString()} />
+          <MetricCard label="Blocked issues" value={blockedIssueCount.toLocaleString()} />
+          <MetricCard label="Run success rate" value={`${runHealth.successRate.toFixed(1)}%`} />
+          <MetricCard label="Avg cost/completed issue" value={`$${avgCostPerCompletedIssue.toFixed(2)}`} />
+        </div>
       </div>
 
       <SectionHeading title="Runs" description="Heartbeat runs scoped to this agent." />
@@ -1080,6 +1004,14 @@ export function AgentDetailPageClient({
         columns={agentRunColumns}
         data={agentRuns}
         emptyMessage="No runs have executed for this agent yet."
+        showViewOptions={false}
+      />
+
+      <SectionHeading title="Recent issues" description="Latest done and in-review issues assigned to this agent." />
+      <DataTable
+        columns={completedIssueColumns}
+        data={recentDeliveryIssues}
+        emptyMessage="No done or in-review issues for this agent yet."
         showViewOptions={false}
       />
     </div>
@@ -1197,6 +1129,62 @@ export function AgentDetailPageClient({
         </Alert>
       ) : null}
       <AppShell leftPane={leftPane} rightPane={rightPane} activeNav="Agents" companies={companies} activeCompanyId={companyId} />
+      <CreateAgentModal
+        companyId={companyId}
+        availableAgents={agents.map((entry) => ({ id: entry.id, name: entry.name }))}
+        agent={{
+          id: agent.id,
+          name: agent.name,
+          role: agent.role,
+          managerAgentId: agent.managerAgentId,
+          providerType: agent.providerType as
+            | "claude_code"
+            | "codex"
+            | "cursor"
+            | "opencode"
+            | "openai_api"
+            | "anthropic_api"
+            | "http"
+            | "shell",
+          heartbeatCron: agent.heartbeatCron,
+          monthlyBudgetUsd: agent.monthlyBudgetUsd,
+          canHireAgents: agent.canHireAgents,
+          runtimeCommand: agent.runtimeCommand,
+          runtimeArgsJson: agent.runtimeArgsJson,
+          runtimeCwd: agent.runtimeCwd,
+          runtimeEnvJson: agent.runtimeEnvJson,
+          runtimeModel: agent.runtimeModel,
+          runtimeThinkingEffort: agent.runtimeThinkingEffort,
+          bootstrapPrompt: agent.bootstrapPrompt,
+          runtimeTimeoutSec: agent.runtimeTimeoutSec,
+          interruptGraceSec: agent.interruptGraceSec,
+          runPolicyJson: agent.runPolicyJson,
+          stateBlob: agent.stateBlob
+        }}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        hideTrigger
+      />
+      <Dialog open={terminateDialogOpen} onOpenChange={setTerminateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Terminate agent?</DialogTitle>
+            <DialogDescription>{`Terminate "${agent.name}". This blocks all future runs.`}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton>
+            <Button
+              variant="destructive"
+              disabled={isActionPending(`agent:${agent.id}:terminate`)}
+              onClick={() => {
+                setTerminateDialogOpen(false);
+                void terminateAgent();
+              }}
+            >
+              {isActionPending(`agent:${agent.id}:terminate`) ? "Terminating..." : "Terminate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={memoryDialogOpen} onOpenChange={setMemoryDialogOpen}>
         <DialogContent size="xl">
           <DialogHeader>

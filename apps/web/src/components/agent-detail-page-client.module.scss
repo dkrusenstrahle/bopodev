@@ -121,7 +121,7 @@
 }
 
 .costGridCardContent {
-  @apply grid gap-6 sm:grid-cols-2 lg:grid-cols-4;
+  @apply grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-6 last:mb-0;
 }
 
 .costSectionContainer {

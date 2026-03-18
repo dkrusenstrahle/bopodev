@@ -293,7 +293,7 @@ body {
 }
 
 .ui-data-table-pagination-total {
-  @apply flex-1 text-base text-muted-foreground;
+  @apply flex-1 text-base text-sidebar-foreground/50;
 }
 
 .ui-data-table-pagination-controls {
@@ -301,11 +301,11 @@ body {
 }
 
 .ui-data-table-pagination-size-group {
-  @apply flex items-center space-x-2;
+  @apply flex items-center space-x-6 text-sidebar-foreground/50;
 }
 
 .ui-data-table-pagination-label {
-  @apply text-base text-muted-foreground;
+  @apply text-base text-sidebar-foreground/50;
 }
 
 .ui-data-table-pagination-size-trigger {
@@ -313,7 +313,7 @@ body {
 }
 
 .ui-data-table-pagination-page-info {
-  @apply flex w-[120px] items-center justify-center text-base text-muted-foreground;
+  @apply flex w-[120px] items-center justify-center text-base text-sidebar-foreground/50;
 }
 
 .ui-data-table-pagination-buttons {

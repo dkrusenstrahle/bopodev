@@ -174,6 +174,30 @@ export const heartbeatRuns = pgTable("heartbeat_runs", {
   message: text("message")
 });
 
+export const heartbeatRunQueue = pgTable("heartbeat_run_queue", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  agentId: text("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  jobType: text("job_type").notNull(),
+  payloadJson: text("payload_json").notNull().default("{}"),
+  status: text("status").notNull().default("pending"),
+  priority: integer("priority").notNull().default(100),
+  idempotencyKey: text("idempotency_key"),
+  availableAt: timestamp("available_at", { mode: "date" }).defaultNow().notNull(),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(10),
+  lastError: text("last_error"),
+  startedAt: timestamp("started_at", { mode: "date" }),
+  finishedAt: timestamp("finished_at", { mode: "date" }),
+  heartbeatRunId: text("heartbeat_run_id").references(() => heartbeatRuns.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
+});
+
 export const heartbeatRunMessages = pgTable("heartbeat_run_messages", {
   id: text("id").primaryKey(),
   companyId: text("company_id")
@@ -392,6 +416,7 @@ export const schema = {
   issueAttachments,
   activityLogs,
   heartbeatRuns,
+  heartbeatRunQueue,
   heartbeatRunMessages,
   approvalRequests,
   approvalInboxStates,

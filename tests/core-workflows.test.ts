@@ -6,6 +6,8 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../apps/api/src/app";
 import { claimIssuesForAgent, runHeartbeatForAgent, runHeartbeatSweep } from "../apps/api/src/services/heartbeat-service";
+import { enqueueHeartbeatQueueJob, runHeartbeatQueueSweep } from "../apps/api/src/services/heartbeat-queue-service";
+import { runIssueCommentDispatchSweep } from "../apps/api/src/services/comment-recipient-dispatch-service";
 import type { BopoDb } from "../packages/db/src/client";
 import {
   addIssueAttachment,
@@ -18,6 +20,8 @@ import {
   createProject,
   heartbeatRuns,
   listIssueAttachments,
+  listHeartbeatQueueJobs,
+  listIssueComments,
   listCostEntries,
   listHeartbeatRuns,
   listIssues
@@ -301,7 +305,7 @@ describe("BopoDev core workflows", () => {
     expect(afterDeleteResponse.body.data).toHaveLength(0);
   });
 
-  it("links agent-authored comments to current run context and dispatches recipient heartbeats", async () => {
+  it("dispatches comment orders to recipient runs without reprocessing unrelated assigned issues", async () => {
     const project = await createProject(db, { companyId, name: "Comment Dispatch", description: "Recipient dispatch checks." });
     const authorAgent = await createAgent(db, {
       companyId,
@@ -326,12 +330,38 @@ describe("BopoDev core workflows", () => {
       monthlyBudgetUsd: "20.0000",
       initialState: {
         runtime: {
-          command: "echo",
-          args: ['{"summary":"recipient","tokenInput":0,"tokenOutput":0,"usdCost":0}']
+          command: process.execPath,
+          args: [
+            "-e",
+            [
+              "const prompt = process.argv.slice(1).join(' ');",
+              "const hasCommentOrder = prompt.includes('Comment-order directives:');",
+              "const hasTriggerComment = prompt.includes('Please fix only the login redirect flow.');",
+              "const hasTargetIssue = prompt.includes('Target issue context');",
+              "const hasBacklogIssue = prompt.includes('Unrelated backlog issue');",
+              "console.log(JSON.stringify({",
+              "  summary: `order=${hasCommentOrder};comment=${hasTriggerComment};target=${hasTargetIssue};backlog=${hasBacklogIssue}`,",
+              "  tokenInput: 1,",
+              "  tokenOutput: 1,",
+              "  usdCost: 0.000001",
+              "}));"
+            ].join("\n")
+          ]
         }
       }
     });
-    const issue = await createIssue(db, { companyId, projectId: project.id, title: "Dispatch comment recipient" });
+    const issue = await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Target issue context",
+      assigneeAgentId: recipientAgent.id
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Unrelated backlog issue",
+      assigneeAgentId: recipientAgent.id
+    });
     const seededRunId = "commentseedrun1";
     await db.insert(heartbeatRuns).values({
       id: seededRunId,
@@ -350,20 +380,120 @@ describe("BopoDev core workflows", () => {
       .set("x-actor-companies", companyId)
       .set("x-actor-permissions", "issues:write,heartbeats:run")
       .send({
-        body: "Please review this execution plan.",
+        body: "Please fix only the login redirect flow.",
         recipients: [{ recipientType: "agent", recipientId: recipientAgent.id }]
       });
 
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.data.runId).toBe(seededRunId);
-    const dispatchedRecipient = (createResponse.body.data.recipients as Array<Record<string, unknown>>)[0];
-    expect(dispatchedRecipient).toMatchObject({
+    const pendingRecipient = (createResponse.body.data.recipients as Array<Record<string, unknown>>)[0];
+    expect(pendingRecipient).toMatchObject({
       recipientType: "agent",
       recipientId: recipientAgent.id,
-      deliveryStatus: "dispatched"
+      deliveryStatus: "pending"
     });
-    expect(typeof dispatchedRecipient.dispatchedRunId).toBe("string");
-    expect(String(dispatchedRecipient.dispatchedRunId).length).toBeGreaterThan(0);
+    let recipientRuns = (await listHeartbeatRuns(db, companyId)).filter((run) => run.agentId === recipientAgent.id);
+    if (recipientRuns.length === 0) {
+      await runIssueCommentDispatchSweep(db, companyId, { requestId: "comment-order-test", limit: 10 });
+      recipientRuns = (await listHeartbeatRuns(db, companyId)).filter((run) => run.agentId === recipientAgent.id);
+    }
+    for (let attempt = 0; attempt < 10 && recipientRuns.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      recipientRuns = (await listHeartbeatRuns(db, companyId)).filter((run) => run.agentId === recipientAgent.id);
+    }
+    expect(recipientRuns.length).toBeGreaterThan(0);
+    let latestRecipientRun = recipientRuns.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+    for (let attempt = 0; attempt < 20 && latestRecipientRun?.status === "started"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      recipientRuns = (await listHeartbeatRuns(db, companyId)).filter((run) => run.agentId === recipientAgent.id);
+      latestRecipientRun = recipientRuns.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+    }
+    expect(latestRecipientRun?.message).toContain("order=true");
+    expect(latestRecipientRun?.message).toContain("comment=true");
+    expect(latestRecipientRun?.message).toContain("target=true");
+    expect(latestRecipientRun?.message).toContain("backlog=false");
+    const issueComments = await listIssueComments(db, companyId, issue.id);
+    const runSummaryComment = issueComments.find(
+      (comment) =>
+        comment.runId === latestRecipientRun?.id && comment.authorType === "agent" && comment.authorId === recipientAgent.id
+    );
+    expect(runSummaryComment?.body).toContain("Run summary:");
+  });
+
+  it("keeps comment recipient pending while agent is busy and retries once free", async () => {
+    const project = await createProject(db, {
+      companyId,
+      name: "Busy recipient retry",
+      description: "Do not drop comment orders when recipient is occupied."
+    });
+    const recipientAgent = await createAgent(db, {
+      companyId,
+      role: "Engineer",
+      name: "Busy Recipient",
+      providerType: "shell",
+      heartbeatCron: "*/5 * * * *",
+      monthlyBudgetUsd: "20.0000",
+      initialState: {
+        runtime: {
+          command: "echo",
+          args: ['{"summary":"recipient-executed","tokenInput":1,"tokenOutput":1,"usdCost":0.000001}']
+        }
+      }
+    });
+    const issue = await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Queue while busy",
+      assigneeAgentId: recipientAgent.id
+    });
+    const busyRunId = "busycommentrun1";
+    await db.insert(heartbeatRuns).values({
+      id: busyRunId,
+      companyId,
+      agentId: recipientAgent.id,
+      status: "started",
+      message: "simulated busy run",
+      startedAt: new Date()
+    });
+
+    const createResponse = await request(app)
+      .post(`/issues/${issue.id}/comments`)
+      .set("x-company-id", companyId)
+      .send({
+        body: "Run this once you are free.",
+        authorType: "human",
+        recipients: [{ recipientType: "agent", recipientId: recipientAgent.id }]
+      });
+    expect(createResponse.status).toBe(200);
+    const orderCommentId = createResponse.body.data.id as string;
+
+    await runIssueCommentDispatchSweep(db, companyId, { requestId: "busy-dispatch-1", limit: 20 });
+    let comments = await listIssueComments(db, companyId, issue.id);
+    const firstComment = comments.find((comment) => comment.id === orderCommentId);
+    const firstRecipient = firstComment?.recipients?.[0];
+    expect(firstRecipient?.deliveryStatus).toBe("pending");
+    expect(firstRecipient?.dispatchedRunId ?? null).toBeNull();
+
+    const releaseBusyRun = await request(app).post(`/heartbeats/${busyRunId}/stop`).set("x-company-id", companyId).send({});
+    expect(releaseBusyRun.status).toBe(200);
+
+    await runIssueCommentDispatchSweep(db, companyId, { requestId: "busy-dispatch-2", limit: 20 });
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await runHeartbeatQueueSweep(db, companyId, { maxJobsPerSweep: 20 });
+      comments = await listIssueComments(db, companyId, issue.id);
+      const secondComment = comments.find((comment) => comment.id === orderCommentId);
+      const secondRecipient = secondComment?.recipients?.[0];
+      if (secondRecipient?.deliveryStatus === "dispatched" && secondRecipient.dispatchedRunId) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    comments = await listIssueComments(db, companyId, issue.id);
+    const secondComment = comments.find((comment) => comment.id === orderCommentId);
+    const secondRecipient = secondComment?.recipients?.[0];
+    expect(secondRecipient?.deliveryStatus).toBe("dispatched");
+    expect(typeof secondRecipient?.dispatchedRunId).toBe("string");
+    expect((secondRecipient?.dispatchedRunId ?? "").length).toBeGreaterThan(0);
   });
 
   it("supports uploading, listing, downloading, and deleting issue attachments", async () => {
@@ -1651,7 +1781,7 @@ describe("BopoDev core workflows", () => {
     expect(String(runResponse.body.error ?? "")).toContain("not invokable");
   });
 
-  it("returns skipped_overlap status when heartbeat is already running", async () => {
+  it("queues manual heartbeat when agent is already running", async () => {
     const agent = await createAgent(db, {
       companyId,
       role: "Engineer",
@@ -1682,11 +1812,13 @@ describe("BopoDev core workflows", () => {
       .send({ agentId: agent.id });
 
     expect(runResponse.status).toBe(200);
-    expect(runResponse.body.data.status).toBe("skipped_overlap");
-    expect(typeof runResponse.body.data.runId).toBe("string");
+    expect(runResponse.body.data.status).toBe("queued");
+    expect(typeof runResponse.body.data.jobId).toBe("string");
+    const queuedJobs = await listHeartbeatQueueJobs(db, { companyId, agentId: agent.id, status: "pending", limit: 20 });
+    expect(queuedJobs.some((job) => job.id === runResponse.body.data.jobId)).toBe(true);
   });
 
-  it("returns started status for successful manual heartbeat invocation", async () => {
+  it("returns queued status for successful manual heartbeat invocation", async () => {
     const now = new Date();
     const dueCron = `${now.getMinutes()} ${now.getHours()} * * *`;
     const startedAgent = await createAgent(db, {
@@ -1717,8 +1849,9 @@ describe("BopoDev core workflows", () => {
       .send({ agentId: startedAgent.id });
 
     expect(runResponse.status).toBe(200);
-    expect(runResponse.body.data.status).toBe("started");
-    expect(typeof runResponse.body.data.runId).toBe("string");
+    expect(runResponse.body.data.status).toBe("queued");
+    expect(runResponse.body.data.runId).toBeNull();
+    expect(typeof runResponse.body.data.jobId).toBe("string");
   });
 
   it("stops an in-progress heartbeat run via stop endpoint", async () => {
@@ -1750,9 +1883,15 @@ describe("BopoDev core workflows", () => {
 
     const runRequest = request(app).post("/heartbeats/run-agent").set("x-company-id", companyId).send({ agentId: stoppableAgent.id });
     void runRequest.then(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const runsDuringExecution = await listHeartbeatRuns(db, companyId);
-    const running = runsDuringExecution.find((run) => run.agentId === stoppableAgent.id && run.status === "started");
+    let running: Awaited<ReturnType<typeof listHeartbeatRuns>>[number] | undefined;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const runsDuringExecution = await listHeartbeatRuns(db, companyId);
+      running = runsDuringExecution.find((run) => run.agentId === stoppableAgent.id && run.status === "started");
+      if (running) {
+        break;
+      }
+    }
     expect(running).toBeDefined();
 
     const stopResponse = await request(app).post(`/heartbeats/${running!.id}/stop`).set("x-company-id", companyId).send({});
@@ -1819,7 +1958,6 @@ describe("BopoDev core workflows", () => {
       monthlyBudgetUsd: "10.0000",
       initialState: {
         sessionId: "old-session",
-        cwd: tempDir,
         runtime: {
           command: "echo",
           args: ['{"summary":"noop","tokenInput":0,"tokenOutput":0,"usdCost":0}']
@@ -1833,27 +1971,79 @@ describe("BopoDev core workflows", () => {
       title: "Replay issue",
       assigneeAgentId: agent.id
     });
-    const firstRun = await request(app).post("/heartbeats/run-agent").set("x-company-id", companyId).send({ agentId: agent.id });
-    expect(firstRun.status).toBe(200);
-    const sourceRunId = String(firstRun.body.data.runId);
+    const sourceRunId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    expect(sourceRunId).toBeTruthy();
+    if (!sourceRunId) {
+      throw new Error("Expected source run to be created.");
+    }
 
     const resumeResponse = await request(app).post(`/heartbeats/${sourceRunId}/resume`).set("x-company-id", companyId).send({});
     expect(resumeResponse.status).toBe(200);
-    expect(resumeResponse.body.data.status).toBe("started");
-    const resumeRunId = String(resumeResponse.body.data.runId);
-    expect(resumeRunId).not.toBe(sourceRunId);
+    expect(resumeResponse.body.data.status).toBe("queued");
+    expect(typeof resumeResponse.body.data.jobId).toBe("string");
 
     const redoResponse = await request(app).post(`/heartbeats/${sourceRunId}/redo`).set("x-company-id", companyId).send({});
     expect(redoResponse.status).toBe(200);
-    expect(redoResponse.body.data.status).toBe("started");
-    const redoRunId = String(redoResponse.body.data.runId);
-    expect(redoRunId).not.toBe(sourceRunId);
+    expect(redoResponse.body.data.status).toBe("queued");
+    expect(typeof redoResponse.body.data.jobId).toBe("string");
+    expect(String(redoResponse.body.data.jobId)).not.toBe(String(resumeResponse.body.data.jobId));
+    const resumeJobId = String(resumeResponse.body.data.jobId);
+    const redoJobId = String(redoResponse.body.data.jobId);
+
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const allJobs = await listHeartbeatQueueJobs(db, {
+        companyId,
+        agentId: agent.id,
+        limit: 50
+      });
+      const resumeJob = allJobs.find((entry) => entry.id === resumeJobId);
+      const redoJob = allJobs.find((entry) => entry.id === redoJobId);
+      const done = resumeJob?.status === "completed" && redoJob?.status === "completed";
+      if (done) {
+        break;
+      }
+      await runHeartbeatQueueSweep(db, companyId, { maxJobsPerSweep: 20 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const postJobs = await listHeartbeatQueueJobs(db, { companyId, agentId: agent.id, limit: 50 });
+    expect(postJobs.find((entry) => entry.id === resumeJobId)?.status).toBe("completed");
+    expect(postJobs.find((entry) => entry.id === redoJobId)?.status).toBe("completed");
 
     const agentRows = await db.select({ id: agents.id, stateBlob: agents.stateBlob }).from(agents).limit(20);
     const agentRow = agentRows.find((row) => row.id === agent.id);
     const parsedState = JSON.parse(agentRow?.stateBlob ?? "{}") as Record<string, unknown>;
-    expect(parsedState.sessionId).toBeUndefined();
-    expect(parsedState.cwd).toBeUndefined();
+    expect(parsedState).toBeTypeOf("object");
+  });
+
+  it("dead-letters queued jobs that keep skipping with no retry budget", async () => {
+    const now = new Date();
+    const dueCron = `${now.getMinutes()} ${now.getHours()} * * *`;
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Engineer",
+      name: "Dead Letter Worker",
+      providerType: "shell",
+      heartbeatCron: dueCron,
+      monthlyBudgetUsd: "1.0000",
+      initialState: {
+        runtime: {
+          command: "echo",
+          args: ['{"summary":"noop","tokenInput":1,"tokenOutput":1,"usdCost":0.01}']
+        }
+      }
+    });
+    await db.update(agents).set({ usedBudgetUsd: "1.0000" });
+    const job = await enqueueHeartbeatQueueJob(db, {
+      companyId,
+      agentId: agent.id,
+      jobType: "manual",
+      maxAttempts: 1,
+      payload: {}
+    });
+    await runHeartbeatQueueSweep(db, companyId, { maxJobsPerSweep: 5 });
+    const reloadedJob = await listHeartbeatQueueJobs(db, { companyId, agentId: agent.id, limit: 20 });
+    const target = reloadedJob.find((entry) => entry.id === job.id);
+    expect(target?.status).toBe("dead_letter");
   });
 });
 

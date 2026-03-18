@@ -11,7 +11,7 @@ export function getGovernanceToastContent(approval: ApprovalRequest, companyId: 
       title: "Approval required",
       message: role ? `${name} is waiting for governance approval as ${role}.` : `${name} is waiting for governance approval.`,
       href,
-      linkLabel: "Open governance"
+      linkLabel: "Open approvals"
     };
   }
 
@@ -21,15 +21,15 @@ export function getGovernanceToastContent(approval: ApprovalRequest, companyId: 
       title: "Goal approval required",
       message: `${title} is ready for governance review before activation.`,
       href,
-      linkLabel: "Open governance"
+      linkLabel: "Open approvals"
     };
   }
 
   return {
-    title: "Governance action required",
+    title: "Approval action required",
     message: `${formatApprovalAction(approval.action)} needs board approval in Governance.`,
     href,
-    linkLabel: "Open governance"
+    linkLabel: "Open approvals"
   };
 }
 

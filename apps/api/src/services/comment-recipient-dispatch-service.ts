@@ -6,7 +6,7 @@ import {
   type BopoDb
 } from "bopodev-db";
 import type { RealtimeHub } from "../realtime/hub";
-import { runHeartbeatForAgent } from "./heartbeat-service";
+import { enqueueHeartbeatQueueJob, triggerHeartbeatQueueWorker } from "./heartbeat-queue-service";
 
 type PersistedCommentRecipient = {
   recipientType: "agent" | "board" | "member";
@@ -17,9 +17,7 @@ type PersistedCommentRecipient = {
   acknowledgedAt: string | null;
 };
 
-const COMMENT_DISPATCH_COOLDOWN_MS = 15_000;
 const COMMENT_DISPATCH_SWEEP_LIMIT = 100;
-const recipientDispatchCooldown = new Map<string, number>();
 const activeCompanyDispatchRuns = new Set<string>();
 
 export async function runIssueCommentDispatchSweep(
@@ -100,7 +98,6 @@ async function dispatchCommentRecipients(
   if (input.recipients.length === 0) {
     return [];
   }
-  const nowIso = new Date().toISOString();
   const agentRecipientIds = input.recipients
     .filter((recipient) => recipient.recipientType === "agent" && recipient.recipientId)
     .map((recipient) => recipient.recipientId as string);
@@ -129,39 +126,40 @@ async function dispatchCommentRecipients(
       });
       continue;
     }
-    const cooldownKey = `${input.companyId}:${input.issueId}:${recipient.recipientId}`;
-    const lastDispatchAt = recipientDispatchCooldown.get(cooldownKey) ?? 0;
-    if (Date.now() - lastDispatchAt < COMMENT_DISPATCH_COOLDOWN_MS) {
-      dispatchedRecipients.push({
-        ...recipient,
-        deliveryStatus: "skipped"
+    try {
+      await enqueueHeartbeatQueueJob(db, {
+        companyId: input.companyId,
+        agentId: recipient.recipientId,
+        jobType: "comment_dispatch",
+        priority: 20,
+        maxAttempts: 12,
+        idempotencyKey: `comment_dispatch:${input.commentId}:${recipient.recipientId}`,
+        payload: {
+          wakeContext: {
+            reason: "issue_comment_recipient",
+            commentId: input.commentId,
+            issueIds: [input.issueId]
+          },
+          commentDispatch: {
+            commentId: input.commentId,
+            issueId: input.issueId,
+            recipientId: recipient.recipientId
+          }
+        }
       });
+      triggerHeartbeatQueueWorker(db, input.companyId, {
+        requestId: input.requestId,
+        realtimeHub: input.realtimeHub
+      });
+      dispatchedRecipients.push(recipient);
       continue;
-    }
-    recipientDispatchCooldown.set(cooldownKey, Date.now());
-    const dispatchedRunId = await runHeartbeatForAgent(db, input.companyId, recipient.recipientId, {
-      trigger: "scheduler",
-      requestId: input.requestId,
-      realtimeHub: input.realtimeHub,
-      wakeContext: {
-        reason: "issue_comment_recipient",
-        commentId: input.commentId,
-        issueIds: [input.issueId]
-      }
-    });
-    if (!dispatchedRunId) {
+    } catch {
       dispatchedRecipients.push({
         ...recipient,
         deliveryStatus: "failed"
       });
       continue;
     }
-    dispatchedRecipients.push({
-      ...recipient,
-      deliveryStatus: "dispatched",
-      dispatchedRunId,
-      dispatchedAt: nowIso
-    });
   }
   return dispatchedRecipients;
 }

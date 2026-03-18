@@ -248,6 +248,35 @@ export async function bootstrapDatabase(dbPath?: string) {
     );
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS heartbeat_run_queue (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      job_type TEXT NOT NULL,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      priority INTEGER NOT NULL DEFAULT 100,
+      idempotency_key TEXT,
+      available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 10,
+      last_error TEXT,
+      started_at TIMESTAMP,
+      finished_at TIMESTAMP,
+      heartbeat_run_id TEXT REFERENCES heartbeat_runs(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await db.execute(sql`
+    ALTER TABLE heartbeat_run_queue
+    ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+  `);
+  await db.execute(sql`
+    ALTER TABLE heartbeat_run_queue
+    ADD COLUMN IF NOT EXISTS heartbeat_run_id TEXT REFERENCES heartbeat_runs(id) ON DELETE SET NULL;
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS heartbeat_run_messages (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -472,6 +501,19 @@ export async function bootstrapDatabase(dbPath?: string) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_heartbeat_runs_single_started
       ON heartbeat_runs (company_id, agent_id)
       WHERE status = 'started';
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_heartbeat_run_queue_status_available_priority
+      ON heartbeat_run_queue (company_id, status, available_at ASC, priority ASC, created_at ASC);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_heartbeat_run_queue_agent_status
+      ON heartbeat_run_queue (company_id, agent_id, status, available_at ASC, created_at ASC);
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_heartbeat_run_queue_idempotency
+      ON heartbeat_run_queue (company_id, agent_id, idempotency_key)
+      WHERE idempotency_key IS NOT NULL AND btrim(idempotency_key) <> '';
   `);
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS idx_heartbeat_run_messages_company_run_sequence

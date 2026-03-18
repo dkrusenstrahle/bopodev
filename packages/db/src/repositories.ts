@@ -10,6 +10,7 @@ import {
   companies,
   costLedger,
   goals,
+  heartbeatRunQueue,
   heartbeatRuns,
   heartbeatRunMessages,
   issueAttachments,
@@ -1337,6 +1338,293 @@ export async function listHeartbeatRuns(db: BopoDb, companyId: string, limit = 1
     .where(eq(heartbeatRuns.companyId, companyId))
     .orderBy(desc(heartbeatRuns.startedAt))
     .limit(limit);
+}
+
+export type HeartbeatQueueJobType = "manual" | "scheduler" | "resume" | "redo" | "comment_dispatch";
+export type HeartbeatQueueJobStatus = "pending" | "running" | "completed" | "failed" | "dead_letter" | "canceled";
+
+type HeartbeatQueueJobRow = typeof heartbeatRunQueue.$inferSelect;
+
+function normalizeHeartbeatQueueJob(rawRow: HeartbeatQueueJobRow | Record<string, unknown>) {
+  const row = {
+    id: String((rawRow as Record<string, unknown>).id ?? ""),
+    companyId: String((rawRow as Record<string, unknown>).companyId ?? (rawRow as Record<string, unknown>).company_id ?? ""),
+    agentId: String((rawRow as Record<string, unknown>).agentId ?? (rawRow as Record<string, unknown>).agent_id ?? ""),
+    jobType: String((rawRow as Record<string, unknown>).jobType ?? (rawRow as Record<string, unknown>).job_type ?? ""),
+    payloadJson: String((rawRow as Record<string, unknown>).payloadJson ?? (rawRow as Record<string, unknown>).payload_json ?? "{}"),
+    status: String((rawRow as Record<string, unknown>).status ?? "pending"),
+    priority: Number((rawRow as Record<string, unknown>).priority ?? 100),
+    idempotencyKey:
+      typeof (rawRow as Record<string, unknown>).idempotencyKey === "string"
+        ? ((rawRow as Record<string, unknown>).idempotencyKey as string)
+        : typeof (rawRow as Record<string, unknown>).idempotency_key === "string"
+          ? ((rawRow as Record<string, unknown>).idempotency_key as string)
+          : null,
+    availableAt: coerceDate((rawRow as Record<string, unknown>).availableAt ?? (rawRow as Record<string, unknown>).available_at) ?? new Date(),
+    attemptCount: Number((rawRow as Record<string, unknown>).attemptCount ?? (rawRow as Record<string, unknown>).attempt_count ?? 0),
+    maxAttempts: Number((rawRow as Record<string, unknown>).maxAttempts ?? (rawRow as Record<string, unknown>).max_attempts ?? 10),
+    lastError:
+      typeof (rawRow as Record<string, unknown>).lastError === "string"
+        ? ((rawRow as Record<string, unknown>).lastError as string)
+        : typeof (rawRow as Record<string, unknown>).last_error === "string"
+          ? ((rawRow as Record<string, unknown>).last_error as string)
+          : null,
+    startedAt: coerceDate((rawRow as Record<string, unknown>).startedAt ?? (rawRow as Record<string, unknown>).started_at),
+    finishedAt: coerceDate((rawRow as Record<string, unknown>).finishedAt ?? (rawRow as Record<string, unknown>).finished_at),
+    heartbeatRunId:
+      typeof (rawRow as Record<string, unknown>).heartbeatRunId === "string"
+        ? ((rawRow as Record<string, unknown>).heartbeatRunId as string)
+        : typeof (rawRow as Record<string, unknown>).heartbeat_run_id === "string"
+          ? ((rawRow as Record<string, unknown>).heartbeat_run_id as string)
+          : null,
+    createdAt: coerceDate((rawRow as Record<string, unknown>).createdAt ?? (rawRow as Record<string, unknown>).created_at) ?? new Date(),
+    updatedAt: coerceDate((rawRow as Record<string, unknown>).updatedAt ?? (rawRow as Record<string, unknown>).updated_at) ?? new Date()
+  } satisfies HeartbeatQueueJobRow;
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = JSON.parse(row.payloadJson ?? "{}") as Record<string, unknown>;
+  } catch {
+    payload = {};
+  }
+  return {
+    ...row,
+    payload
+  };
+}
+
+function coerceDate(value: unknown) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
+export async function enqueueHeartbeatJob(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    agentId: string;
+    jobType: HeartbeatQueueJobType;
+    payload?: Record<string, unknown>;
+    priority?: number;
+    availableAt?: Date;
+    maxAttempts?: number;
+    idempotencyKey?: string | null;
+  }
+) {
+  await assertAgentBelongsToCompany(db, input.companyId, input.agentId);
+  const normalizedIdempotencyKey = input.idempotencyKey?.trim() || null;
+  if (normalizedIdempotencyKey) {
+    const [existing] = await db
+      .select()
+      .from(heartbeatRunQueue)
+      .where(
+        and(
+          eq(heartbeatRunQueue.companyId, input.companyId),
+          eq(heartbeatRunQueue.agentId, input.agentId),
+          eq(heartbeatRunQueue.idempotencyKey, normalizedIdempotencyKey),
+          notInArray(heartbeatRunQueue.status, ["failed", "dead_letter", "canceled"])
+        )
+      )
+      .orderBy(desc(heartbeatRunQueue.createdAt))
+      .limit(1);
+    if (existing) {
+      return normalizeHeartbeatQueueJob(existing);
+    }
+  }
+  const id = nanoid(14);
+  const [job] = await db
+    .insert(heartbeatRunQueue)
+    .values({
+      id,
+      companyId: input.companyId,
+      agentId: input.agentId,
+      jobType: input.jobType,
+      payloadJson: JSON.stringify(input.payload ?? {}),
+      status: "pending",
+      priority: Number.isFinite(input.priority) ? Math.max(0, Math.floor(input.priority!)) : 100,
+      idempotencyKey: normalizedIdempotencyKey,
+      availableAt: input.availableAt ?? new Date(),
+      maxAttempts: Number.isFinite(input.maxAttempts) ? Math.max(1, Math.floor(input.maxAttempts!)) : 10
+    })
+    .returning();
+  if (!job) {
+    throw new RepositoryValidationError("Failed to enqueue heartbeat job.");
+  }
+  return normalizeHeartbeatQueueJob(job);
+}
+
+export async function claimNextHeartbeatJob(db: BopoDb, companyId: string) {
+  const result = await db.execute(sql`
+    WITH candidate AS (
+      SELECT q.id
+      FROM heartbeat_run_queue q
+      WHERE q.company_id = ${companyId}
+        AND q.status = 'pending'
+        AND q.available_at <= CURRENT_TIMESTAMP
+        AND NOT EXISTS (
+          SELECT 1
+          FROM heartbeat_run_queue active_q
+          WHERE active_q.company_id = q.company_id
+            AND active_q.agent_id = q.agent_id
+            AND active_q.status = 'running'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM heartbeat_runs r
+          WHERE r.company_id = q.company_id
+            AND r.agent_id = q.agent_id
+            AND r.status = 'started'
+        )
+      ORDER BY q.priority ASC, q.created_at ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE heartbeat_run_queue q
+    SET
+      status = 'running',
+      started_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP,
+      attempt_count = q.attempt_count + 1
+    FROM candidate c
+    WHERE q.id = c.id
+    RETURNING q.*;
+  `);
+  const row = (result.rows ?? [])[0] as Record<string, unknown> | undefined;
+  return row ? normalizeHeartbeatQueueJob(row) : null;
+}
+
+export async function getHeartbeatQueueJob(db: BopoDb, companyId: string, id: string) {
+  const [job] = await db
+    .select()
+    .from(heartbeatRunQueue)
+    .where(and(eq(heartbeatRunQueue.companyId, companyId), eq(heartbeatRunQueue.id, id)))
+    .limit(1);
+  return job ? normalizeHeartbeatQueueJob(job) : null;
+}
+
+export async function markHeartbeatJobCompleted(
+  db: BopoDb,
+  input: { companyId: string; id: string; heartbeatRunId?: string | null }
+) {
+  const [job] = await db
+    .update(heartbeatRunQueue)
+    .set({
+      status: "completed",
+      heartbeatRunId: input.heartbeatRunId ?? null,
+      finishedAt: new Date(),
+      updatedAt: touchUpdatedAtSql
+    })
+    .where(and(eq(heartbeatRunQueue.companyId, input.companyId), eq(heartbeatRunQueue.id, input.id)))
+    .returning();
+  return job ? normalizeHeartbeatQueueJob(job) : null;
+}
+
+export async function markHeartbeatJobRetry(
+  db: BopoDb,
+  input: { companyId: string; id: string; retryAt: Date; error?: string | null; heartbeatRunId?: string | null }
+) {
+  const [job] = await db
+    .update(heartbeatRunQueue)
+    .set({
+      status: "pending",
+      availableAt: input.retryAt,
+      lastError: input.error ?? null,
+      heartbeatRunId: input.heartbeatRunId ?? null,
+      updatedAt: touchUpdatedAtSql
+    })
+    .where(and(eq(heartbeatRunQueue.companyId, input.companyId), eq(heartbeatRunQueue.id, input.id)))
+    .returning();
+  return job ? normalizeHeartbeatQueueJob(job) : null;
+}
+
+export async function markHeartbeatJobFailed(
+  db: BopoDb,
+  input: { companyId: string; id: string; error?: string | null; heartbeatRunId?: string | null }
+) {
+  const [job] = await db
+    .update(heartbeatRunQueue)
+    .set({
+      status: "failed",
+      lastError: input.error ?? null,
+      heartbeatRunId: input.heartbeatRunId ?? null,
+      finishedAt: new Date(),
+      updatedAt: touchUpdatedAtSql
+    })
+    .where(and(eq(heartbeatRunQueue.companyId, input.companyId), eq(heartbeatRunQueue.id, input.id)))
+    .returning();
+  return job ? normalizeHeartbeatQueueJob(job) : null;
+}
+
+export async function markHeartbeatJobDeadLetter(
+  db: BopoDb,
+  input: { companyId: string; id: string; error?: string | null; heartbeatRunId?: string | null }
+) {
+  const [job] = await db
+    .update(heartbeatRunQueue)
+    .set({
+      status: "dead_letter",
+      lastError: input.error ?? null,
+      heartbeatRunId: input.heartbeatRunId ?? null,
+      finishedAt: new Date(),
+      updatedAt: touchUpdatedAtSql
+    })
+    .where(and(eq(heartbeatRunQueue.companyId, input.companyId), eq(heartbeatRunQueue.id, input.id)))
+    .returning();
+  return job ? normalizeHeartbeatQueueJob(job) : null;
+}
+
+export async function cancelHeartbeatJob(db: BopoDb, input: { companyId: string; id: string }) {
+  const [job] = await db
+    .update(heartbeatRunQueue)
+    .set({
+      status: "canceled",
+      finishedAt: new Date(),
+      updatedAt: touchUpdatedAtSql
+    })
+    .where(
+      and(
+        eq(heartbeatRunQueue.companyId, input.companyId),
+        eq(heartbeatRunQueue.id, input.id),
+        notInArray(heartbeatRunQueue.status, ["completed", "failed", "dead_letter", "canceled"])
+      )
+    )
+    .returning();
+  return job ? normalizeHeartbeatQueueJob(job) : null;
+}
+
+export async function listHeartbeatQueueJobs(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    status?: HeartbeatQueueJobStatus;
+    agentId?: string;
+    jobType?: HeartbeatQueueJobType;
+    limit?: number;
+  }
+) {
+  const conditions = [eq(heartbeatRunQueue.companyId, input.companyId)];
+  if (input.status) {
+    conditions.push(eq(heartbeatRunQueue.status, input.status));
+  }
+  if (input.agentId) {
+    conditions.push(eq(heartbeatRunQueue.agentId, input.agentId));
+  }
+  if (input.jobType) {
+    conditions.push(eq(heartbeatRunQueue.jobType, input.jobType));
+  }
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), 1000);
+  const rows = await db
+    .select()
+    .from(heartbeatRunQueue)
+    .where(and(...conditions))
+    .orderBy(asc(heartbeatRunQueue.priority), asc(heartbeatRunQueue.availableAt), asc(heartbeatRunQueue.createdAt))
+    .limit(limit);
+  return rows.map((row) => normalizeHeartbeatQueueJob(row));
 }
 
 export async function getHeartbeatRun(db: BopoDb, companyId: string, runId: string) {

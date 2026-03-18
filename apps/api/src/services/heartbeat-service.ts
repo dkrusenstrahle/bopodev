@@ -13,6 +13,7 @@ import {
 } from "bopodev-contracts";
 import type { BopoDb } from "bopodev-db";
 import {
+  addIssueComment,
   agents,
   appendActivity,
   appendHeartbeatRunMessages,
@@ -66,6 +67,8 @@ type HeartbeatWakeContext = {
   commentBody?: string | null;
   issueIds?: string[];
 };
+
+const AGENT_COMMENT_EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/gu;
 
 export async function claimIssuesForAgent(
   db: BopoDb,
@@ -1008,6 +1011,30 @@ export async function runHeartbeatForAgent(
       message: execution.summary,
       finishedAt: new Date()
     });
+    try {
+      await appendRunSummaryComments(db, {
+        companyId,
+        issueIds,
+        agentId,
+        runId,
+        status: execution.status === "failed" ? "failed" : "completed",
+        executionSummary: execution.summary
+      });
+    } catch (commentError) {
+      await appendAuditEvent(db, {
+        companyId,
+        actorType: "system",
+        eventType: "heartbeat.run_comment_failed",
+        entityType: "heartbeat_run",
+        entityId: runId,
+        correlationId: options?.requestId ?? runId,
+        payload: {
+          agentId,
+          issueIds,
+          error: String(commentError)
+        }
+      });
+    }
 
     const fallbackMessages = normalizeTraceTranscript(executionTrace);
     const fallbackHighSignalCount = fallbackMessages.filter((message) => message.signalLevel === "high").length;
@@ -1210,6 +1237,30 @@ export async function runHeartbeatForAgent(
       message: executionSummary,
       finishedAt: new Date()
     });
+    try {
+      await appendRunSummaryComments(db, {
+        companyId,
+        issueIds,
+        agentId,
+        runId,
+        status: "failed",
+        executionSummary
+      });
+    } catch (commentError) {
+      await appendAuditEvent(db, {
+        companyId,
+        actorType: "system",
+        eventType: "heartbeat.run_comment_failed",
+        entityType: "heartbeat_run",
+        entityId: runId,
+        correlationId: options?.requestId ?? runId,
+        payload: {
+          agentId,
+          issueIds,
+          error: String(commentError)
+        }
+      });
+    }
     await appendAuditEvent(db, {
       companyId,
       actorType: "system",
@@ -1274,6 +1325,15 @@ export async function runHeartbeatForAgent(
       });
     }
     await publishOfficeOccupantForAgent(db, options?.realtimeHub, companyId, agentId);
+    try {
+      const queueModule = await import("./heartbeat-queue-service");
+      queueModule.triggerHeartbeatQueueWorker(db, companyId, {
+        requestId: options?.requestId,
+        realtimeHub: options?.realtimeHub
+      });
+    } catch {
+      // Queue worker trigger is best-effort to keep heartbeat execution resilient.
+    }
   }
 
   return runId;
@@ -1358,7 +1418,7 @@ export async function runHeartbeatSweep(
   const latestRunByAgent = await listLatestRunByAgent(db, companyId);
 
   const now = new Date();
-  const runs: string[] = [];
+  const enqueuedJobIds: string[] = [];
   const dueAgents: Array<{ id: string }> = [];
   let skippedNotDue = 0;
   let skippedStatus = 0;
@@ -1376,16 +1436,22 @@ export async function runHeartbeatSweep(
     dueAgents.push({ id: agent.id });
   }
   const sweepConcurrency = resolveHeartbeatSweepConcurrency(dueAgents.length);
+  const queueModule = await import("./heartbeat-queue-service");
   await runWithConcurrency(dueAgents, sweepConcurrency, async (agent) => {
     try {
-      const runId = await runHeartbeatForAgent(db, companyId, agent.id, {
-        trigger: "scheduler",
+      const job = await queueModule.enqueueHeartbeatQueueJob(db, {
+        companyId,
+        agentId: agent.id,
+        jobType: "scheduler",
+        priority: 80,
+        idempotencyKey: options?.requestId ? `scheduler:${agent.id}:${options.requestId}` : null,
+        payload: {}
+      });
+      enqueuedJobIds.push(job.id);
+      queueModule.triggerHeartbeatQueueWorker(db, companyId, {
         requestId: options?.requestId,
         realtimeHub: options?.realtimeHub
       });
-      if (runId) {
-        runs.push(runId);
-      }
     } catch {
       failedStarts += 1;
     }
@@ -1398,8 +1464,8 @@ export async function runHeartbeatSweep(
     entityId: companyId,
     correlationId: options?.requestId ?? null,
     payload: {
-      runIds: runs,
-      startedCount: runs.length,
+      runIds: enqueuedJobIds,
+      startedCount: enqueuedJobIds.length,
       dueCount: dueAgents.length,
       failedStarts,
       skippedStatus,
@@ -1409,7 +1475,7 @@ export async function runHeartbeatSweep(
       requestId: options?.requestId ?? null
     }
   });
-  return runs;
+  return enqueuedJobIds;
 }
 
 async function listLatestRunByAgent(db: BopoDb, companyId: string) {
@@ -1739,6 +1805,47 @@ function parseStringArray(value: string | null) {
     return Array.isArray(parsed) ? parsed.map((entry) => String(entry)) : [];
   } catch {
     return [];
+  }
+}
+
+function sanitizeAgentSummaryCommentBody(body: string) {
+  const sanitized = body.replace(AGENT_COMMENT_EMOJI_REGEX, "").trim();
+  return sanitized.length > 0 ? sanitized : "Run update.";
+}
+
+function buildRunSummaryCommentBody(input: { status: "completed" | "failed"; executionSummary: string }) {
+  const summary = sanitizeAgentSummaryCommentBody(input.executionSummary);
+  const heading = input.status === "completed" ? "Run summary" : "Run failure summary";
+  return `${heading}: ${summary}`;
+}
+
+async function appendRunSummaryComments(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    issueIds: string[];
+    agentId: string;
+    runId: string;
+    status: "completed" | "failed";
+    executionSummary: string;
+  }
+) {
+  if (input.issueIds.length === 0) {
+    return;
+  }
+  const commentBody = buildRunSummaryCommentBody({
+    status: input.status,
+    executionSummary: input.executionSummary
+  });
+  for (const issueId of input.issueIds) {
+    await addIssueComment(db, {
+      companyId: input.companyId,
+      issueId,
+      authorType: "agent",
+      authorId: input.agentId,
+      runId: input.runId,
+      body: commentBody
+    });
   }
 }
 

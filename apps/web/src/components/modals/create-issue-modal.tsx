@@ -255,7 +255,6 @@ export function CreateIssueModal({
                   onChange={(e) => setLabels(e.target.value)}
                   placeholder="bug, onboarding, backend"
                 />
-                <FieldDescription>Separate labels with commas.</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="issue-attachments">Attachments</FieldLabel>

@@ -25,7 +25,7 @@
 }
 
 .agentHeaderLink {
-  @apply font-medium hover:underline;
+  @apply font-medium hover:underline text-sidebar-foreground;
 }
 
 .agentHeaderLabel {
@@ -113,7 +113,7 @@
 }
 
 .issueRowContainer3 {
-  @apply mt-1 text-base text-muted-foreground;
+  @apply mt-1 text-base text-sidebar-foreground/50;
 }
 
 .issueRowContainer4 {
@@ -177,11 +177,11 @@
 }
 
 .configRowContainer2 {
-  @apply text-muted-foreground;
+  @apply text-sidebar-foreground/50;
 }
 
 .configRowContainer3 {
-  @apply max-w-[60%] wrap-break-word text-right;
+  @apply max-w-[60%] wrap-break-word text-right text-sidebar-foreground;
 }
 
 .promptCardContent {

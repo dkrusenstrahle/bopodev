@@ -1,18 +1,25 @@
 import { Router } from "express";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
-import { agents, heartbeatRuns } from "bopodev-db";
+import { agents, heartbeatRuns, listHeartbeatQueueJobs } from "bopodev-db";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
-import { runHeartbeatForAgent, runHeartbeatSweep, stopHeartbeatRun } from "../services/heartbeat-service";
+import { runHeartbeatSweep, stopHeartbeatRun } from "../services/heartbeat-service";
+import { enqueueHeartbeatQueueJob, triggerHeartbeatQueueWorker } from "../services/heartbeat-queue-service";
 
 const runAgentSchema = z.object({
   agentId: z.string().min(1)
 });
 const runIdParamsSchema = z.object({
   runId: z.string().min(1)
+});
+const queueQuerySchema = z.object({
+  status: z.enum(["pending", "running", "completed", "failed", "dead_letter", "canceled"]).optional(),
+  agentId: z.string().min(1).optional(),
+  jobType: z.enum(["manual", "scheduler", "resume", "redo", "comment_dispatch"]).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).optional()
 });
 
 export function createHeartbeatRouter(ctx: AppContext) {
@@ -40,30 +47,24 @@ export function createHeartbeatRouter(ctx: AppContext) {
       return sendError(res, `Agent is not invokable in status '${agent.status}'.`, 409);
     }
 
-    const runId = await runHeartbeatForAgent(ctx.db, req.companyId!, parsed.data.agentId, {
+    const job = await enqueueHeartbeatQueueJob(ctx.db, {
+      companyId: req.companyId!,
+      agentId: parsed.data.agentId,
+      jobType: "manual",
+      priority: 30,
+      idempotencyKey: req.requestId ? `manual:${parsed.data.agentId}:${req.requestId}` : null,
+      payload: {}
+    });
+    triggerHeartbeatQueueWorker(ctx.db, req.companyId!, {
       requestId: req.requestId,
-      trigger: "manual",
       realtimeHub: ctx.realtimeHub
     });
-    if (!runId) {
-      return sendError(res, "Heartbeat could not be started for this agent.", 409);
-    }
-    const [runRow] = await ctx.db
-      .select({ id: heartbeatRuns.id, status: heartbeatRuns.status, message: heartbeatRuns.message })
-      .from(heartbeatRuns)
-      .where(and(eq(heartbeatRuns.companyId, req.companyId!), eq(heartbeatRuns.id, runId)))
-      .limit(1);
-    const invokeStatus =
-      runRow?.status === "skipped" && String(runRow.message ?? "").includes("already in progress")
-        ? "skipped_overlap"
-        : runRow?.status === "skipped"
-          ? "skipped"
-          : "started";
     return sendOk(res, {
-      runId,
+      runId: null,
+      jobId: job.id,
       requestId: req.requestId,
-      status: invokeStatus,
-      message: runRow?.message ?? null
+      status: "queued",
+      message: "Heartbeat queued."
     });
   });
 
@@ -127,32 +128,24 @@ export function createHeartbeatRouter(ctx: AppContext) {
     if (agent.status === "paused" || agent.status === "terminated") {
       return { ok: false as const, statusCode: 409, message: `Agent is not invokable in status '${agent.status}'.` };
     }
-    const nextRunId = await runHeartbeatForAgent(ctx.db, input.companyId, run.agentId, {
-      requestId: input.requestId,
-      trigger: "manual",
-      realtimeHub: ctx.realtimeHub,
-      mode: input.mode,
-      sourceRunId: run.id
+    const job = await enqueueHeartbeatQueueJob(ctx.db, {
+      companyId: input.companyId,
+      agentId: run.agentId,
+      jobType: input.mode,
+      priority: 30,
+      idempotencyKey: input.requestId ? `${input.mode}:${run.agentId}:${run.id}:${input.requestId}` : null,
+      payload: { sourceRunId: run.id }
     });
-    if (!nextRunId) {
-      return { ok: false as const, statusCode: 409, message: "Heartbeat could not be started for this agent." };
-    }
-    const [runRow] = await ctx.db
-      .select({ id: heartbeatRuns.id, status: heartbeatRuns.status, message: heartbeatRuns.message })
-      .from(heartbeatRuns)
-      .where(and(eq(heartbeatRuns.companyId, input.companyId), eq(heartbeatRuns.id, nextRunId)))
-      .limit(1);
-    const invokeStatus =
-      runRow?.status === "skipped" && String(runRow.message ?? "").includes("already in progress")
-        ? "skipped_overlap"
-        : runRow?.status === "skipped"
-          ? "skipped"
-          : "started";
+    triggerHeartbeatQueueWorker(ctx.db, input.companyId, {
+      requestId: input.requestId,
+      realtimeHub: ctx.realtimeHub
+    });
     return {
       ok: true as const,
-      runId: nextRunId,
-      status: invokeStatus,
-      message: runRow?.message ?? null
+      runId: null,
+      jobId: job.id,
+      status: "queued" as const,
+      message: "Heartbeat queued."
     };
   }
 
@@ -176,6 +169,7 @@ export function createHeartbeatRouter(ctx: AppContext) {
     }
     return sendOk(res, {
       runId: result.runId,
+      jobId: result.jobId,
       requestId: req.requestId,
       status: result.status,
       message: result.message
@@ -202,6 +196,7 @@ export function createHeartbeatRouter(ctx: AppContext) {
     }
     return sendOk(res, {
       runId: result.runId,
+      jobId: result.jobId,
       requestId: req.requestId,
       status: result.status,
       message: result.message
@@ -218,6 +213,25 @@ export function createHeartbeatRouter(ctx: AppContext) {
       realtimeHub: ctx.realtimeHub
     });
     return sendOk(res, { runIds, requestId: req.requestId });
+  });
+
+  router.get("/queue", async (req, res) => {
+    requirePermission("heartbeats:run")(req, res, () => {});
+    if (res.headersSent) {
+      return;
+    }
+    const parsed = queueQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return sendError(res, parsed.error.message, 422);
+    }
+    const jobs = await listHeartbeatQueueJobs(ctx.db, {
+      companyId: req.companyId!,
+      status: parsed.data.status,
+      agentId: parsed.data.agentId,
+      jobType: parsed.data.jobType,
+      limit: parsed.data.limit
+    });
+    return sendOk(res, { items: jobs });
   });
 
   return router;

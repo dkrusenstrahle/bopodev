@@ -100,9 +100,10 @@ interface IssueActivityRow {
 }
 
 interface RunHeartbeatResponse {
-  runId: string;
+  runId: string | null;
+  jobId?: string | null;
   requestId?: string;
-  status?: "started" | "skipped_overlap" | "skipped";
+  status?: "queued" | "started" | "skipped";
   message?: string | null;
 }
 
@@ -201,6 +202,10 @@ function formatCommentDate(value: string | null | undefined) {
 
 function formatEventType(eventType: string) {
   return eventType.replace(/[._]/g, " ");
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function extractSummaryFromJsonLikeText(input: string) {
@@ -476,11 +481,35 @@ export function IssueDetailPageClient({
   async function refreshIssueView() {
     router.refresh();
     try {
-      const result = await apiGet<IssueActivityRow[]>(`/issues/${issue.id}/activity`, companyId);
-      setActivityItems(result.data);
+      const [activityResult, commentsResult] = await Promise.all([
+        apiGet<IssueActivityRow[]>(`/issues/${issue.id}/activity`, companyId),
+        apiGet<IssueCommentRow[]>(`/issues/${issue.id}/comments`, companyId)
+      ]);
+      setActivityItems(activityResult.data);
+      setComments(commentsResult.data);
       setActivityError(null);
+      setCommentError(null);
     } catch (error) {
       setActivityError(error instanceof ApiError ? error.message : "Failed to load issue activity.");
+    }
+  }
+
+  async function pollCommentDispatch(commentId: string) {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      await sleep(1000);
+      try {
+        const result = await apiGet<IssueCommentRow[]>(`/issues/${issue.id}/comments`, companyId);
+        setComments(result.data);
+        const targetComment = result.data.find((comment) => comment.id === commentId);
+        const hasPendingRecipient = (targetComment?.recipients ?? []).some(
+          (recipient) => recipient.deliveryStatus === "pending"
+        );
+        if (!hasPendingRecipient) {
+          break;
+        }
+      } catch {
+        break;
+      }
     }
   }
 
@@ -510,6 +539,18 @@ export function IssueDetailPageClient({
       return agentName ?? `Agent ${recipient.recipientId ?? "unknown"}`;
     }
     return recipient.recipientId ? `Member ${recipient.recipientId}` : "Member";
+  }
+
+  function formatRecipientDeliveryStatus(
+    recipient: IssueCommentRow["recipients"][number]
+  ) {
+    if (recipient.deliveryStatus === "pending") {
+      return "queued";
+    }
+    if (recipient.deliveryStatus === "dispatched") {
+      return "running";
+    }
+    return recipient.deliveryStatus;
   }
 
   async function updateIssue(payload: {
@@ -544,10 +585,8 @@ export function IssueDetailPageClient({
       const response = await apiPost<RunHeartbeatResponse>("/heartbeats/run-agent", companyId, {
         agentId: issue.assigneeAgentId
       });
-      if (response.data.status === "skipped_overlap") {
-        setActionNotice(
-          `A heartbeat is already running for this assignee (run ${response.data.runId}). The new request was skipped.`
-        );
+      if (response.data.status === "queued") {
+        setActionNotice(`Heartbeat queued (job ${response.data.jobId ?? "unknown"}).`);
       } else if (response.data.status === "skipped") {
         setActionNotice(response.data.message ?? "Heartbeat request was skipped.");
       } else {
@@ -579,6 +618,9 @@ export function IssueDetailPageClient({
       setDraftComment("");
       setSelectedRecipientKey(null);
       void refreshIssueView();
+      if ((response.data.recipients ?? []).some((recipient) => recipient.deliveryStatus === "pending")) {
+        void pollCommentDispatch(response.data.id);
+      }
     } catch (error) {
       setCommentError(error instanceof ApiError ? error.message : "Failed to add comment.");
     } finally {
@@ -711,15 +753,26 @@ export function IssueDetailPageClient({
                         <div className={styles.commentMetadataRow}>
                           {(comment.recipients ?? []).map((recipient) => (
                             <Badge key={`${comment.id}-${recipient.recipientType}-${recipient.recipientId ?? "all"}`} variant="outline">
-                              To: {formatRecipientDisplay(recipient)} ({recipient.deliveryStatus})
+                              {formatRecipientDisplay(recipient)} ({formatRecipientDeliveryStatus(recipient)})
                             </Badge>
                           ))}
+                          {(comment.recipients ?? [])
+                            .filter((recipient) => Boolean(recipient.dispatchedRunId))
+                            .map((recipient) => (
+                              <Link
+                                key={`${comment.id}-${recipient.recipientType}-${recipient.recipientId ?? "all"}-run`}
+                                href={{ pathname: `/runs/${recipient.dispatchedRunId}`, query: { companyId } }}
+                                className={styles.issueDetailLink2}
+                              >
+                                <Badge variant="outline">Run {recipient.dispatchedRunId}</Badge>
+                              </Link>
+                            ))}
                         </div>
                       ) : null}
                       {comment.runId ? (
                         <div className={styles.commentMetadataRow}>
                           <Link href={{ pathname: `/runs/${comment.runId}`, query: { companyId } }} className={styles.issueDetailLink2}>
-                            Run: {comment.runId}
+                            <Badge variant="outline">Run {comment.runId}</Badge>
                           </Link>
                         </div>
                       ) : null}

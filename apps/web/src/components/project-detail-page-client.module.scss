@@ -77,11 +77,11 @@
 }
 
 .projectPropertyLabel {
-  @apply text-base text-muted-foreground font-medium;
+  @apply text-base text-sidebar-foreground/50 font-medium;
 }
 
 .projectPropertyValue {
-  @apply min-w-0 text-foreground;
+  @apply min-w-0 text-sidebar-foreground;
   overflow-wrap: anywhere;
 }
 

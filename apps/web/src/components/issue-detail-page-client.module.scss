@@ -9,7 +9,7 @@
 }
 
 .propertyRowContainer2 {
-  @apply text-base text-sidebar-foreground/80 font-semibold;
+  @apply text-base text-sidebar-foreground/50 font-medium;
 }
 
 .propertyRowValue {
@@ -83,6 +83,9 @@
 
 .issueDetailLink2 {
   @apply hover:underline;
+  .ui-badge--outline {
+    @apply text-sidebar-foreground/80;
+  }
 }
 
 .issueDetailTextarea {
@@ -139,7 +142,7 @@
 }
 
 .commentMetadataRow {
-  @apply mt-2 flex flex-wrap items-center gap-2;
+  @apply flex flex-wrap items-center gap-4 mt-4;
 }
 
 .commentRecipientChevron {
@@ -147,5 +150,5 @@
 }
 
 .commentTimestamp {
-  @apply whitespace-nowrap text-base text-muted-foreground;
+  @apply whitespace-nowrap text-base text-sidebar-foreground/50;
 }

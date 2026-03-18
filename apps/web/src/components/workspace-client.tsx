@@ -1452,9 +1452,9 @@ export function WorkspaceClient({
     const year = Number(match[1]);
     const month = Number(match[2]);
     const daysInMonth = new Date(year, month, 0).getDate();
-    const byDay = new Map<number, { usd: number; tokens: number }>();
+    const byDay = new Map<number, { usd: number; inputTokens: number; outputTokens: number }>();
     for (let day = 1; day <= daysInMonth; day += 1) {
-      byDay.set(day, { usd: 0, tokens: 0 });
+      byDay.set(day, { usd: 0, inputTokens: 0, outputTokens: 0 });
     }
     for (const entry of costEntries) {
       if (monthKeyFromDate(entry.createdAt) !== targetMonth) {
@@ -1466,13 +1466,24 @@ export function WorkspaceClient({
         continue;
       }
       current.usd += entry.usdCost;
-      current.tokens += entry.tokenInput + entry.tokenOutput;
+      current.inputTokens += entry.tokenInput;
+      current.outputTokens += entry.tokenOutput;
     }
-    return Array.from(byDay.entries()).map(([day, values]) => ({
+    const dailySeries = Array.from(byDay.entries()).map(([day, values]) => ({
       label: String(day).padStart(2, "0"),
-      usd: Number(values.usd.toFixed(4)),
-      tokens: values.tokens
+      usd: values.usd,
+      inputTokens: values.inputTokens,
+      outputTokens: values.outputTokens,
+      tokens: values.inputTokens + values.outputTokens
     }));
+    let cumulativeUsd = 0;
+    return dailySeries.map((entry) => {
+      cumulativeUsd += entry.usd;
+      return {
+        ...entry,
+        cumulativeUsd
+      };
+    });
   }, [activeCostMonth, costEntries, costMonthOptions, includeCostAggregations]);
   const monthlyCostChartData = useMemo(() => {
     if (!includeCostAggregations) {
@@ -1494,18 +1505,25 @@ export function WorkspaceClient({
       .slice(-6)
       .map(([month, value]) => ({
         label: month.slice(2),
-        usd: Number(value.usd.toFixed(4)),
+        usd: value.usd,
         tokens: value.tokens
       }));
   }, [costEntries, includeCostAggregations]);
-  const hasCostChartData = selectedMonthChartData.some((entry) => entry.usd > 0 || entry.tokens > 0) || monthlyCostChartData.some((entry) => entry.usd > 0);
   const costDailyConfig = {
-    usd: { label: "USD", color: "var(--chart-2)" },
-    tokens: { label: "Tokens", color: "var(--chart-4)" }
+    usd: { label: "Daily spend", color: "var(--chart-2)" }
+  } satisfies ChartConfig;
+  const costTokenMixConfig = {
+    inputTokens: { label: "Input tokens", color: "var(--chart-3)" },
+    outputTokens: { label: "Output tokens", color: "var(--chart-4)" }
+  } satisfies ChartConfig;
+  const costCumulativeConfig = {
+    cumulativeUsd: { label: "Cumulative USD", color: "var(--chart-5)" }
   } satisfies ChartConfig;
   const costMonthlyConfig = {
     usd: { label: "USD", color: "var(--chart-1)" }
   } satisfies ChartConfig;
+  const hasCostTokenMixData = selectedMonthChartData.some((entry) => entry.inputTokens > 0 || entry.outputTokens > 0);
+  const hasMonthlySpendData = monthlyCostChartData.some((entry) => entry.usd > 0);
   const runDetailsByRunId = useMemo(() => {
     if (!isRunsNav) {
       return new Map<string, RunDetailsPayload>();
@@ -4965,49 +4983,113 @@ export function WorkspaceClient({
                 }
               />
             </div>
-            {hasCostChartData ? (
-              <div className="ui-cost-charts-grid">
+            <div className="ui-cost-charts-grid">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Daily usage</CardTitle>
+                    <CardTitle>Daily spend trend</CardTitle>
                     <CardDescription>
                       {activeCostMonth === "all"
                         ? "Showing the latest available month. Change month for a focused view."
-                        : `${selectedMonthLabel} by day`}
+                        : `${selectedMonthLabel} spend by day`}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ChartContainer config={costDailyConfig} className={styles.costLedgerChartContainer}>
-                      <AreaChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                      <BarChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
                         <defs>
-                          <linearGradient id="costDailyUsdGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="10%" stopColor="var(--color-usd)" stopOpacity={0.45} />
-                            <stop offset="90%" stopColor="var(--color-usd)" stopOpacity={0.05} />
-                          </linearGradient>
-                          <linearGradient id="costDailyTokensGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="10%" stopColor="var(--color-tokens)" stopOpacity={0.4} />
-                            <stop offset="90%" stopColor="var(--color-tokens)" stopOpacity={0.04} />
+                          <linearGradient id="costDailyUsdBarGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="4%" stopColor="var(--color-usd)" stopOpacity={0.95} />
+                            <stop offset="96%" stopColor="var(--color-usd)" stopOpacity={0.55} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
                         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
                         <YAxis hide />
                         <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                        <Area
-                          type="monotone"
+                        <Bar
                           dataKey="usd"
-                          stroke="var(--color-usd)"
-                          fill="url(#costDailyUsdGradient)"
-                          fillOpacity={1}
-                          strokeWidth={2}
+                          fill="url(#costDailyUsdBarGradient)"
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={24}
+                          minPointSize={3}
                         />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Daily token mix</CardTitle>
+                    <CardDescription>{selectedMonthLabel} input and output token volumes.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {hasCostTokenMixData ? (
+                      <ChartContainer config={costTokenMixConfig} className={styles.costLedgerChartContainer}>
+                        <BarChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                          <defs>
+                            <linearGradient id="costTokenInputBarGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="8%" stopColor="var(--color-inputTokens)" stopOpacity={0.92} />
+                              <stop offset="94%" stopColor="var(--color-inputTokens)" stopOpacity={0.52} />
+                            </linearGradient>
+                            <linearGradient id="costTokenOutputBarGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="8%" stopColor="var(--color-outputTokens)" stopOpacity={0.92} />
+                              <stop offset="94%" stopColor="var(--color-outputTokens)" stopOpacity={0.52} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
+                          <YAxis hide />
+                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                          <Bar
+                            dataKey="inputTokens"
+                            stackId="tokens"
+                            fill="url(#costTokenInputBarGradient)"
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={24}
+                            minPointSize={2}
+                          />
+                          <Bar
+                            dataKey="outputTokens"
+                            stackId="tokens"
+                            fill="url(#costTokenOutputBarGradient)"
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={24}
+                            minPointSize={2}
+                          />
+                        </BarChart>
+                      </ChartContainer>
+                    ) : (
+                      <div className={styles.emptyStateContainer}>
+                        No input or output token usage was reported for this month.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Cumulative spend</CardTitle>
+                    <CardDescription>{selectedMonthLabel} running spend progression in USD.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={costCumulativeConfig} className={styles.costLedgerChartContainer}>
+                      <AreaChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                        <defs>
+                          <linearGradient id="costCumulativeUsdGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="8%" stopColor="var(--color-cumulativeUsd)" stopOpacity={0.5} />
+                            <stop offset="90%" stopColor="var(--color-cumulativeUsd)" stopOpacity={0.04} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.35} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
                         <Area
                           type="monotone"
-                          dataKey="tokens"
-                          stroke="var(--color-tokens)"
-                          fill="url(#costDailyTokensGradient)"
+                          dataKey="cumulativeUsd"
+                          stroke="var(--color-cumulativeUsd)"
+                          fill="url(#costCumulativeUsdGradient)"
                           fillOpacity={1}
-                          strokeWidth={2}
+                          strokeWidth={2.2}
                         />
                       </AreaChart>
                     </ChartContainer>
@@ -5019,32 +5101,34 @@ export function WorkspaceClient({
                     <CardDescription>Last 6 months total spend in USD.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ChartContainer config={costMonthlyConfig} className={styles.costLedgerChartContainer}>
-                      <AreaChart accessibilityLayer data={monthlyCostChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                        <defs>
-                          <linearGradient id="costMonthlyUsdGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="8%" stopColor="var(--color-usd)" stopOpacity={0.5} />
-                            <stop offset="90%" stopColor="var(--color-usd)" stopOpacity={0.05} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.35} />
-                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                        <YAxis hide />
-                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                        <Area
-                          type="monotone"
-                          dataKey="usd"
-                          stroke="var(--color-usd)"
-                          fill="url(#costMonthlyUsdGradient)"
-                          fillOpacity={1}
-                          strokeWidth={2.2}
-                        />
-                      </AreaChart>
-                    </ChartContainer>
+                    {hasMonthlySpendData ? (
+                      <ChartContainer config={costMonthlyConfig} className={styles.costLedgerChartContainer}>
+                        <BarChart accessibilityLayer data={monthlyCostChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                          <defs>
+                            <linearGradient id="costMonthlyUsdBarGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="8%" stopColor="var(--color-usd)" stopOpacity={0.92} />
+                              <stop offset="94%" stopColor="var(--color-usd)" stopOpacity={0.52} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.35} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
+                          <YAxis hide />
+                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                          <Bar
+                            dataKey="usd"
+                            fill="url(#costMonthlyUsdBarGradient)"
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={28}
+                            minPointSize={3}
+                          />
+                        </BarChart>
+                      </ChartContainer>
+                    ) : (
+                      <div className={styles.emptyStateContainer}>No spend has been recorded yet for the available months.</div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
-            ) : null}
             <DataTable
               columns={costColumns}
               data={filteredCostEntries}

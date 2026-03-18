@@ -1186,7 +1186,7 @@ body {
 }
 
 .ui-project-workspace-mode {
-  @apply flex flex-col gap-2 items-start justify-between rounded-md border border-border px-4 py-3 min-h-20 text-left transition-colors hover:border-muted-foreground/40;
+  @apply flex flex-col gap-0 items-start justify-between rounded-md border border-border px-4 py-3 min-h-20 text-left transition-colors hover:border-muted-foreground/40;
 }
 
 .ui-project-workspace-mode-active {

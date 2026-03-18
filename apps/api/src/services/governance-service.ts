@@ -5,6 +5,7 @@ import { AgentCreateRequestSchema, TemplateManifestDefault, TemplateManifestSche
 import type { BopoDb } from "bopodev-db";
 import {
   approvalRequests,
+  agents,
   createAgent,
   createGoal,
   createIssue,
@@ -106,6 +107,23 @@ const applyTemplatePayloadSchema = z.object({
   templateId: z.string().min(1),
   templateVersion: z.string().min(1),
   variables: z.record(z.string(), z.unknown()).default({})
+});
+const overrideBudgetPayloadSchema = z
+  .object({
+    agentId: z.string().min(1),
+    reason: z.string().optional(),
+    additionalBudgetUsd: z.number().positive().optional(),
+    revisedMonthlyBudgetUsd: z.number().positive().optional()
+  })
+  .refine(
+    (value) =>
+      (typeof value.additionalBudgetUsd === "number" && value.additionalBudgetUsd > 0) ||
+      (typeof value.revisedMonthlyBudgetUsd === "number" && value.revisedMonthlyBudgetUsd > 0),
+    "Budget override payload requires additionalBudgetUsd or revisedMonthlyBudgetUsd."
+  );
+const pauseOrTerminateAgentPayloadSchema = z.object({
+  agentId: z.string().min(1),
+  reason: z.string().optional()
 });
 const AGENT_STARTUP_PROJECT_NAME = "Agent Onboarding";
 const AGENT_STARTUP_TASK_MARKER = "[bopodev:onboarding:agent-startup:v1]";
@@ -347,8 +365,86 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
     };
   }
 
-  if (action === "pause_agent" || action === "terminate_agent" || action === "override_budget") {
-    return { applied: false };
+  if (action === "override_budget") {
+    const parsed = overrideBudgetPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new GovernanceError("Approval payload for budget override is invalid.");
+    }
+    const [agent] = await db
+      .select({
+        id: agents.id,
+        monthlyBudgetUsd: agents.monthlyBudgetUsd,
+        usedBudgetUsd: agents.usedBudgetUsd
+      })
+      .from(agents)
+      .where(and(eq(agents.companyId, companyId), eq(agents.id, parsed.data.agentId)))
+      .limit(1);
+    if (!agent) {
+      throw new GovernanceError("Agent not found for budget override request.");
+    }
+    const currentMonthlyBudget = Number(agent.monthlyBudgetUsd);
+    const currentUsedBudget = Number(agent.usedBudgetUsd);
+    const nextMonthlyBudget =
+      typeof parsed.data.revisedMonthlyBudgetUsd === "number"
+        ? parsed.data.revisedMonthlyBudgetUsd
+        : currentMonthlyBudget + (parsed.data.additionalBudgetUsd ?? 0);
+    if (!Number.isFinite(nextMonthlyBudget) || nextMonthlyBudget <= 0) {
+      throw new GovernanceError("Budget override must resolve to a positive monthly budget.");
+    }
+    if (nextMonthlyBudget <= currentUsedBudget) {
+      throw new GovernanceError("Budget override must exceed current used budget.");
+    }
+    await db
+      .update(agents)
+      .set({
+        monthlyBudgetUsd: nextMonthlyBudget.toFixed(4),
+        updatedAt: new Date()
+      })
+      .where(and(eq(agents.companyId, companyId), eq(agents.id, parsed.data.agentId)));
+    return {
+      applied: true,
+      entityType: "agent" as const,
+      entityId: parsed.data.agentId,
+      entity: {
+        agentId: parsed.data.agentId,
+        previousMonthlyBudgetUsd: currentMonthlyBudget,
+        monthlyBudgetUsd: nextMonthlyBudget,
+        usedBudgetUsd: currentUsedBudget,
+        reason: parsed.data.reason ?? null
+      }
+    };
+  }
+
+  if (action === "pause_agent" || action === "terminate_agent") {
+    const parsed = pauseOrTerminateAgentPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new GovernanceError(`Approval payload for ${action} is invalid.`);
+    }
+    const nextStatus = action === "pause_agent" ? "paused" : "terminated";
+    const [updated] = await db
+      .update(agents)
+      .set({
+        status: nextStatus,
+        updatedAt: new Date()
+      })
+      .where(and(eq(agents.companyId, companyId), eq(agents.id, parsed.data.agentId)))
+      .returning({
+        id: agents.id,
+        status: agents.status
+      });
+    if (!updated) {
+      throw new GovernanceError("Agent not found for lifecycle governance action.");
+    }
+    return {
+      applied: true,
+      entityType: "agent" as const,
+      entityId: updated.id,
+      entity: {
+        id: updated.id,
+        status: updated.status,
+        reason: parsed.data.reason ?? null
+      }
+    };
   }
 
   if (action === "promote_memory_fact") {

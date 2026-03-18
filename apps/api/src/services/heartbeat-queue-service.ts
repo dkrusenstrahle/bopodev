@@ -10,6 +10,7 @@ import {
   updateIssueCommentRecipients,
   type BopoDb
 } from "bopodev-db";
+import { parseIssueCommentRecipients } from "../lib/comment-recipients";
 import type { RealtimeHub } from "../realtime/hub";
 import { runHeartbeatForAgent } from "./heartbeat-service";
 
@@ -300,71 +301,3 @@ async function markCommentRecipientDeliveryIfNeeded(
   });
 }
 
-function parseIssueCommentRecipients(raw: string | null) {
-  if (!raw) {
-    return [] as Array<{
-      recipientType: "agent" | "board" | "member";
-      recipientId: string | null;
-      deliveryStatus: "pending" | "dispatched" | "failed" | "skipped";
-      dispatchedRunId: string | null;
-      dispatchedAt: string | null;
-      acknowledgedAt: string | null;
-    }>;
-  }
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed
-      .map((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return null;
-        }
-        const candidate = entry as Record<string, unknown>;
-        const recipientTypeRaw = String(candidate.recipientType ?? "").trim();
-        if (recipientTypeRaw !== "agent" && recipientTypeRaw !== "board" && recipientTypeRaw !== "member") {
-          return null;
-        }
-        const deliveryStatusRaw = String(candidate.deliveryStatus ?? "").trim();
-        const deliveryStatus =
-          deliveryStatusRaw === "pending" ||
-          deliveryStatusRaw === "dispatched" ||
-          deliveryStatusRaw === "failed" ||
-          deliveryStatusRaw === "skipped"
-            ? deliveryStatusRaw
-            : "pending";
-        const recipientId =
-          typeof candidate.recipientId === "string" && candidate.recipientId.trim().length > 0
-            ? candidate.recipientId.trim()
-            : null;
-        return {
-          recipientType: recipientTypeRaw as "agent" | "board" | "member",
-          recipientId,
-          deliveryStatus,
-          dispatchedRunId:
-            typeof candidate.dispatchedRunId === "string" && candidate.dispatchedRunId.trim().length > 0
-              ? candidate.dispatchedRunId.trim()
-              : null,
-          dispatchedAt:
-            typeof candidate.dispatchedAt === "string" && candidate.dispatchedAt.trim().length > 0
-              ? candidate.dispatchedAt.trim()
-              : null,
-          acknowledgedAt:
-            typeof candidate.acknowledgedAt === "string" && candidate.acknowledgedAt.trim().length > 0
-              ? candidate.acknowledgedAt.trim()
-              : null
-        };
-      })
-      .filter(Boolean) as Array<{
-      recipientType: "agent" | "board" | "member";
-      recipientId: string | null;
-      deliveryStatus: "pending" | "dispatched" | "failed" | "skipped";
-      dispatchedRunId: string | null;
-      dispatchedAt: string | null;
-      acknowledgedAt: string | null;
-    }>;
-  } catch {
-    return [];
-  }
-}

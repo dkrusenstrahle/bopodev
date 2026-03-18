@@ -2298,6 +2298,8 @@ export function createPrompt(context: HeartbeatContext) {
           [
             `- [${item.issueId}] ${item.title}`,
             `  Project: ${item.projectName ?? item.projectId}`,
+            item.parentIssueId ? `  Parent issue: ${item.parentIssueId}` : null,
+            item.childIssueIds?.length ? `  Sub-issues: ${item.childIssueIds.join(", ")}` : null,
             item.status ? `  Status: ${item.status}` : null,
             item.priority ? `  Priority: ${item.priority}` : null,
             item.body ? `  Body: ${item.body}` : null,

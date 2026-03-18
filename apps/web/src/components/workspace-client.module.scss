@@ -9,7 +9,7 @@
 }
 
 .metricCardDescription {
-  @apply text-xs uppercase tracking-[0.12em] text-muted-foreground font-semibold;
+  @apply text-xs uppercase tracking-[0.12em] text-sidebar-foreground/50 font-semibold;
 }
 
 .metricCardContent {

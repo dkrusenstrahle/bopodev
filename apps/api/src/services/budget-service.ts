@@ -9,6 +9,7 @@ export interface BudgetCheckResult {
 }
 
 export async function checkAgentBudget(db: BopoDb, companyId: string, agentId: string): Promise<BudgetCheckResult> {
+  // Budget enforcement is currently agent-scoped. Project/issue budgets are intentionally out of scope.
   const [agent] = await db
     .select()
     .from(agents)

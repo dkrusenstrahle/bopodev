@@ -5,17 +5,9 @@ import {
   updateIssueCommentRecipients,
   type BopoDb
 } from "bopodev-db";
+import { parseIssueCommentRecipients, type PersistedCommentRecipient } from "../lib/comment-recipients";
 import type { RealtimeHub } from "../realtime/hub";
 import { enqueueHeartbeatQueueJob, triggerHeartbeatQueueWorker } from "./heartbeat-queue-service";
-
-type PersistedCommentRecipient = {
-  recipientType: "agent" | "board" | "member";
-  recipientId: string | null;
-  deliveryStatus: "pending" | "dispatched" | "failed" | "skipped";
-  dispatchedRunId: string | null;
-  dispatchedAt: string | null;
-  acknowledgedAt: string | null;
-};
 
 const COMMENT_DISPATCH_SWEEP_LIMIT = 100;
 const activeCompanyDispatchRuns = new Set<string>();
@@ -164,61 +156,3 @@ async function dispatchCommentRecipients(
   return dispatchedRecipients;
 }
 
-function parseIssueCommentRecipients(raw: string | null) {
-  if (!raw) {
-    return [] as PersistedCommentRecipient[];
-  }
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [] as PersistedCommentRecipient[];
-    }
-    return parsed
-      .map((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return null;
-        }
-        const candidate = entry as Record<string, unknown>;
-        const recipientTypeRaw = String(candidate.recipientType ?? "").trim();
-        if (recipientTypeRaw !== "agent" && recipientTypeRaw !== "board" && recipientTypeRaw !== "member") {
-          return null;
-        }
-        const recipientType = recipientTypeRaw as "agent" | "board" | "member";
-        const deliveryStatusRaw = String(candidate.deliveryStatus ?? "").trim();
-        const deliveryStatus =
-          deliveryStatusRaw === "pending" ||
-          deliveryStatusRaw === "dispatched" ||
-          deliveryStatusRaw === "failed" ||
-          deliveryStatusRaw === "skipped"
-            ? deliveryStatusRaw
-            : "pending";
-        const recipientId =
-          typeof candidate.recipientId === "string" && candidate.recipientId.trim().length > 0
-            ? candidate.recipientId.trim()
-            : null;
-        const dispatchedRunId =
-          typeof candidate.dispatchedRunId === "string" && candidate.dispatchedRunId.trim().length > 0
-            ? candidate.dispatchedRunId.trim()
-            : null;
-        const dispatchedAt =
-          typeof candidate.dispatchedAt === "string" && candidate.dispatchedAt.trim().length > 0
-            ? candidate.dispatchedAt.trim()
-            : null;
-        const acknowledgedAt =
-          typeof candidate.acknowledgedAt === "string" && candidate.acknowledgedAt.trim().length > 0
-            ? candidate.acknowledgedAt.trim()
-            : null;
-        return {
-          recipientType,
-          recipientId,
-          deliveryStatus,
-          dispatchedRunId,
-          dispatchedAt,
-          acknowledgedAt
-        } satisfies PersistedCommentRecipient;
-      })
-      .filter(Boolean) as PersistedCommentRecipient[];
-  } catch {
-    return [] as PersistedCommentRecipient[];
-  }
-}

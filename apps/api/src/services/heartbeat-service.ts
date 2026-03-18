@@ -14,10 +14,12 @@ import {
 import type { BopoDb } from "bopodev-db";
 import {
   addIssueComment,
+  approvalRequests,
   agents,
   appendActivity,
   appendHeartbeatRunMessages,
   companies,
+  createApprovalRequest,
   goals,
   heartbeatRuns,
   issueComments,
@@ -95,12 +97,13 @@ export async function claimIssuesForAgent(
         updated_at = CURRENT_TIMESTAMP
     FROM candidate c
     WHERE i.id = c.id
-    RETURNING i.id, i.project_id, i.title, i.body, i.status, i.priority, i.labels_json, i.tags_json;
+    RETURNING i.id, i.project_id, i.parent_issue_id, i.title, i.body, i.status, i.priority, i.labels_json, i.tags_json;
   `);
 
   return (result.rows ?? []) as Array<{
     id: string;
     project_id: string;
+    parent_issue_id: string | null;
     title: string;
     body: string | null;
     status: string;
@@ -339,6 +342,14 @@ export async function runHeartbeatForAgent(
   }
 
   if (!budgetCheck.allowed) {
+    await ensureBudgetOverrideApprovalRequest(db, {
+      companyId,
+      agentId,
+      utilizationPct: budgetCheck.utilizationPct,
+      usedBudgetUsd: Number(agent.usedBudgetUsd),
+      monthlyBudgetUsd: Number(agent.monthlyBudgetUsd),
+      runId
+    });
     await appendAuditEvent(db, {
       companyId,
       actorType: "system",
@@ -1517,6 +1528,7 @@ async function loadWakeContextWorkItems(db: BopoDb, companyId: string, wakeIssue
     return [] as Array<{
       id: string;
       project_id: string;
+      parent_issue_id: string | null;
       title: string;
       body: string | null;
       status: string;
@@ -1529,6 +1541,7 @@ async function loadWakeContextWorkItems(db: BopoDb, companyId: string, wakeIssue
     .select({
       id: issues.id,
       project_id: issues.projectId,
+      parent_issue_id: issues.parentIssueId,
       title: issues.title,
       body: issues.body,
       status: issues.status,
@@ -1546,6 +1559,7 @@ function mergeContextWorkItems(
   assigned: Array<{
     id: string;
     project_id: string;
+    parent_issue_id: string | null;
     title: string;
     body: string | null;
     status: string;
@@ -1556,6 +1570,7 @@ function mergeContextWorkItems(
   wakeContext: Array<{
     id: string;
     project_id: string;
+    parent_issue_id: string | null;
     title: string;
     body: string | null;
     status: string;
@@ -1585,6 +1600,7 @@ function resolveExecutionWorkItems(
   assigned: Array<{
     id: string;
     project_id: string;
+    parent_issue_id: string | null;
     title: string;
     body: string | null;
     status: string;
@@ -1595,6 +1611,7 @@ function resolveExecutionWorkItems(
   wakeContextItems: Array<{
     id: string;
     project_id: string;
+    parent_issue_id: string | null;
     title: string;
     body: string | null;
     status: string;
@@ -1656,6 +1673,7 @@ async function buildHeartbeatContext(
     workItems: Array<{
       id: string;
       project_id: string;
+      parent_issue_id: string | null;
       title: string;
       body: string | null;
       status: string;
@@ -1684,6 +1702,25 @@ async function buildHeartbeatContext(
     Array.from(projectWorkspaceContextMap.entries()).map(([projectId, context]) => [projectId, context.cwd])
   );
   const issueIds = input.workItems.map((item) => item.id);
+  const childIssueRows =
+    issueIds.length > 0
+      ? await db
+          .select({
+            id: issues.id,
+            parentIssueId: issues.parentIssueId
+          })
+          .from(issues)
+          .where(and(eq(issues.companyId, companyId), inArray(issues.parentIssueId, issueIds)))
+      : [];
+  const childIssueIdsByParent = new Map<string, string[]>();
+  for (const row of childIssueRows) {
+    if (!row.parentIssueId) {
+      continue;
+    }
+    const existing = childIssueIdsByParent.get(row.parentIssueId) ?? [];
+    existing.push(row.id);
+    childIssueIdsByParent.set(row.parentIssueId, existing);
+  }
   const attachmentRows =
     issueIds.length > 0
       ? await db
@@ -1785,6 +1822,8 @@ async function buildHeartbeatContext(
     workItems: input.workItems.map((item) => ({
       issueId: item.id,
       projectId: item.project_id,
+      parentIssueId: item.parent_issue_id,
+      childIssueIds: childIssueIdsByParent.get(item.id) ?? [],
       projectName: projectNameById.get(item.project_id) ?? null,
       title: item.title,
       // Comment-order runs should treat linked issues as context-only, not as a full issue execution order.
@@ -1808,6 +1847,71 @@ function parseStringArray(value: string | null) {
   } catch {
     return [];
   }
+}
+
+async function ensureBudgetOverrideApprovalRequest(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    agentId: string;
+    utilizationPct: number;
+    usedBudgetUsd: number;
+    monthlyBudgetUsd: number;
+    runId: string;
+  }
+) {
+  const pendingOverrides = await db
+    .select({ id: approvalRequests.id, payloadJson: approvalRequests.payloadJson })
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.companyId, input.companyId),
+        eq(approvalRequests.action, "override_budget"),
+        eq(approvalRequests.status, "pending")
+      )
+    );
+  const alreadyPending = pendingOverrides.some((approval) => {
+    try {
+      const payload = JSON.parse(approval.payloadJson) as Record<string, unknown>;
+      return payload.agentId === input.agentId;
+    } catch {
+      return false;
+    }
+  });
+  if (alreadyPending) {
+    return;
+  }
+  const recommendedAdditionalBudgetUsd = Math.max(1, Math.ceil(Math.max(input.monthlyBudgetUsd * 0.25, 1)));
+  const approvalId = await createApprovalRequest(db, {
+    companyId: input.companyId,
+    action: "override_budget",
+    payload: {
+      agentId: input.agentId,
+      reason: "Agent reached budget hard-stop and needs additional funds.",
+      currentMonthlyBudgetUsd: input.monthlyBudgetUsd,
+      usedBudgetUsd: input.usedBudgetUsd,
+      utilizationPct: input.utilizationPct,
+      additionalBudgetUsd: recommendedAdditionalBudgetUsd,
+      revisedMonthlyBudgetUsd: Number((input.monthlyBudgetUsd + recommendedAdditionalBudgetUsd).toFixed(4)),
+      triggerRunId: input.runId
+    }
+  });
+  await appendAuditEvent(db, {
+    companyId: input.companyId,
+    actorType: "system",
+    eventType: "budget.override_requested",
+    entityType: "approval",
+    entityId: approvalId,
+    correlationId: input.runId,
+    payload: {
+      agentId: input.agentId,
+      runId: input.runId,
+      currentMonthlyBudgetUsd: input.monthlyBudgetUsd,
+      usedBudgetUsd: input.usedBudgetUsd,
+      utilizationPct: input.utilizationPct,
+      additionalBudgetUsd: recommendedAdditionalBudgetUsd
+    }
+  });
 }
 
 function sanitizeAgentSummaryCommentBody(body: string) {

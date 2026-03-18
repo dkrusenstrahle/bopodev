@@ -183,7 +183,7 @@ body {
 }
 
 .ui-card-description {
-  @apply text-base text-muted-foreground ;
+  @apply text-base text-sidebar-foreground/50;
 }
 
 .ui-card-action {
@@ -368,7 +368,7 @@ body {
 }
 
 .ui-dialog-description {
-  @apply text-base text-muted-foreground;
+  @apply text-base text-sidebar-foreground/50;
 }
 
 .ui-sheet-overlay {
@@ -630,7 +630,7 @@ body {
 }
 
 .ui-label {
-  @apply flex items-center gap-2 text-base leading-none font-medium text-muted-foreground select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50;
+  @apply flex items-center gap-2 text-base leading-none font-medium text-sidebar-foreground/50 select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50;
 }
 
 .ui-navigation-menu {
@@ -1119,7 +1119,7 @@ body {
 }
 
 .ui-feature-metric-label {
-  @apply text-xs uppercase text-muted-foreground tracking-[0.12em] font-semibold;
+  @apply text-xs uppercase text-sidebar-foreground/50 tracking-[0.12em] font-semibold;
 }
 
 .ui-feature-metric-content {

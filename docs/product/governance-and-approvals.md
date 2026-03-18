@@ -61,6 +61,11 @@ Always verify post-resolution state in related views:
 - run behavior for budget-related requests,
 - audit trail in observability.
 
+Budget override behavior:
+
+- When an agent hard-stops on budget, the system can queue a pending `override_budget` approval for governance review.
+- Approved budget overrides update the target agent's monthly budget.
+
 ## Operating Recommendations
 
 - Resolve stale pending approvals daily.

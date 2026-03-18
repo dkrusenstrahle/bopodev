@@ -5,6 +5,8 @@ export type AgentProviderType = ProviderType;
 export interface AgentWorkItem {
   issueId: string;
   projectId: string;
+  parentIssueId?: string | null;
+  childIssueIds?: string[];
   projectName?: string | null;
   title: string;
   body?: string | null;

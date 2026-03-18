@@ -26,6 +26,11 @@ From `agents` and related modals, you can:
 - set run policy (`workspace_write` or `full_access`, optional web search),
 - pause, resume, or terminate agents.
 
+Budget scope:
+
+- Budget enforcement is currently agent-level (`monthlyBudgetUsd` vs `usedBudgetUsd`).
+- Project and issue entities do not currently enforce independent budget caps.
+
 Leadership delegation:
 
 - Agent hiring delegation resolves through policy (hiring-capable leadership) rather than only a `CEO` name/role string match.

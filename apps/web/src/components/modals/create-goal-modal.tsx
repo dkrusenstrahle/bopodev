@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, apiPost, apiPut } from "@/lib/api";
+import { ApiError, apiDelete, apiPost, apiPut } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -59,6 +59,7 @@ export function CreateGoalModal({
   const [status, setStatus] = useState(goal?.status ?? "draft");
   const [activateNow, setActivateNow] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isEditing = Boolean(goal);
 
@@ -105,6 +106,27 @@ export function CreateGoalModal({
       }
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function onDeleteGoal() {
+    if (!goal) {
+      return;
+    }
+    setError(null);
+    setIsDeleting(true);
+    try {
+      await apiDelete(`/goals/${goal.id}`, companyId);
+      setOpen(false);
+      router.refresh();
+    } catch (deleteError) {
+      if (deleteError instanceof ApiError) {
+        setError(deleteError.message);
+      } else {
+        setError("Failed to delete goal.");
+      }
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -182,8 +204,13 @@ export function CreateGoalModal({
             </FieldGroup>
           </div>
           {error ? <p className={styles.createGoalModalText}>{error}</p> : null}
-          <DialogFooter showCloseButton>
-            <Button type="submit" disabled={isSubmitting}>
+          <DialogFooter showCloseButton={!isEditing}>
+            {isEditing ? (
+              <Button type="button" variant="destructive" onClick={() => void onDeleteGoal()} disabled={isSubmitting || isDeleting}>
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            ) : null}
+            <Button type="submit" disabled={isSubmitting || isDeleting}>
               {isEditing ? "Save" : "Create"}
             </Button>
           </DialogFooter>

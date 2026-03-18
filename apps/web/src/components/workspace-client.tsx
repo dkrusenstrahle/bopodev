@@ -603,16 +603,53 @@ function formatRunMessage(message: string | null | undefined) {
 
   const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   const candidate = fencedMatch ? fencedMatch[1]!.trim() : trimmed;
+  const apiErrorMatch = candidate.match(/^API\s+Error:?\s*(\d{3})?\s*([\s\S]*)$/i);
+  const apiStatusCode = apiErrorMatch?.[1] ?? null;
+  const apiPayloadCandidate = apiErrorMatch?.[2]?.trim() ?? null;
+  const jsonCandidate = apiPayloadCandidate && apiPayloadCandidate.startsWith("{") ? apiPayloadCandidate : candidate;
 
   try {
-    const parsed = JSON.parse(candidate) as { summary?: unknown; message?: unknown };
-    if (typeof parsed.summary === "string" && parsed.summary.trim()) {
-      return parsed.summary.trim();
+    const parsed = JSON.parse(jsonCandidate) as {
+      summary?: unknown;
+      message?: unknown;
+      type?: unknown;
+      error?: { type?: unknown; message?: unknown } | unknown;
+    };
+    const parsedError =
+      parsed.error && typeof parsed.error === "object" && !Array.isArray(parsed.error)
+        ? (parsed.error as { type?: unknown; message?: unknown })
+        : null;
+    const messageText =
+      typeof parsed.summary === "string" && parsed.summary.trim()
+        ? parsed.summary.trim()
+        : typeof parsed.message === "string" && parsed.message.trim()
+          ? parsed.message.trim()
+          : typeof parsedError?.message === "string" && parsedError.message.trim()
+            ? parsedError.message.trim()
+            : null;
+    if (apiStatusCode) {
+      if (messageText) {
+        return `API error ${apiStatusCode}: ${messageText}`;
+      }
+      return `API error ${apiStatusCode}`;
     }
-    if (typeof parsed.message === "string" && parsed.message.trim()) {
-      return parsed.message.trim();
+    if (typeof parsedError?.type === "string" && parsedError.type.trim() && messageText) {
+      return `${parsedError.type.trim().replaceAll("_", " ")}: ${messageText}`;
+    }
+    if (typeof parsed.type === "string" && parsed.type.trim() && messageText) {
+      return `${parsed.type.trim().replaceAll("_", " ")}: ${messageText}`;
+    }
+    if (messageText) {
+      return messageText;
     }
   } catch {
+    if (apiStatusCode) {
+      const compactPayload = (apiPayloadCandidate ?? "").replace(/\s+/g, " ").trim();
+      if (compactPayload) {
+        return `API error ${apiStatusCode}: ${compactPayload}`;
+      }
+      return `API error ${apiStatusCode}`;
+    }
     const summaryMatch = candidate.match(/"summary"\s*:\s*"([^"]+)"/i);
     if (summaryMatch?.[1]?.trim()) {
       return summaryMatch[1].trim();
@@ -989,12 +1026,6 @@ export function WorkspaceClient({
     await runCrudAction(async () => {
       await apiPut(`/goals/${goalId}`, companyId!, { status });
     }, "Failed to update goal status.");
-  }
-
-  async function removeGoal(goal: GoalRow) {
-    await runCrudAction(async () => {
-      await apiDelete(`/goals/${goal.id}`, companyId!);
-    }, "Failed to delete goal.", `goal:${goal.id}:delete`);
   }
 
   async function removeCompany(company: CompanyRow) {
@@ -1538,7 +1569,7 @@ export function WorkspaceClient({
         const agentName = agentNameById.get(run.agentId) ?? run.agentId;
         return (
           run.id.toLowerCase().includes(normalizedQuery) ||
-          (run.message ?? "").toLowerCase().includes(normalizedQuery) ||
+          formatRunMessage(run.message).toLowerCase().includes(normalizedQuery) ||
           formatRunStatusLabel(run.status).toLowerCase().includes(normalizedQuery) ||
           agentName.toLowerCase().includes(normalizedQuery)
         );
@@ -2844,9 +2875,6 @@ export function WorkspaceClient({
         cell: ({ row }) => (
           <div className={styles.formatDurationContainer4}>
             <div className={styles.formatDurationContainer1}>{row.original.title}</div>
-            {row.original.description ? (
-              <div className={styles.formatDurationContainer2}>{row.original.description}</div>
-            ) : null}
           </div>
         )
       },
@@ -2885,22 +2913,12 @@ export function WorkspaceClient({
                 triggerVariant="outline"
                 triggerSize="sm"
               />
-              <ConfirmActionModal
-                triggerLabel="Delete"
-                triggerVariant="outline"
-                triggerSize="sm"
-                title="Delete goal?"
-                description={`Delete "${goal.title}".`}
-                confirmLabel="Delete"
-                onConfirm={() => removeGoal(goal)}
-                triggerDisabled={isActionPending(`goal:${goal.id}:delete`)}
-              />
             </div>
           );
         }
       }
     ],
-    [companyId, isActionPending, onboardingRuntimeFallback, suggestedAgentRuntimeCwd]
+    [companyId, onboardingRuntimeFallback, suggestedAgentRuntimeCwd]
   );
 
   const agentColumns = useMemo<ColumnDef<AgentRow>[]>(
@@ -3988,7 +4006,12 @@ export function WorkspaceClient({
               <MetricCard label="Spend (last 6m)" value={formatUsdCost(dashboardCostTrendData.reduce((sum, row) => sum + row.usd, 0))} hint={topCostAgent} />
             </div>
             {dashboardAgentSnapshots.length > 0 ? (
-              <div className={styles.dashboardAgentSpotlightGrid}>
+              <div
+                className={cn(
+                  styles.dashboardAgentSpotlightGrid,
+                  dashboardAgentSnapshots.length === 1 ? styles.dashboardAgentSpotlightGridSingle : null
+                )}
+              >
                 {dashboardAgentSnapshots.map((agentSnapshot) => (
                   <Card key={agentSnapshot.id} className={styles.dashboardAgentSpotlightCard}>
                     <CardHeader>
@@ -4074,11 +4097,13 @@ export function WorkspaceClient({
                   ) : (
                     <div className={styles.dashboardActionQueueEmpty}>No active attention items right now.</div>
                   )}
-                  <div className={styles.dashboardActionQueueActions}>
-                    <Button asChild size="sm">
-                      <Link href={{ pathname: "/inbox", query: { companyId: companyId! } }}>Open inbox queue</Link>
-                    </Button>
-                  </div>
+                  {dashboardAttentionPreview.length > 0 ? (
+                    <div className={styles.dashboardActionQueueActions}>
+                      <Button asChild size="sm">
+                        <Link href={{ pathname: "/inbox", query: { companyId: companyId! } }}>Open inbox queue</Link>
+                      </Button>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
               <Card className={styles.dashboardAttentionCard}>
@@ -4137,14 +4162,16 @@ export function WorkspaceClient({
                   ) : (
                     <div className={styles.dashboardActionQueueEmpty}>No pending approvals right now.</div>
                   )}
-                  <div className={styles.dashboardActionQueueActions}>
-                    <Button asChild size="sm">
-                      <Link href={{ pathname: "/inbox", query: { companyId: companyId!, preset: "board-decisions" } }}>Review approvals</Link>
-                    </Button>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={{ pathname: "/inbox", query: { companyId: companyId! } }}>Open inbox</Link>
-                    </Button>
-                  </div>
+                  {dashboardPendingApprovalPreview.length > 0 ? (
+                    <div className={styles.dashboardActionQueueActions}>
+                      <Button asChild size="sm">
+                        <Link href={{ pathname: "/inbox", query: { companyId: companyId!, preset: "board-decisions" } }}>Review approvals</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={{ pathname: "/inbox", query: { companyId: companyId! } }}>Open inbox</Link>
+                      </Button>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </div>

@@ -65,7 +65,7 @@
 }
 
 .projectDetailCardContent2 {
-  @apply space-y-2 text-base;
+  @apply space-y-6 text-base;
 }
 
 .projectDetailSelectTrigger {
@@ -73,7 +73,7 @@
 }
 
 .projectPropertyRow {
-  @apply space-y-1.5 py-1 text-base leading-6;
+  @apply space-y-1.5 py-1 text-base leading-6 mb-0;
 }
 
 .projectPropertyLabel {

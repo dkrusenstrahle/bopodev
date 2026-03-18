@@ -10,6 +10,44 @@ body {
   @apply font-medium antialiased;
 }
 
+/* Theme-aware native scrollbars (lists, panels, markdown, code blocks). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--sidebar-foreground) 28%, transparent)
+    color-mix(in oklab, var(--background) 82%, var(--border) 18%);
+}
+
+*::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+*::-webkit-scrollbar-track {
+  background: color-mix(in oklab, var(--background) 80%, var(--border) 20%);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--sidebar-foreground) 24%, transparent);
+  border-radius: 999px;
+  box-shadow: none;
+  min-height: 28px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--sidebar-foreground) 36%, transparent);
+  box-shadow: none;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklab, var(--sidebar-foreground) 46%, transparent);
+  box-shadow: none;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .ui-alert {
   @apply relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-base has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current;
   &.ui-alert--default {
@@ -1207,7 +1245,7 @@ body {
 }
 
 .ui-project-workspace-mode-description {
-  @apply text-base text-muted-foreground;
+  @apply text-base text-sidebar-foreground/50;
 }
 
 .ui-issue-muted-text {

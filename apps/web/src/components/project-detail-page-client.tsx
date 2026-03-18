@@ -131,6 +131,8 @@ export function ProjectDetailPageClient({
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [plannedStartAtDraft, setPlannedStartAtDraft] = useState(project.plannedStartAt ? project.plannedStartAt.slice(0, 10) : "");
+  const [isSavingPlannedStartAt, setIsSavingPlannedStartAt] = useState(false);
   const [issuesQuery, setIssuesQuery] = useState("");
   const [issuesStatusFilter, setIssuesStatusFilter] = useState<string>("all");
   const [issuesAssigneeFilter, setIssuesAssigneeFilter] = useState<string>("all");
@@ -251,6 +253,19 @@ export function ProjectDetailPageClient({
     }
   }
 
+  async function updateProjectPlannedStartAt(nextPlannedStartAt: string) {
+    setActionError(null);
+    setIsSavingPlannedStartAt(true);
+    try {
+      await apiPut(`/projects/${project.id}`, companyId, { plannedStartAt: nextPlannedStartAt || null });
+      router.refresh();
+    } catch (error) {
+      setActionError(error instanceof ApiError ? error.message : "Failed to update planned start date.");
+    } finally {
+      setIsSavingPlannedStartAt(false);
+    }
+  }
+
   const leftPane = (
     <div className={styles.projectDetailContainer2}>
       <SectionHeading
@@ -359,6 +374,22 @@ export function ProjectDetailPageClient({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+          <Field>
+            <FieldLabel>Planned start date</FieldLabel>
+            <Input
+              id="project-planned-start-at-sidebar"
+              type="date"
+              value={plannedStartAtDraft}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setPlannedStartAtDraft(nextValue);
+                void updateProjectPlannedStartAt(nextValue);
+              }}
+              disabled={isSavingPlannedStartAt}
+              className={styles.projectDetailSelectTrigger}
+              autoComplete="off"
+            />
           </Field>
         </CardContent>
       </Card>

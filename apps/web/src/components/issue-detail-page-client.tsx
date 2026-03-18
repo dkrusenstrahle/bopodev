@@ -316,10 +316,48 @@ function normalizePayloadText(value: unknown) {
     .trim();
 }
 
+function formatInlineApiErrorText(input: string) {
+  const match = input.match(/^(?<prefix>[\s\S]*?)\bapi\s+er+r?or:?\s*(?<status>\d{3})\s*(?<payload>\{[\s\S]*\})\s*$/i);
+  if (!match?.groups) {
+    return null;
+  }
+  const prefix = (match.groups.prefix ?? "").trim();
+  const status = (match.groups.status ?? "").trim();
+  const payload = (match.groups.payload ?? "").trim();
+  if (!status || !payload) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(payload) as {
+      message?: unknown;
+      error?: { message?: unknown } | unknown;
+    };
+    const parsedError =
+      parsed.error && typeof parsed.error === "object" && !Array.isArray(parsed.error)
+        ? (parsed.error as { message?: unknown })
+        : null;
+    const message =
+      typeof parsedError?.message === "string" && parsedError.message.trim()
+        ? parsedError.message.trim()
+        : typeof parsed.message === "string" && parsed.message.trim()
+          ? parsed.message.trim()
+          : null;
+    const formatted = message ? `API error ${status}: ${message}` : `API error ${status}`;
+    return prefix ? `${prefix} ${formatted}` : formatted;
+  } catch {
+    const fallback = `API error ${status}`;
+    return prefix ? `${prefix} ${fallback}` : fallback;
+  }
+}
+
 function normalizeAgentCommentBodyForDisplay(body: string) {
   const trimmed = body.trim();
   if (!trimmed) {
     return body;
+  }
+  const inlineApiError = formatInlineApiErrorText(trimmed);
+  if (inlineApiError) {
+    return inlineApiError;
   }
   const extractedSummary = extractSummaryFromJsonLikeText(trimmed);
   const isPureJsonLike =
@@ -431,7 +469,7 @@ export function IssueDetailPageClient({
   );
   const selectedRecipientLabel = useMemo(() => {
     if (!selectedRecipientKey) {
-      return "Mention";
+      return "Assign";
     }
     if (selectedRecipientKey === boardRecipientKey) {
       return boardRecipientLabel;

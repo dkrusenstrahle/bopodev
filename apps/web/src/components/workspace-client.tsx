@@ -1683,96 +1683,69 @@ export function WorkspaceClient({
       );
     });
   }, [agents, agentsModelFilter, agentsProviderFilter, agentsQuery, agentsReportToFilter, agentsStatusFilter, isAgentsNav]);
-  const agentsInScopeForCharts = useMemo(() => {
+  const agentsSummary = useMemo(() => {
     if (!isAgentsNav) {
-      return [];
-    }
-    return filteredAgents;
-  }, [filteredAgents, isAgentsNav]);
-  const agentIdsInScopeForCharts = useMemo(
-    () => new Set(agentsInScopeForCharts.map((agent) => agent.id)),
-    [agentsInScopeForCharts]
-  );
-  const agentsRunsTrendData = useMemo(() => {
-    if (!isAgentsNav) {
-      return [];
-    }
-    const dayKeys = buildRecentDayKeys(14);
-    const byDay = new Map(dayKeys.map((key) => [key, { total: 0, failed: 0, completed: 0 }]));
-    for (const run of heartbeatRuns) {
-      if (!agentIdsInScopeForCharts.has(run.agentId)) {
-        continue;
-      }
-      const key = dayKeyFromDate(run.startedAt);
-      if (!key) {
-        continue;
-      }
-      const current = byDay.get(key);
-      if (!current) {
-        continue;
-      }
-      current.total += 1;
-      if (run.status === "failed") {
-        current.failed += 1;
-      }
-      if (run.status === "completed") {
-        current.completed += 1;
-      }
-    }
-    return dayKeys.map((key) => {
-      const current = byDay.get(key) ?? { total: 0, failed: 0, completed: 0 };
-      const relevant = current.completed + current.failed;
       return {
-        label: key.slice(5),
-        total: current.total,
-        failed: current.failed,
-        successRate: relevant > 0 ? Number(((current.completed / relevant) * 100).toFixed(1)) : 0
+        inScope: 0,
+        total: 0,
+        runs14d: 0,
+        completed14d: 0,
+        failed14d: 0,
+        successRate14d: 0,
+        spend30d: 0,
+        managedAgents: 0,
+        uniqueProviders: 0,
+        unconfiguredModels: 0
       };
-    });
-  }, [agentIdsInScopeForCharts, heartbeatRuns, isAgentsNav]);
-  const agentsSpendTrendData = useMemo(() => {
-    if (!isAgentsNav) {
-      return [];
     }
-    const dayKeys = buildRecentDayKeys(30);
-    const byDay = new Map(dayKeys.map((key) => [key, 0]));
-    for (const entry of costEntries) {
-      if (!entry.agentId || !agentIdsInScopeForCharts.has(entry.agentId)) {
+    const now = Date.now();
+    const last14dMs = 14 * 24 * 60 * 60 * 1000;
+    const last30dMs = 30 * 24 * 60 * 60 * 1000;
+    const inScopeIds = new Set(filteredAgents.map((agent) => agent.id));
+    let runs14d = 0;
+    let completed14d = 0;
+    let failed14d = 0;
+    for (const run of heartbeatRuns) {
+      if (!inScopeIds.has(run.agentId)) {
         continue;
       }
-      const key = dayKeyFromDate(entry.createdAt);
-      if (!key) {
+      if (now - new Date(run.startedAt).getTime() > last14dMs) {
         continue;
       }
-      const current = byDay.get(key);
-      if (typeof current !== "number") {
-        continue;
+      runs14d += 1;
+      if (run.status === "completed") {
+        completed14d += 1;
+      } else if (run.status === "failed") {
+        failed14d += 1;
       }
-      byDay.set(key, current + entry.usdCost);
     }
-    return dayKeys.map((key) => ({
-      label: key.slice(5),
-      usd: Number((byDay.get(key) ?? 0).toFixed(4))
-    }));
-  }, [agentIdsInScopeForCharts, costEntries, isAgentsNav]);
-  const agentsInsightsHasData = useMemo(() => {
-    if (!isAgentsNav) {
-      return false;
-    }
-    const hasRunData = agentsRunsTrendData.some((entry) => entry.total > 0);
-    const hasSpendData = agentsSpendTrendData.some((entry) => entry.usd > 0);
-    return hasRunData || hasSpendData;
-  }, [agentsRunsTrendData, agentsSpendTrendData, isAgentsNav]);
-  const agentsRunsTrendConfig = {
-    total: { label: "Total runs", color: "var(--chart-2)" },
-    failed: { label: "Failed runs", color: "var(--chart-5)" }
-  } satisfies ChartConfig;
-  const agentsSpendTrendConfig = {
-    usd: { label: "USD", color: "var(--chart-1)" }
-  } satisfies ChartConfig;
-  const agentsSuccessTrendConfig = {
-    successRate: { label: "Success rate %", color: "var(--chart-3)" }
-  } satisfies ChartConfig;
+    const spend30d = costEntries.reduce((sum, entry) => {
+      if (!entry.agentId || !inScopeIds.has(entry.agentId)) {
+        return sum;
+      }
+      if (now - new Date(entry.createdAt).getTime() > last30dMs) {
+        return sum;
+      }
+      return sum + entry.usdCost;
+    }, 0);
+    const relevantRuns14d = completed14d + failed14d;
+    const successRate14d = relevantRuns14d > 0 ? (completed14d / relevantRuns14d) * 100 : 0;
+    const managedAgents = filteredAgents.filter((agent) => Boolean(agent.managerAgentId)).length;
+    const uniqueProviders = new Set(filteredAgents.map((agent) => agent.providerType)).size;
+    const unconfiguredModels = filteredAgents.filter((agent) => (resolveNamedModelForAgent(agent) ?? "unconfigured") === "unconfigured").length;
+    return {
+      inScope: filteredAgents.length,
+      total: agents.length,
+      runs14d,
+      completed14d,
+      failed14d,
+      successRate14d,
+      spend30d,
+      managedAgents,
+      uniqueProviders,
+      unconfiguredModels
+    };
+  }, [agents, costEntries, filteredAgents, heartbeatRuns, isAgentsNav]);
   const pluginKindOptions = useMemo(
     () => Array.from(new Set(plugins.map((plugin) => plugin.kind))).sort((a, b) => a.localeCompare(b)),
     [plugins]
@@ -3779,68 +3752,24 @@ export function WorkspaceClient({
               }
             />
             <>
-              {agentsInsightsHasData ? (
-                <div className={styles.agentsInsightsChartsGrid}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Run volume trend</CardTitle>
-                      <CardDescription>Daily total and failed runs over the last 14 days.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={agentsRunsTrendConfig} className={styles.agentsInsightsChartContainer}>
-                        <LineChart accessibilityLayer data={agentsRunsTrendData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                          <Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2.2} dot={false} />
-                          <Line type="monotone" dataKey="failed" stroke="var(--color-failed)" strokeWidth={2} dot={false} />
-                        </LineChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Spend trend</CardTitle>
-                      <CardDescription>Daily USD spend over the last 30 days.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={agentsSpendTrendConfig} className={styles.agentsInsightsChartContainer}>
-                        <LineChart accessibilityLayer data={agentsSpendTrendData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                          <Line type="monotone" dataKey="usd" stroke="var(--color-usd)" strokeWidth={2.2} dot={false} />
-                        </LineChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Success-rate trend</CardTitle>
-                      <CardDescription>Daily completion quality from completed vs failed runs.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={agentsSuccessTrendConfig} className={styles.agentsInsightsChartContainer}>
-                        <LineChart accessibilityLayer data={agentsRunsTrendData} margin={{ top: 8, left: -8, right: -8 }}>
-                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                          <YAxis hide />
-                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                          <Line
-                            type="monotone"
-                            dataKey="successRate"
-                            stroke="var(--color-successRate)"
-                            strokeWidth={2.2}
-                            dot={false}
-                          />
-                        </LineChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
+              <div className={cn("ui-stats", "mt-4")}>
+                <MetricCard
+                  label="Agents in scope"
+                  value={`${agentsSummary.inScope} / ${agentsSummary.total}`}
+                  hint="filtered agents / total workforce"
+                />
+                <MetricCard
+                  label="Run success (14d)"
+                  value={`${agentsSummary.successRate14d.toFixed(1)}%`}
+                  hint={`${agentsSummary.completed14d} completed / ${agentsSummary.failed14d} failed`}
+                />
+                <MetricCard label="Spend (30d)" value={formatUsdCost(agentsSummary.spend30d)} hint={`${agentsSummary.runs14d} runs in last 14d`} />
+                <MetricCard
+                  label="Managed / Unconfigured"
+                  value={`${agentsSummary.managedAgents} / ${agentsSummary.unconfiguredModels}`}
+                  hint={`${agentsSummary.uniqueProviders} providers in current scope`}
+                />
+              </div>
               <DataTable
                 columns={agentColumns}
                 data={filteredAgents}

@@ -216,3 +216,23 @@
   @apply max-h-64 overflow-auto rounded-md border bg-muted/20 p-3 text-base leading-6;
   white-space: pre-wrap;
 }
+
+.runIdLink {
+  @apply font-medium hover:underline text-sidebar-foreground;
+}
+
+.runTableCellMuted {
+  @apply text-base text-sidebar-foreground/70;
+}
+
+.runMessageCell {
+  @apply max-w-[48ch] truncate text-base text-sidebar-foreground/80;
+}
+
+.runActionsCell {
+  @apply flex justify-end;
+}
+
+.tableHeaderAlignRight {
+  @apply text-right;
+}

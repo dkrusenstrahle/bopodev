@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ColumnDef } from "@tanstack/react-table";
 import type { ExecutionOutcome } from "bopodev-contracts";
 import { AppShell } from "@/components/app-shell";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { DataTable } from "@/components/ui/data-table";
+import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
 import { ConfirmActionModal } from "@/components/modals/confirm-action-modal";
 import { CreateAgentModal } from "@/components/modals/create-agent-modal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api";
@@ -211,6 +215,33 @@ function formatRunStatusLabel(status: string) {
 
 function isRunActive(run: Pick<HeartbeatRunRow, "status" | "finishedAt">) {
   return !run.finishedAt || run.status === "started" || run.status === "running";
+}
+
+function formatRunMessage(message: string | null | undefined) {
+  if (!message) {
+    return "No message";
+  }
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return "No message";
+  }
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = fencedMatch ? fencedMatch[1]!.trim() : trimmed;
+  try {
+    const parsed = JSON.parse(candidate) as { summary?: unknown; message?: unknown };
+    if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+      return parsed.summary.trim();
+    }
+    if (typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+  } catch {
+    const summaryMatch = candidate.match(/"summary"\s*:\s*"([^"]+)"/i);
+    if (summaryMatch?.[1]?.trim()) {
+      return summaryMatch[1].trim();
+    }
+  }
+  return candidate.replace(/\s+/g, " ").trim();
 }
 
 function formatHeartbeatInterval(seconds: number) {
@@ -438,15 +469,8 @@ export function AgentDetailPageClient({
   const [selectedMemoryContent, setSelectedMemoryContent] = useState<string>("");
   const [compiledContextPreview, setCompiledContextPreview] = useState<string>("");
   const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
   const managerNameById = useMemo(() => new Map(agents.map((entry) => [entry.id, entry.name])), [agents]);
-
-  const agentIssues = useMemo(
-    () =>
-      issues
-        .filter((issue) => issue.assigneeAgentId === agent.id)
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
-    [agent.id, issues]
-  );
 
   const agentRuns = useMemo(
     () =>
@@ -459,7 +483,6 @@ export function AgentDetailPageClient({
 
   const latestRun = agentRuns[0] ?? null;
   const activeRun = agentRuns.find((run) => isRunActive(run)) ?? null;
-  const recentRuns = agentRuns.slice(0, 6);
   const liveStatus = activeRun ? "running" : agent.status;
   const liveStatusDetail = activeRun ? `Run ${shortId(activeRun.id)} started ${formatRelative(activeRun.startedAt)}` : undefined;
 
@@ -524,6 +547,68 @@ export function AgentDetailPageClient({
     }
     return getModelOptionsForProvider(provider, selectedModelId).filter((option) => option.value.trim().length > 0);
   }, [selectedProviderType, selectedModelId]);
+  const agentRunColumns = useMemo<ColumnDef<HeartbeatRunRow>[]>(
+    () => [
+      {
+        accessorKey: "id",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Run" />,
+        cell: ({ row }) => (
+          <Link className={styles.runIdLink} href={`/runs/${row.original.id}?companyId=${companyId}&agentId=${agent.id}`}>
+            {shortId(row.original.id)}
+          </Link>
+        )
+      },
+      {
+        accessorKey: "status",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <Badge variant="outline" className={getStatusBadgeClassName(row.original.status)}>
+            {formatRunStatusLabel(row.original.status)}
+          </Badge>
+        )
+      },
+      {
+        accessorKey: "startedAt",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Started" />,
+        cell: ({ row }) => <div className={styles.runTableCellMuted}>{formatDateTime(row.original.startedAt)}</div>
+      },
+      {
+        accessorKey: "message",
+        header: "Message",
+        cell: ({ row }) => {
+          const displayMessage = formatRunMessage(row.original.message);
+          const previewMessage = displayMessage.length > 120 ? `${displayMessage.slice(0, 117)}...` : displayMessage;
+          return (
+            <div className={styles.runMessageCell} title={displayMessage}>
+              {previewMessage}
+            </div>
+          );
+        }
+      },
+      {
+        id: "actions",
+        header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className={styles.runActionsCell}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pendingActionKeys[`run:${row.original.id}:redo`] === true}
+              onClick={() => {
+                if (window.confirm("Redo from scratch? This starts a new run without previous session context.")) {
+                  void redoRun(row.original.id);
+                }
+              }}
+            >
+              {pendingActionKeys[`run:${row.original.id}:redo`] === true ? "Starting..." : "Redo"}
+            </Button>
+          </div>
+        )
+      }
+    ],
+    [agent.id, companyId, pendingActionKeys]
+  );
   const configuredThinkingEffort = state.runtime?.thinkingEffort ?? agent.runtimeThinkingEffort ?? "auto";
   const [selectedThinkingEffort, setSelectedThinkingEffort] = useState<"auto" | "low" | "medium" | "high">(
     configuredThinkingEffort
@@ -946,6 +1031,9 @@ export function AgentDetailPageClient({
             triggerVariant="outline"
             triggerSize="sm"
           />
+          <Button size="sm" variant="outline" onClick={() => setMemoryDialogOpen(true)}>
+            Memory
+          </Button>
         </div>
       </div>
       {invokeDisabledReason ? (
@@ -987,103 +1075,13 @@ export function AgentDetailPageClient({
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Issues</CardTitle>
-          <CardDescription>Most recently updated issues assigned to this agent.</CardDescription>
-        </CardHeader>
-        <CardContent className={styles.issueListCardContent}>
-          {agentIssues.length === 0 ? (
-            <div className={styles.mutedTextContainer}>No assigned issues yet.</div>
-          ) : (
-            agentIssues.slice(0, 6).map((issue) => (
-              <div key={issue.id} className={styles.issueRowContainer1}>
-                <div className={styles.issueRowContainer2}>
-                  <Link href={`/issues/${issue.id}?companyId=${companyId}`} className={styles.agentHeaderLink}>
-                    {issue.title}
-                  </Link>
-                  <div className={styles.issueRowContainer3}>{formatDateTime(issue.updatedAt)}</div>
-                </div>
-                <div className={styles.issueRowContainer4}>
-                  <Badge variant="outline">{issue.priority}</Badge>
-                  <Badge variant="outline" className={getStatusBadgeClassName(issue.status)}>
-                    {issue.status}
-                  </Badge>
-                </div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Runs</CardTitle>
-          <CardDescription>Most recent heartbeat runs for this agent.</CardDescription>
-        </CardHeader>
-        <CardContent className={styles.issueListCardContent}>
-          {recentRuns.length === 0 ? (
-            <div className={styles.mutedTextContainer}>No runs have executed yet.</div>
-          ) : (
-            recentRuns.map((run) => (
-              <div key={run.id} className={styles.issueRowContainer1}>
-                <div className={styles.issueRowContainer2}>
-                  <Link
-                    href={{
-                      pathname: `/runs/${run.id}`,
-                      query: { companyId, agentId: agent.id }
-                    }}
-                    className={styles.agentHeaderLink}
-                  >
-                    {shortId(run.id)}
-                  </Link>
-                  <div className={styles.issueRowContainer3}>{formatRelative(run.startedAt)}</div>
-                </div>
-                <div className={styles.issueRowContainer4}>
-                  <Badge variant="outline" className={getStatusBadgeClassName(run.status)}>
-                    {formatRunStatusLabel(run.status)}
-                  </Badge>
-                  {run.outcome?.kind ? <Badge variant="outline">{run.outcome.kind}</Badge> : null}
-                </div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Memory Context</CardTitle>
-          <CardDescription>Inspect durable notes and the effective context preview used for this agent.</CardDescription>
-        </CardHeader>
-        <CardContent className={styles.issueListCardContent}>
-          {memoryError ? <Alert variant="destructive"><AlertDescription>{memoryError}</AlertDescription></Alert> : null}
-          <Field>
-            <FieldLabel>Memory file</FieldLabel>
-            <Select
-              value={selectedMemoryPath || "__none"}
-              onValueChange={(value) => setSelectedMemoryPath(value === "__none" ? "" : value)}
-              disabled={memoryLoading || memoryFiles.length === 0}
-            >
-              <SelectTrigger className={styles.agentSidebarSelectTrigger}>
-                <SelectValue placeholder={memoryFiles.length > 0 ? "Select a memory file" : "No memory files yet"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">No file selected</SelectItem>
-                {memoryFiles.map((file) => (
-                  <SelectItem key={file.relativePath} value={file.relativePath}>
-                    {file.relativePath}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <div className={styles.memoryPreviewLabel}>Selected file contents</div>
-          <pre className={styles.memoryPreviewBlock}>{selectedMemoryContent || "No file selected."}</pre>
-          <div className={styles.memoryPreviewLabel}>Effective context preview</div>
-          <pre className={styles.memoryPreviewBlock}>{compiledContextPreview || "No preview available."}</pre>
-        </CardContent>
-      </Card>
+      <SectionHeading title="Runs" description="Heartbeat runs scoped to this agent." />
+      <DataTable
+        columns={agentRunColumns}
+        data={agentRuns}
+        emptyMessage="No runs have executed for this agent yet."
+        showViewOptions={false}
+      />
     </div>
   );
 
@@ -1199,6 +1197,42 @@ export function AgentDetailPageClient({
         </Alert>
       ) : null}
       <AppShell leftPane={leftPane} rightPane={rightPane} activeNav="Agents" companies={companies} activeCompanyId={companyId} />
+      <Dialog open={memoryDialogOpen} onOpenChange={setMemoryDialogOpen}>
+        <DialogContent size="xl">
+          <DialogHeader>
+            <DialogTitle>Memory Context</DialogTitle>
+            <DialogDescription>Inspect durable notes and the effective context preview used for this agent.</DialogDescription>
+          </DialogHeader>
+          <div className={styles.issueListCardContent}>
+            {memoryError ? <Alert variant="destructive"><AlertDescription>{memoryError}</AlertDescription></Alert> : null}
+            <Field>
+              <FieldLabel>Memory file</FieldLabel>
+              <Select
+                value={selectedMemoryPath || "__none"}
+                onValueChange={(value) => setSelectedMemoryPath(value === "__none" ? "" : value)}
+                disabled={memoryLoading || memoryFiles.length === 0}
+              >
+                <SelectTrigger className={styles.agentSidebarSelectTrigger}>
+                  <SelectValue placeholder={memoryFiles.length > 0 ? "Select a memory file" : "No memory files yet"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">No file selected</SelectItem>
+                  {memoryFiles.map((file) => (
+                    <SelectItem key={file.relativePath} value={file.relativePath}>
+                      {file.relativePath}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className={styles.memoryPreviewLabel}>Selected file contents</div>
+            <pre className={styles.memoryPreviewBlock}>{selectedMemoryContent || "No file selected."}</pre>
+            <div className={styles.memoryPreviewLabel}>Effective context preview</div>
+            <pre className={styles.memoryPreviewBlock}>{compiledContextPreview || "No preview available."}</pre>
+          </div>
+          <DialogFooter showCloseButton />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

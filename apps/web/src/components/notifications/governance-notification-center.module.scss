@@ -1,0 +1,53 @@
+@reference "../../app/globals.css";
+
+.toastCard {
+  @apply w-88 pointer-events-auto rounded-md border bg-background text-foreground p-4;
+}
+
+.toastHeader {
+  @apply flex items-start justify-between gap-3;
+}
+
+.toastContent {
+  @apply min-w-0 grid gap-2;
+}
+
+.toastTitle {
+  @apply text-sm font-semibold leading-5 text-sidebar-foreground;
+}
+
+.toastMessage {
+  @apply text-sm leading-5 text-sidebar-foreground/50;
+}
+
+.toastDismissButton {
+  @apply shrink-0;
+}
+
+.toastDismissIcon {
+  @apply size-4;
+}
+
+.toastActions {
+  @apply mt-3;
+}
+
+.toastActionsInline {
+  @apply mt-3 flex items-center gap-4;
+}
+
+.color-default {
+  @apply border-border bg-background text-foreground;
+}
+
+.color-info {
+  @apply border-sky-500/20;
+}
+
+.color-warning {
+  @apply border-amber-500/20;
+}
+
+.color-critical {
+  @apply border-rose-500/20;
+}

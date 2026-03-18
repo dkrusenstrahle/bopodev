@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { resolveAdapter } from "bopodev-agent-sdk";
@@ -2595,6 +2595,7 @@ async function resolveRuntimeWorkspaceForWorkItems(
       continue;
     }
     let selectedWorkspaceCwd = normalizeCompanyWorkspacePath(companyId, baseWorkspaceCwd);
+    const projectIssue = workItems.find((item) => item.project_id === projectId);
     await mkdir(baseWorkspaceCwd, { recursive: true });
     try {
       if (hasText(projectContext.repoUrl)) {
@@ -2614,7 +2615,6 @@ async function resolveRuntimeWorkspaceForWorkItems(
         projectContext.policy?.strategy?.type === "git_worktree" &&
         resolveGitWorktreeIsolationEnabled()
       ) {
-        const projectIssue = workItems.find((item) => item.project_id === projectId);
         const worktree = await ensureIsolatedGitWorktree({
           companyId,
           repoCwd: selectedWorkspaceCwd,
@@ -2633,6 +2633,15 @@ async function resolveRuntimeWorkspaceForWorkItems(
     } catch (error) {
       const message = error instanceof GitRuntimeError ? error.message : String(error);
       warnings.push(`Workspace bootstrap failed for project '${projectId}': ${message}`);
+    }
+
+    if (projectIssue?.id) {
+      const issueScopedWorkspaceCwd = normalizeCompanyWorkspacePath(
+        companyId,
+        join(selectedWorkspaceCwd, "issues", projectIssue.id)
+      );
+      await mkdir(issueScopedWorkspaceCwd, { recursive: true });
+      selectedWorkspaceCwd = issueScopedWorkspaceCwd;
     }
 
     if (hasText(normalizedRuntimeCwd) && normalizedRuntimeCwd !== selectedWorkspaceCwd) {

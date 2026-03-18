@@ -3236,7 +3236,9 @@ export function WorkspaceClient({
               ? approvalById.get(row.original.evidence.approvalId)
               : undefined;
           const isPendingHireApproval = linkedApproval?.status === "pending" && linkedApproval.action === "hire_agent";
-          const showStandardAttentionActions = !isPendingHireApproval;
+          const isRunFailureSpike = row.original.category === "run_failure_spike";
+          const showStandardAttentionActions = !isPendingHireApproval && !isRunFailureSpike;
+          const showActionLink = showStandardAttentionActions || isRunFailureSpike;
           const showApprovalResolutionActions = linkedApproval?.status === "pending" && Boolean(row.original.evidence.approvalId);
 
           return (
@@ -3331,7 +3333,7 @@ export function WorkspaceClient({
                   )}
                 </>
               ) : null}
-              {showStandardAttentionActions ? (
+              {showActionLink ? (
                 <Button asChild variant="outline" size="sm">
                   <a href={toAttentionActionHref(row.original.actionHref, companyId)}>{row.original.actionLabel}</a>
                 </Button>

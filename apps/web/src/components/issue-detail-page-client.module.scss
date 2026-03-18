@@ -134,7 +134,7 @@
 }
 
 .issueActivityTitleRow {
-  @apply inline-flex items-center gap-2;
+  @apply inline-flex items-center gap-2 text-sidebar-foreground;
 }
 
 .issueActivityTimestamp {

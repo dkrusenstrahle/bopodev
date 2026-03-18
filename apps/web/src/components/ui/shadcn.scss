@@ -13,7 +13,13 @@ body {
 .ui-alert {
   @apply relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-base has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current;
   &.ui-alert--default {
-    @apply bg-green-800 text-card-foreground;
+    @apply bg-green-800/20 border-green-700/30;
+    .ui-alert-title {
+      @apply text-green-200/70 font-semibold;
+    }
+    .ui-alert-description {
+      @apply text-green-200/60;
+    }
   }
 }
 
@@ -251,7 +257,7 @@ body {
 }
 
 .ui-data-table-header-cell {
-  @apply h-11 px-4 text-base font-medium tracking-wide text-muted-foreground uppercase;
+  @apply h-11 px-4 text-base font-medium tracking-wide text-sidebar-foreground/50 uppercase;
 }
 
 .ui-data-table-row {
@@ -275,7 +281,7 @@ body {
 }
 
 .ui-data-table-column-header-button {
-  @apply -ml-3 h-8 data-[state=open]:bg-accent;
+  @apply -ml-3 h-8 data-[state=open]:bg-accent text-sidebar-foreground/50;
 }
 
 .ui-data-table-column-header-icon {
@@ -813,7 +819,7 @@ body {
 }
 
 .ui-table-head {
-  @apply px-3 py-3 first:pl-5 last:pr-4 text-left align-middle font-medium text-base capitalize whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
+  @apply px-3 py-3 first:pl-5 last:pr-4 text-left align-middle font-medium text-base capitalize whitespace-nowrap text-muted-foreground/50 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px];
 }
 
 .ui-table-cell {

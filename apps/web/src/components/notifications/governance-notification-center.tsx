@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { apiGet, apiPost } from "@/lib/api";
 import { getGovernanceToastContent } from "@/lib/governance-notifications";
 import { subscribeToRealtime } from "@/lib/realtime";
+import styles from "./governance-notification-center.module.scss";
 
 const ROUTER_REFRESH_DELAY_MS = 250;
 const TEST_NOTIFICATION_EVENT = "bopodev:test-governance-notification";
@@ -221,24 +222,24 @@ export function GovernanceNotificationCenter({ companyId }: { companyId: string 
       const content = getGovernanceToastContent(approval, companyId);
       toast.custom(
         () => (
-          <div className="pointer-events-auto w-88 rounded-md border bg-background p-4 text-foreground">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-2">
-                <div className="text-sm font-semibold leading-5">{content.title}</div>
-                <div className="text-sm leading-5 text-muted-foreground">{content.message}</div>
+          <div className={`${styles.toastCard} ${styles["color-default"]}`}>
+            <div className={styles.toastHeader}>
+              <div className={styles.toastContent}>
+                <div className={styles.toastTitle}>{content.title}</div>
+                <div className={styles.toastMessage}>{content.message}</div>
               </div>
               <Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
                 aria-label="Dismiss notification"
-                className="shrink-0"
+                className={styles.toastDismissButton}
                 onClick={() => handleDismiss(companyId, approval, setApprovals, setDismissedApprovalIds)}
               >
-                <X className="size-4" />
+                <X className={styles.toastDismissIcon} />
               </Button>
             </div>
-            <div className="mt-3">
+            <div className={styles.toastActions}>
               <Button asChild variant="outline" size="sm">
                 <Link href={content.href}>{content.linkLabel}</Link>
               </Button>
@@ -274,35 +275,44 @@ export function GovernanceNotificationCenter({ companyId }: { companyId: string 
       const toastId = `attention:${companyId}:${item.key}`;
       toast.custom(
         () => (
-          <div className="pointer-events-auto w-88 rounded-md border bg-background p-4 text-foreground">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-2">
-                <div className="text-sm font-semibold leading-5">{item.title}</div>
-                <div className="text-sm leading-5 text-muted-foreground">{item.contextSummary}</div>
+          <div className={`${styles.toastCard} ${styles[`color-${item.severity}`] ?? styles["color-default"]}`}>
+            <div className={styles.toastHeader}>
+              <div className={styles.toastContent}>
+                <div className={styles.toastTitle}>{item.title}</div>
+                <div className={styles.toastMessage}>{item.contextSummary}</div>
               </div>
               <Button
                 type="button"
-                variant="outline"
-                size="icon-sm"
+                variant="ghost"
+                size="xs"
                 aria-label="Dismiss notification"
-                className="shrink-0"
+                className={styles.toastDismissButton}
                 onClick={() => {
                   toast.dismiss(toastId);
                   void apiPost(`/attention/${encodeURIComponent(item.key)}/dismiss`, companyId, {});
                 }}
               >
-                <X className="size-4" />
+                <X className={styles.toastDismissIcon} />
               </Button>
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className={styles.toastActionsInline}>
               <Button asChild variant="outline" size="sm">
-                <a href={toAttentionActionHref(item.actionHref, companyId)}>{item.actionLabel}</a>
+                <a
+                  href={toAttentionActionHref(item.actionHref, companyId)}
+                  onClick={() => {
+                    toast.dismiss(toastId);
+                    void apiPost(`/attention/${encodeURIComponent(item.key)}/seen`, companyId, {});
+                  }}
+                >
+                  {item.actionLabel}
+                </a>
               </Button>
               {!item.seenAt ? (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
+                    toast.dismiss(toastId);
                     void apiPost(`/attention/${encodeURIComponent(item.key)}/seen`, companyId, {});
                   }}
                 >

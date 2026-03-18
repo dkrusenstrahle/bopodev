@@ -28,6 +28,10 @@ const STATUS_PRESENTATION: Record<string, StatusPresentation> = {
     badgeClassName: "border-sky-500/40 bg-sky-500/15 text-sky-700 dark:text-sky-300",
     chartColor: "var(--color-chart-1)"
   },
+  started: {
+    badgeClassName: "border-sky-500/40 bg-sky-500/15 text-sky-700 dark:text-sky-300",
+    chartColor: "var(--color-chart-1)"
+  },
   in_progress: {
     badgeClassName: "border-sky-500/40 bg-sky-500/15 text-sky-700 dark:text-sky-300",
     chartColor: "var(--color-chart-1)"

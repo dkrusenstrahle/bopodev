@@ -195,9 +195,19 @@ export async function bootstrapDatabase(dbPath?: string) {
       company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
       author_type TEXT NOT NULL,
       author_id TEXT,
+      recipients_json TEXT NOT NULL DEFAULT '[]',
+      run_id TEXT,
       body TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+  await db.execute(sql`
+    ALTER TABLE issue_comments
+    ADD COLUMN IF NOT EXISTS recipients_json TEXT NOT NULL DEFAULT '[]';
+  `);
+  await db.execute(sql`
+    ALTER TABLE issue_comments
+    ADD COLUMN IF NOT EXISTS run_id TEXT;
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS issue_attachments (

@@ -17,7 +17,7 @@
 }
 
 .metricCardContainer {
-  @apply text-3xl font-semibold tracking-tight font-mono tabular-nums;
+  @apply text-3xl font-semibold tracking-tight font-mono tabular-nums text-sidebar-foreground;
 }
 
 .metricCardText {

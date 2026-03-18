@@ -687,29 +687,55 @@ export async function addIssueComment(
     issueId: string;
     authorType: "human" | "agent" | "system";
     authorId?: string | null;
+    runId?: string | null;
+    recipients?: Array<{
+      recipientType: "agent" | "board" | "member";
+      recipientId?: string | null;
+      deliveryStatus?: "pending" | "dispatched" | "failed" | "skipped";
+      dispatchedRunId?: string | null;
+      dispatchedAt?: string | null;
+      acknowledgedAt?: string | null;
+    }>;
     body: string;
   }
 ) {
   await assertIssueBelongsToCompany(db, input.companyId, input.issueId);
   const id = nanoid(12);
-  await db.insert(issueComments).values({
-    id,
-    companyId: input.companyId,
-    issueId: input.issueId,
-    authorType: input.authorType,
-    authorId: input.authorId ?? null,
-    body: input.body
-  });
-
-  return { id, ...input };
+  const [comment] = await db
+    .insert(issueComments)
+    .values({
+      id,
+      companyId: input.companyId,
+      issueId: input.issueId,
+      authorType: input.authorType,
+      authorId: input.authorId ?? null,
+      recipientsJson: JSON.stringify(input.recipients ?? []),
+      runId: input.runId ?? null,
+      body: input.body
+    })
+    .returning();
+  if (!comment) {
+    return {
+      id,
+      companyId: input.companyId,
+      issueId: input.issueId,
+      authorType: input.authorType,
+      authorId: input.authorId ?? null,
+      body: input.body,
+      runId: input.runId ?? null,
+      recipients: input.recipients ?? []
+    };
+  }
+  return normalizeIssueComment(comment);
 }
 
 export async function listIssueComments(db: BopoDb, companyId: string, issueId: string) {
-  return db
+  const comments = await db
     .select()
     .from(issueComments)
     .where(and(eq(issueComments.companyId, companyId), eq(issueComments.issueId, issueId)))
     .orderBy(desc(issueComments.createdAt));
+  return comments.map((comment) => normalizeIssueComment(comment));
 }
 
 export async function listIssueActivity(db: BopoDb, companyId: string, issueId: string, limit = 100) {
@@ -741,7 +767,37 @@ export async function updateIssueComment(
       )
     )
     .returning();
-  return comment ?? null;
+  return comment ? normalizeIssueComment(comment) : null;
+}
+
+export async function updateIssueCommentRecipients(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    issueId: string;
+    id: string;
+    recipients: Array<{
+      recipientType: "agent" | "board" | "member";
+      recipientId?: string | null;
+      deliveryStatus?: "pending" | "dispatched" | "failed" | "skipped";
+      dispatchedRunId?: string | null;
+      dispatchedAt?: string | null;
+      acknowledgedAt?: string | null;
+    }>;
+  }
+) {
+  const [comment] = await db
+    .update(issueComments)
+    .set({ recipientsJson: JSON.stringify(input.recipients ?? []) })
+    .where(
+      and(
+        eq(issueComments.companyId, input.companyId),
+        eq(issueComments.issueId, input.issueId),
+        eq(issueComments.id, input.id)
+      )
+    )
+    .returning();
+  return comment ? normalizeIssueComment(comment) : null;
 }
 
 export async function deleteIssueComment(db: BopoDb, companyId: string, issueId: string, id: string) {
@@ -750,6 +806,86 @@ export async function deleteIssueComment(db: BopoDb, companyId: string, issueId:
     .where(and(eq(issueComments.companyId, companyId), eq(issueComments.issueId, issueId), eq(issueComments.id, id)))
     .returning({ id: issueComments.id });
   return Boolean(deletedComment);
+}
+
+function normalizeIssueComment(comment: typeof issueComments.$inferSelect) {
+  const { recipientsJson, ...rest } = comment;
+  return {
+    ...rest,
+    recipients: parseIssueCommentRecipients(recipientsJson)
+  };
+}
+
+function parseIssueCommentRecipients(raw: string | null) {
+  if (!raw) {
+    return [] as Array<{
+      recipientType: "agent" | "board" | "member";
+      recipientId: string | null;
+      deliveryStatus: "pending" | "dispatched" | "failed" | "skipped";
+      dispatchedRunId: string | null;
+      dispatchedAt: string | null;
+      acknowledgedAt: string | null;
+    }>;
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return null;
+        }
+        const candidate = entry as Record<string, unknown>;
+        const recipientTypeRaw = String(candidate.recipientType ?? "").trim();
+        if (recipientTypeRaw !== "agent" && recipientTypeRaw !== "board" && recipientTypeRaw !== "member") {
+          return null;
+        }
+        const recipientType = recipientTypeRaw as "agent" | "board" | "member";
+        const deliveryStatusRaw = String(candidate.deliveryStatus ?? "").trim();
+        const deliveryStatus =
+          deliveryStatusRaw === "pending" ||
+          deliveryStatusRaw === "dispatched" ||
+          deliveryStatusRaw === "failed" ||
+          deliveryStatusRaw === "skipped"
+            ? deliveryStatusRaw
+            : "pending";
+        const recipientId = typeof candidate.recipientId === "string" && candidate.recipientId.trim().length > 0
+          ? candidate.recipientId.trim()
+          : null;
+        const dispatchedRunId =
+          typeof candidate.dispatchedRunId === "string" && candidate.dispatchedRunId.trim().length > 0
+            ? candidate.dispatchedRunId.trim()
+            : null;
+        const dispatchedAt =
+          typeof candidate.dispatchedAt === "string" && candidate.dispatchedAt.trim().length > 0
+            ? candidate.dispatchedAt.trim()
+            : null;
+        const acknowledgedAt =
+          typeof candidate.acknowledgedAt === "string" && candidate.acknowledgedAt.trim().length > 0
+            ? candidate.acknowledgedAt.trim()
+            : null;
+        return {
+          recipientType,
+          recipientId,
+          deliveryStatus,
+          dispatchedRunId,
+          dispatchedAt,
+          acknowledgedAt
+        };
+      })
+      .filter(Boolean) as Array<{
+      recipientType: "agent" | "board" | "member";
+      recipientId: string | null;
+      deliveryStatus: "pending" | "dispatched" | "failed" | "skipped";
+      dispatchedRunId: string | null;
+      dispatchedAt: string | null;
+      acknowledgedAt: string | null;
+    }>;
+  } catch {
+    return [];
+  }
 }
 
 export async function createGoal(

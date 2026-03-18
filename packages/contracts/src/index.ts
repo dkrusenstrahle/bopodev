@@ -134,6 +134,29 @@ export const IssueAttachmentSchema = z.object({
 });
 export type IssueAttachment = z.infer<typeof IssueAttachmentSchema>;
 
+export const IssueCommentRecipientSchema = z.object({
+  recipientType: z.enum(["agent", "board", "member"]),
+  recipientId: z.string().nullable().optional(),
+  deliveryStatus: z.enum(["pending", "dispatched", "failed", "skipped"]).default("pending"),
+  dispatchedRunId: z.string().nullable().optional(),
+  dispatchedAt: z.string().nullable().optional(),
+  acknowledgedAt: z.string().nullable().optional()
+});
+export type IssueCommentRecipient = z.infer<typeof IssueCommentRecipientSchema>;
+
+export const IssueCommentSchema = z.object({
+  id: EntityIdSchema,
+  issueId: EntityIdSchema,
+  companyId: EntityIdSchema,
+  authorType: z.enum(["human", "agent", "system"]),
+  authorId: z.string().nullable().optional(),
+  recipients: z.array(IssueCommentRecipientSchema).default([]),
+  runId: EntityIdSchema.nullable().optional(),
+  body: z.string().min(1),
+  createdAt: z.string()
+});
+export type IssueComment = z.infer<typeof IssueCommentSchema>;
+
 export const GoalLevelSchema = z.enum(["company", "project", "agent"]);
 
 export const GoalSchema = z.object({
@@ -386,7 +409,10 @@ export const ControlPlaneRuntimeEnvSchema = z
     BOPODEV_ACTOR_ID: HeaderValueSchema.optional(),
     BOPODEV_ACTOR_COMPANIES: z.string().optional(),
     BOPODEV_ACTOR_PERMISSIONS: z.string().optional(),
-    BOPODEV_REQUEST_HEADERS_JSON: z.string().optional()
+    BOPODEV_REQUEST_HEADERS_JSON: z.string().optional(),
+    BOPODEV_WAKE_REASON: z.string().optional(),
+    BOPODEV_WAKE_COMMENT_ID: z.string().optional(),
+    BOPODEV_LINKED_ISSUE_IDS: z.string().optional()
   })
   .superRefine((value, ctx) => {
     const actorType = value.BOPODEV_ACTOR_TYPE;

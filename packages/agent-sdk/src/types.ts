@@ -62,6 +62,12 @@ export interface HeartbeatContext {
   state: AgentState;
   memoryContext?: AgentMemoryContext;
   runtime?: AgentRuntimeConfig;
+  wakeContext?: {
+    reason?: string | null;
+    commentId?: string | null;
+    commentBody?: string | null;
+    issueIds?: string[];
+  };
 }
 
 /**

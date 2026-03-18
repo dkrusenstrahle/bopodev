@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import multer from "multer";
 import { z } from "zod";
 import { IssueSchema } from "bopodev-contracts";
@@ -15,6 +15,7 @@ import {
   deleteIssueAttachment,
   deleteIssueComment,
   deleteIssue,
+  heartbeatRuns,
   getIssueAttachment,
   issues,
   listIssueAttachments,
@@ -32,6 +33,7 @@ import { sendError, sendOk, sendOkValidated } from "../http";
 import { isInsidePath, normalizeCompanyWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
+import { triggerIssueCommentDispatchWorker } from "../services/comment-recipient-dispatch-service";
 
 const createIssueSchema = z.object({
   projectId: z.string().min(1),
@@ -61,6 +63,14 @@ const createIssueSchema = z.object({
 
 const createIssueCommentSchema = z.object({
   body: z.string().min(1),
+  recipients: z
+    .array(
+      z.object({
+        recipientType: z.enum(["agent", "board", "member"]),
+        recipientId: z.string().nullable().optional()
+      })
+    )
+    .default([]),
   authorType: z.enum(["human", "agent", "system"]).optional(),
   authorId: z.string().optional()
 });
@@ -68,6 +78,14 @@ const createIssueCommentSchema = z.object({
 const createIssueCommentLegacySchema = z.object({
   issueId: z.string().min(1),
   body: z.string().min(1),
+  recipients: z
+    .array(
+      z.object({
+        recipientType: z.enum(["agent", "board", "member"]),
+        recipientId: z.string().nullable().optional()
+      })
+    )
+    .default([]),
   authorType: z.enum(["human", "agent", "system"]).optional(),
   authorId: z.string().optional()
 });
@@ -100,6 +118,20 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = parseCsvSet(
 );
 
 type IssueAttachmentResponse = Record<string, unknown> & { id: string; downloadPath: string };
+type CommentRecipientInput = {
+  recipientType: "agent" | "board" | "member";
+  recipientId?: string | null;
+};
+type PersistedCommentRecipient = {
+  recipientType: "agent" | "board" | "member";
+  recipientId: string | null;
+  deliveryStatus: "pending" | "dispatched" | "failed" | "skipped";
+  dispatchedRunId: string | null;
+  dispatchedAt: string | null;
+  acknowledgedAt: string | null;
+};
+
+const COMMENT_RUN_ID_HEADER = "x-bopodev-run-id";
 
 function parseStringArray(value: unknown) {
   if (Array.isArray(value)) {
@@ -431,29 +463,56 @@ export function createIssuesRouter(ctx: AppContext) {
       return sendError(res, parsed.error.message, 422);
     }
     const author = resolveIssueCommentAuthor(req.actor?.type, req.actor?.id, parsed.data);
+    let normalizedRecipients: PersistedCommentRecipient[];
+    try {
+      normalizedRecipients = await normalizeCommentRecipients(ctx, req.companyId!, parsed.data.recipients);
+    } catch (error) {
+      return sendError(res, error instanceof Error ? error.message : "Invalid recipients.", 422);
+    }
+    const runId = await resolveIssueCommentRunId(ctx, {
+      companyId: req.companyId!,
+      actorType: req.actor?.type,
+      actorId: req.actor?.id,
+      runIdHeader: req.header(COMMENT_RUN_ID_HEADER)
+    });
+    const sanitizedBody = sanitizeCommentBodyForAuthor(parsed.data.body, author.authorType);
+    if (!sanitizedBody) {
+      return sendError(res, "Agent/system comments must include non-emoji text.", 422);
+    }
     const comment = await addIssueComment(ctx.db, {
       companyId: req.companyId!,
       issueId: req.params.issueId,
-      body: parsed.data.body,
+      body: sanitizedBody,
       authorType: author.authorType,
-      authorId: author.authorId
+      authorId: author.authorId,
+      runId,
+      recipients: normalizedRecipients
     });
     await appendActivity(ctx.db, {
       companyId: req.companyId!,
       issueId: comment.issueId,
-      actorType: comment.authorType,
+      actorType: coerceActorType(comment.authorType),
       actorId: comment.authorId,
       eventType: "issue.comment_added",
-      payload: { commentId: comment.id }
+      payload: {
+        commentId: comment.id,
+        runId: comment.runId ?? null,
+        recipientCount: normalizedRecipients.length
+      }
     });
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: comment.authorType,
+      actorType: coerceActorType(comment.authorType),
       actorId: comment.authorId,
       eventType: "issue.comment_added",
       entityType: "issue_comment",
       entityId: comment.id,
       payload: comment
+    });
+    triggerIssueCommentDispatchWorker(ctx.db, req.companyId!, {
+      requestId: req.requestId,
+      realtimeHub: ctx.realtimeHub,
+      limit: 10
     });
     return sendOk(res, comment);
   });
@@ -469,29 +528,56 @@ export function createIssuesRouter(ctx: AppContext) {
       return sendError(res, parsed.error.message, 422);
     }
     const author = resolveIssueCommentAuthor(req.actor?.type, req.actor?.id, parsed.data);
+    let normalizedRecipients: PersistedCommentRecipient[];
+    try {
+      normalizedRecipients = await normalizeCommentRecipients(ctx, req.companyId!, parsed.data.recipients);
+    } catch (error) {
+      return sendError(res, error instanceof Error ? error.message : "Invalid recipients.", 422);
+    }
+    const runId = await resolveIssueCommentRunId(ctx, {
+      companyId: req.companyId!,
+      actorType: req.actor?.type,
+      actorId: req.actor?.id,
+      runIdHeader: req.header(COMMENT_RUN_ID_HEADER)
+    });
+    const sanitizedBody = sanitizeCommentBodyForAuthor(parsed.data.body, author.authorType);
+    if (!sanitizedBody) {
+      return sendError(res, "Agent/system comments must include non-emoji text.", 422);
+    }
     const comment = await addIssueComment(ctx.db, {
       companyId: req.companyId!,
       issueId: parsed.data.issueId,
-      body: parsed.data.body,
+      body: sanitizedBody,
       authorType: author.authorType,
-      authorId: author.authorId
+      authorId: author.authorId,
+      runId,
+      recipients: normalizedRecipients
     });
     await appendActivity(ctx.db, {
       companyId: req.companyId!,
       issueId: comment.issueId,
-      actorType: comment.authorType,
+      actorType: coerceActorType(comment.authorType),
       actorId: comment.authorId,
       eventType: "issue.comment_added",
-      payload: { commentId: comment.id }
+      payload: {
+        commentId: comment.id,
+        runId: comment.runId ?? null,
+        recipientCount: normalizedRecipients.length
+      }
     });
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: comment.authorType,
+      actorType: coerceActorType(comment.authorType),
       actorId: comment.authorId,
       eventType: "issue.comment_added",
       entityType: "issue_comment",
       entityId: comment.id,
       payload: comment
+    });
+    triggerIssueCommentDispatchWorker(ctx.db, req.companyId!, {
+      requestId: req.requestId,
+      realtimeHub: ctx.realtimeHub,
+      limit: 10
     });
     return sendOk(res, comment);
   });
@@ -506,11 +592,16 @@ export function createIssuesRouter(ctx: AppContext) {
       return sendError(res, parsed.error.message, 422);
     }
 
+    const body =
+      req.actor?.type === "agent" ? sanitizeCommentBodyForAuthor(parsed.data.body, "agent") : parsed.data.body;
+    if (req.actor?.type === "agent" && !body) {
+      return sendError(res, "Agent comments must include non-emoji text.", 422);
+    }
     const comment = await updateIssueComment(ctx.db, {
       companyId: req.companyId!,
       issueId: req.params.issueId,
       id: req.params.commentId,
-      body: parsed.data.body
+      body
     });
     if (!comment) {
       return sendError(res, "Comment not found.", 404);
@@ -519,13 +610,15 @@ export function createIssuesRouter(ctx: AppContext) {
     await appendActivity(ctx.db, {
       companyId: req.companyId!,
       issueId: req.params.issueId,
-      actorType: "human",
+      actorType: req.actor?.type === "agent" ? "agent" : "human",
+      actorId: req.actor?.id,
       eventType: "issue.comment_updated",
       payload: { commentId: comment.id }
     });
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: req.actor?.type === "agent" ? "agent" : "human",
+      actorId: req.actor?.id,
       eventType: "issue.comment_updated",
       entityType: "issue_comment",
       entityId: comment.id,
@@ -547,13 +640,15 @@ export function createIssuesRouter(ctx: AppContext) {
     await appendActivity(ctx.db, {
       companyId: req.companyId!,
       issueId: req.params.issueId,
-      actorType: "human",
+      actorType: req.actor?.type === "agent" ? "agent" : "human",
+      actorId: req.actor?.id,
       eventType: "issue.comment_deleted",
       payload: { commentId: req.params.commentId }
     });
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
-      actorType: "human",
+      actorType: req.actor?.type === "agent" ? "agent" : "human",
+      actorId: req.actor?.id,
       eventType: "issue.comment_deleted",
       entityType: "issue_comment",
       entityId: req.params.commentId,
@@ -697,6 +792,117 @@ function resolveIssueCommentAuthor(
     return { authorType, authorId: actorId };
   }
   return { authorType, authorId: undefined };
+}
+
+function coerceActorType(value: string | null | undefined): "human" | "agent" | "system" {
+  if (value === "agent" || value === "system") {
+    return value;
+  }
+  return "human";
+}
+
+function sanitizeCommentBodyForAuthor(body: string, authorType: "human" | "agent" | "system") {
+  if (authorType === "human") {
+    return body;
+  }
+  const withoutEmoji = body.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "");
+  return withoutEmoji.trim();
+}
+
+async function resolveIssueCommentRunId(
+  ctx: AppContext,
+  input: {
+    companyId: string;
+    actorType: "board" | "member" | "agent" | undefined;
+    actorId: string | undefined;
+    runIdHeader: string | undefined;
+  }
+) {
+  const runId = input.runIdHeader?.trim();
+  if (runId) {
+    const [run] = await ctx.db
+      .select({ id: heartbeatRuns.id, agentId: heartbeatRuns.agentId })
+      .from(heartbeatRuns)
+      .where(and(eq(heartbeatRuns.companyId, input.companyId), eq(heartbeatRuns.id, runId)))
+      .limit(1);
+    if (!run) {
+      return null;
+    }
+    if (input.actorType === "agent" && input.actorId && run.agentId !== input.actorId) {
+      return null;
+    }
+    return run.id;
+  }
+  if (input.actorType !== "agent" || !input.actorId) {
+    return null;
+  }
+  const [latestRun] = await ctx.db
+    .select({ id: heartbeatRuns.id })
+    .from(heartbeatRuns)
+    .where(
+      and(
+        eq(heartbeatRuns.companyId, input.companyId),
+        eq(heartbeatRuns.agentId, input.actorId),
+        eq(heartbeatRuns.status, "started")
+      )
+    )
+    .orderBy(desc(heartbeatRuns.startedAt))
+    .limit(1);
+  return latestRun?.id ?? null;
+}
+
+async function normalizeCommentRecipients(
+  ctx: AppContext,
+  companyId: string,
+  recipients: CommentRecipientInput[]
+): Promise<PersistedCommentRecipient[]> {
+  if (recipients.length === 0) {
+    return [] as PersistedCommentRecipient[];
+  }
+  const deduped = dedupeCommentRecipients(recipients);
+  const agentIds = deduped
+    .filter((recipient) => recipient.recipientType === "agent" && recipient.recipientId)
+    .map((recipient) => recipient.recipientId as string);
+  if (agentIds.length > 0) {
+    const existingAgents = await ctx.db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.companyId, companyId), inArray(agents.id, agentIds)));
+    const existingAgentIds = new Set(existingAgents.map((agent) => agent.id));
+    const missing = agentIds.find((id) => !existingAgentIds.has(id));
+    if (missing) {
+      throw new Error(`Recipient agent not found: ${missing}`);
+    }
+  }
+  return deduped.map((recipient) => ({
+    recipientType: recipient.recipientType,
+    recipientId: recipient.recipientId ?? null,
+    deliveryStatus: "pending" as const,
+    dispatchedRunId: null,
+    dispatchedAt: null,
+    acknowledgedAt: null
+  }));
+}
+
+function dedupeCommentRecipients(recipients: CommentRecipientInput[]) {
+  const result: Array<{ recipientType: "agent" | "board" | "member"; recipientId: string | null }> = [];
+  const seen = new Set<string>();
+  for (const recipient of recipients) {
+    const recipientId = recipient.recipientId?.trim() ? recipient.recipientId.trim() : null;
+    if (recipient.recipientType !== "board" && !recipientId) {
+      continue;
+    }
+    const key = `${recipient.recipientType}:${recipientId ?? "__all__"}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push({
+      recipientType: recipient.recipientType,
+      recipientId
+    });
+  }
+  return result;
 }
 
 async function validateIssueAssignmentScope(

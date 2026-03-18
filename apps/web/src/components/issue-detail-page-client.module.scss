@@ -9,11 +9,11 @@
 }
 
 .propertyRowContainer2 {
-  @apply text-base text-muted-foreground font-medium;
+  @apply text-base text-sidebar-foreground/80 font-semibold;
 }
 
 .propertyRowValue {
-  @apply min-w-0 wrap-break-word text-foreground;
+  @apply min-w-0 wrap-break-word text-sidebar-foreground;
 }
 
 .issueDetailContainer1 {
@@ -136,4 +136,16 @@
 
 .issueActivityTimestamp {
   @apply text-base text-muted-foreground;
+}
+
+.commentMetadataRow {
+  @apply mt-2 flex flex-wrap items-center gap-2;
+}
+
+.commentRecipientChevron {
+  @apply ml-2 h-4 w-4;
+}
+
+.commentTimestamp {
+  @apply whitespace-nowrap text-base text-muted-foreground;
 }

@@ -19,6 +19,7 @@ import {
   companies,
   goals,
   heartbeatRuns,
+  issueComments,
   issueAttachments,
   issues,
   projects
@@ -59,6 +60,12 @@ type ActiveHeartbeatRun = {
 };
 
 const activeHeartbeatRuns = new Map<string, ActiveHeartbeatRun>();
+type HeartbeatWakeContext = {
+  reason?: string | null;
+  commentId?: string | null;
+  commentBody?: string | null;
+  issueIds?: string[];
+};
 
 export async function claimIssuesForAgent(
   db: BopoDb,
@@ -203,6 +210,7 @@ export async function runHeartbeatForAgent(
     realtimeHub?: RealtimeHub;
     mode?: HeartbeatRunMode;
     sourceRunId?: string;
+    wakeContext?: HeartbeatWakeContext;
   }
 ) {
   const runMode = options?.mode ?? "default";
@@ -315,7 +323,8 @@ export async function runHeartbeatForAgent(
         requestId: options?.requestId ?? null,
         trigger: runTrigger,
         mode: runMode,
-        sourceRunId: options?.sourceRunId ?? null
+        sourceRunId: options?.sourceRunId ?? null,
+        wakeContext: options?.wakeContext ?? null
       }
     });
     publishHeartbeatRunStatus(options?.realtimeHub, {
@@ -351,6 +360,7 @@ export async function runHeartbeatForAgent(
   }
 
   let issueIds: string[] = [];
+  let claimedIssueIds: string[] = [];
   let state: AgentState & {
     runtime?: {
       command?: string;
@@ -511,10 +521,15 @@ export async function runHeartbeatForAgent(
       },
       failClosed: false
     });
-    const workItems = await claimIssuesForAgent(db, companyId, agentId, runId);
-    issueIds = workItems.map((item) => item.id);
-    primaryIssueId = workItems[0]?.id ?? null;
-    primaryProjectId = workItems[0]?.project_id ?? null;
+    const isCommentOrderWake = options?.wakeContext?.reason === "issue_comment_recipient";
+    const workItems = isCommentOrderWake ? [] : await claimIssuesForAgent(db, companyId, agentId, runId);
+    const wakeWorkItems = await loadWakeContextWorkItems(db, companyId, options?.wakeContext?.issueIds);
+    const contextWorkItems = resolveExecutionWorkItems(workItems, wakeWorkItems, options?.wakeContext);
+    claimedIssueIds = workItems.map((item) => item.id);
+    issueIds = contextWorkItems.map((item) => item.id);
+    primaryIssueId = contextWorkItems[0]?.id ?? null;
+    primaryProjectId = contextWorkItems[0]?.project_id ?? null;
+    const resolvedWakeContext = await resolveHeartbeatWakeContext(db, companyId, options?.wakeContext);
     await runPluginHook(db, {
       hook: "afterClaim",
       context: {
@@ -523,7 +538,7 @@ export async function runHeartbeatForAgent(
         runId,
         requestId: options?.requestId,
         providerType: agent.providerType,
-        workItemCount: workItems.length
+        workItemCount: contextWorkItems.length
       },
       failClosed: false
     });
@@ -539,7 +554,8 @@ export async function runHeartbeatForAgent(
       companyId,
       agentId: agent.id,
       heartbeatRunId: runId,
-      canHireAgents: agent.canHireAgents
+      canHireAgents: agent.canHireAgents,
+      wakeContext: options?.wakeContext
     });
     const runtimeFromConfig = {
       command: persistedRuntime.runtimeCommand,
@@ -580,7 +596,7 @@ export async function runHeartbeatForAgent(
       db,
       companyId,
       agent.id,
-      workItems,
+      contextWorkItems,
       mergedRuntime
     );
     state = {
@@ -602,7 +618,8 @@ export async function runHeartbeatForAgent(
       state,
       memoryContext,
       runtime: workspaceResolution.runtime,
-      workItems
+      workItems: contextWorkItems,
+      wakeContext: resolvedWakeContext
     });
     if (workspaceResolution.warnings.length > 0) {
       await appendAuditEvent(db, {
@@ -663,7 +680,7 @@ export async function runHeartbeatForAgent(
       resolveControlPlanePreflightEnabled() &&
       shouldRequireControlPlanePreflight(
         agent.providerType as HeartbeatProviderType,
-        workItems.length
+        contextWorkItems.length
       )
     ) {
       const preflight = await runControlPlaneConnectivityPreflight({
@@ -743,7 +760,7 @@ export async function runHeartbeatForAgent(
         runId,
         requestId: options?.requestId,
         providerType: agent.providerType,
-        workItemCount: workItems.length,
+        workItemCount: contextWorkItems.length,
         runtime: {
           command: workspaceResolution.runtime.command,
           cwd: workspaceResolution.runtime.cwd
@@ -1240,7 +1257,7 @@ export async function runHeartbeatForAgent(
     await transcriptWriteQueue;
     unregisterActiveHeartbeatRun(runId);
     try {
-      await releaseClaimedIssues(db, companyId, issueIds);
+      await releaseClaimedIssues(db, companyId, claimedIssueIds);
     } catch (releaseError) {
       await appendAuditEvent(db, {
         companyId,
@@ -1251,7 +1268,7 @@ export async function runHeartbeatForAgent(
         correlationId: options?.requestId ?? runId,
         payload: {
           agentId,
-          issueIds,
+          issueIds: claimedIssueIds,
           error: String(releaseError)
         }
       });
@@ -1428,6 +1445,134 @@ function coerceDate(value: unknown) {
   return null;
 }
 
+async function loadWakeContextWorkItems(db: BopoDb, companyId: string, wakeIssueIds?: string[]) {
+  const normalizedIds = Array.from(new Set((wakeIssueIds ?? []).filter((id) => id.trim().length > 0)));
+  if (normalizedIds.length === 0) {
+    return [] as Array<{
+      id: string;
+      project_id: string;
+      title: string;
+      body: string | null;
+      status: string;
+      priority: string;
+      labels_json: string;
+      tags_json: string;
+    }>;
+  }
+  const rows = await db
+    .select({
+      id: issues.id,
+      project_id: issues.projectId,
+      title: issues.title,
+      body: issues.body,
+      status: issues.status,
+      priority: issues.priority,
+      labels_json: issues.labelsJson,
+      tags_json: issues.tagsJson
+    })
+    .from(issues)
+    .where(and(eq(issues.companyId, companyId), inArray(issues.id, normalizedIds)));
+  const sortOrder = new Map(normalizedIds.map((id, index) => [id, index]));
+  return rows.sort((a, b) => (sortOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (sortOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+}
+
+function mergeContextWorkItems(
+  assigned: Array<{
+    id: string;
+    project_id: string;
+    title: string;
+    body: string | null;
+    status: string;
+    priority: string;
+    labels_json: string;
+    tags_json: string;
+  }>,
+  wakeContext: Array<{
+    id: string;
+    project_id: string;
+    title: string;
+    body: string | null;
+    status: string;
+    priority: string;
+    labels_json: string;
+    tags_json: string;
+  }>
+) {
+  const seen = new Set<string>();
+  const merged: typeof assigned = [];
+  for (const item of assigned) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      merged.push(item);
+    }
+  }
+  for (const item of wakeContext) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      merged.push(item);
+    }
+  }
+  return merged;
+}
+
+function resolveExecutionWorkItems(
+  assigned: Array<{
+    id: string;
+    project_id: string;
+    title: string;
+    body: string | null;
+    status: string;
+    priority: string;
+    labels_json: string;
+    tags_json: string;
+  }>,
+  wakeContextItems: Array<{
+    id: string;
+    project_id: string;
+    title: string;
+    body: string | null;
+    status: string;
+    priority: string;
+    labels_json: string;
+    tags_json: string;
+  }>,
+  wakeContext?: HeartbeatWakeContext
+) {
+  if (wakeContext?.reason === "issue_comment_recipient" && wakeContextItems.length > 0) {
+    return wakeContextItems;
+  }
+  return mergeContextWorkItems(assigned, wakeContextItems);
+}
+
+async function resolveHeartbeatWakeContext(
+  db: BopoDb,
+  companyId: string,
+  wakeContext?: HeartbeatWakeContext
+): Promise<HeartbeatWakeContext | undefined> {
+  if (!wakeContext) {
+    return undefined;
+  }
+  const commentBody = wakeContext.commentId
+    ? await loadWakeContextCommentBody(db, companyId, wakeContext.commentId)
+    : null;
+  return {
+    reason: wakeContext.reason ?? null,
+    commentId: wakeContext.commentId ?? null,
+    commentBody,
+    issueIds: wakeContext.issueIds ?? []
+  };
+}
+
+async function loadWakeContextCommentBody(db: BopoDb, companyId: string, commentId: string) {
+  const [comment] = await db
+    .select({ body: issueComments.body })
+    .from(issueComments)
+    .where(and(eq(issueComments.companyId, companyId), eq(issueComments.id, commentId)))
+    .limit(1);
+  const body = comment?.body?.trim();
+  return body && body.length > 0 ? body : null;
+}
+
 async function buildHeartbeatContext(
   db: BopoDb,
   companyId: string,
@@ -1441,6 +1586,7 @@ async function buildHeartbeatContext(
     state: AgentState;
     memoryContext?: HeartbeatContext["memoryContext"];
     runtime?: { command?: string; args?: string[]; cwd?: string; timeoutMs?: number };
+    wakeContext?: HeartbeatWakeContext;
     workItems: Array<{
       id: string;
       project_id: string;
@@ -1556,6 +1702,14 @@ async function buildHeartbeatContext(
     state: input.state,
     memoryContext: input.memoryContext,
     runtime: input.runtime,
+    wakeContext: input.wakeContext
+      ? {
+          reason: input.wakeContext.reason ?? null,
+          commentId: input.wakeContext.commentId ?? null,
+          commentBody: input.wakeContext.commentBody ?? null,
+          issueIds: input.wakeContext.issueIds ?? []
+        }
+      : undefined,
     goalContext: {
       companyGoals: activeCompanyGoals,
       projectGoals: activeProjectGoals,
@@ -2308,6 +2462,7 @@ function buildHeartbeatRuntimeEnv(input: {
   agentId: string;
   heartbeatRunId: string;
   canHireAgents: boolean;
+  wakeContext?: HeartbeatWakeContext;
 }) {
   const apiBaseUrl = resolveControlPlaneApiBaseUrl();
   const actorPermissions = ["issues:write", ...(input.canHireAgents ? ["agents:write"] : [])].join(",");
@@ -2335,6 +2490,9 @@ function buildHeartbeatRuntimeEnv(input: {
     BOPODEV_REQUEST_HEADERS_JSON: actorHeaders,
     BOPODEV_REQUEST_APPROVAL_DEFAULT: "true",
     BOPODEV_CAN_HIRE_AGENTS: input.canHireAgents ? "true" : "false",
+    ...(input.wakeContext?.reason ? { BOPODEV_WAKE_REASON: input.wakeContext.reason } : {}),
+    ...(input.wakeContext?.commentId ? { BOPODEV_WAKE_COMMENT_ID: input.wakeContext.commentId } : {}),
+    ...(input.wakeContext?.issueIds?.length ? { BOPODEV_LINKED_ISSUE_IDS: input.wakeContext.issueIds.join(",") } : {}),
     ...(codexApiKey ? { OPENAI_API_KEY: codexApiKey } : {}),
     ...(claudeApiKey ? { ANTHROPIC_API_KEY: claudeApiKey } : {})
   } satisfies Record<string, string>;

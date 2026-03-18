@@ -4,18 +4,24 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { IssueStatus } from "bopodev-contracts";
+import { ChevronDownIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmActionModal } from "@/components/modals/confirm-action-modal";
 import { CreateIssueModal } from "@/components/modals/create-issue-modal";
-import { TextActionModal } from "@/components/modals/text-action-modal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -49,6 +55,8 @@ interface AgentRow {
   id: string;
   name: string;
   role: string;
+  managerAgentId?: string | null;
+  status?: string;
 }
 
 interface ProjectRow {
@@ -68,6 +76,15 @@ interface IssueCommentRow {
   issueId: string;
   authorType: "human" | "agent" | "system";
   authorId: string | null;
+  runId?: string | null;
+  recipients: Array<{
+    recipientType: "agent" | "board" | "member";
+    recipientId: string | null;
+    deliveryStatus: "pending" | "dispatched" | "failed" | "skipped";
+    dispatchedRunId: string | null;
+    dispatchedAt: string | null;
+    acknowledgedAt: string | null;
+  }>;
   body: string;
   createdAt: string;
 }
@@ -107,6 +124,30 @@ const issueStatusOptions = [
   { value: "done", label: "Done" },
   { value: "canceled", label: "Canceled" }
 ] as const;
+const boardRecipientKey = "board:all";
+const boardRecipientLabel = "Board";
+
+function makeRecipientKey(recipientType: "agent" | "board" | "member", recipientId: string | null) {
+  return `${recipientType}:${recipientId ?? "all"}`;
+}
+
+function toRecipientPayload(selectedRecipientKey: string | null) {
+  if (!selectedRecipientKey) {
+    return [] as Array<{ recipientType: "agent" | "board" | "member"; recipientId: string | null }>;
+  }
+  const [recipientTypeRaw, ...idParts] = selectedRecipientKey.split(":");
+  const recipientType = recipientTypeRaw === "agent" || recipientTypeRaw === "board" || recipientTypeRaw === "member"
+    ? recipientTypeRaw
+    : null;
+  if (!recipientType) {
+    return [] as Array<{ recipientType: "agent" | "board" | "member"; recipientId: string | null }>;
+  }
+  const recipientId = idParts.join(":");
+  return [{
+    recipientType,
+    recipientId: recipientType === "board" || recipientId === "all" ? null : recipientId
+  }];
+}
 
 function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className={styles.issueEmptyStateContainer}>{children}</div>;
@@ -123,6 +164,39 @@ function PropertyRow({ label, value }: { label: string; value: React.ReactNode }
 
 function formatDate(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString() : "Not set";
+}
+
+function formatCommentDate(value: string | null | undefined) {
+  if (!value) {
+    return "Unknown time";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown time";
+  }
+  const now = new Date();
+  const isSameYear = date.getFullYear() === now.getFullYear();
+  const isToday = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  const timeText = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+  if (isToday) {
+    return `Today ${timeText}`;
+  }
+  if (isYesterday) {
+    return `Yesterday ${timeText}`;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(isSameYear ? {} : { year: "numeric" }),
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function formatEventType(eventType: string) {
@@ -243,6 +317,8 @@ export function IssueDetailPageClient({
   const [activityItems, setActivityItems] = useState<IssueActivityRow[]>([]);
   const [attachments, setAttachments] = useState<IssueAttachmentRow[]>([]);
   const [draftComment, setDraftComment] = useState("");
+  const [selectedRecipientKey, setSelectedRecipientKey] = useState<string | null>(null);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isHeartbeatStarting, setIsHeartbeatStarting] = useState(false);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -256,6 +332,31 @@ export function IssueDetailPageClient({
     () => agents.find((agent) => agent.id === issue.assigneeAgentId) ?? null,
     [agents, issue.assigneeAgentId]
   );
+  const selectedAssigneeManager = useMemo(() => {
+    if (!selectedAssignee?.managerAgentId) {
+      return null;
+    }
+    return agents.find((agent) => agent.id === selectedAssignee.managerAgentId) ?? null;
+  }, [agents, selectedAssignee?.managerAgentId]);
+  const recipientOptions = useMemo(
+    () =>
+      agents
+        .filter((agent) => agent.status !== "terminated")
+        .map((agent) => ({
+          key: makeRecipientKey("agent", agent.id),
+          label: `${agent.name} (${agent.role})`
+        })),
+    [agents]
+  );
+  const selectedRecipientLabel = useMemo(() => {
+    if (!selectedRecipientKey) {
+      return "Select recipient";
+    }
+    if (selectedRecipientKey === boardRecipientKey) {
+      return boardRecipientLabel;
+    }
+    return recipientOptions.find((entry) => entry.key === selectedRecipientKey)?.label ?? "Select recipient";
+  }, [recipientOptions, selectedRecipientKey]);
 
   const issueCostSummary = useMemo(() => {
     return costEntries
@@ -394,6 +495,23 @@ export function IssueDetailPageClient({
     }
   }
 
+  function applyQuickRecipientSelection(nextKey: string) {
+    setSelectedRecipientKey(nextKey);
+  }
+
+  function formatRecipientDisplay(
+    recipient: IssueCommentRow["recipients"][number]
+  ) {
+    if (recipient.recipientType === "board") {
+      return boardRecipientLabel;
+    }
+    if (recipient.recipientType === "agent") {
+      const agentName = agents.find((agent) => agent.id === recipient.recipientId)?.name;
+      return agentName ?? `Agent ${recipient.recipientId ?? "unknown"}`;
+    }
+    return recipient.recipientId ? `Member ${recipient.recipientId}` : "Member";
+  }
+
   async function updateIssue(payload: {
     title?: string;
     body?: string | null;
@@ -445,45 +563,26 @@ export function IssueDetailPageClient({
 
   async function submitComment(event: FormEvent) {
     event.preventDefault();
-    if (!draftComment.trim()) {
+    if (!draftComment.trim() || isSubmittingComment) {
       return;
     }
 
     setCommentError(null);
+    setIsSubmittingComment(true);
     try {
-      await apiPost(`/issues/${issue.id}/comments`, companyId, { body: draftComment.trim(), authorType: "human" });
-      const result = await apiGet<IssueCommentRow[]>(`/issues/${issue.id}/comments`, companyId);
-      setComments(result.data);
+      const response = await apiPost<IssueCommentRow>(`/issues/${issue.id}/comments`, companyId, {
+        body: draftComment.trim(),
+        authorType: "human",
+        recipients: toRecipientPayload(selectedRecipientKey)
+      });
+      setComments((current) => [response.data, ...current.filter((comment) => comment.id !== response.data.id)]);
       setDraftComment("");
-      await refreshIssueView();
+      setSelectedRecipientKey(null);
+      void refreshIssueView();
     } catch (error) {
       setCommentError(error instanceof ApiError ? error.message : "Failed to add comment.");
-    }
-  }
-
-  async function updateComment(commentId: string, body: string) {
-    setCommentError(null);
-    try {
-      await apiPut(`/issues/${issue.id}/comments/${commentId}`, companyId, { body });
-      const result = await apiGet<IssueCommentRow[]>(`/issues/${issue.id}/comments`, companyId);
-      setComments(result.data);
-      await refreshIssueView();
-    } catch (error) {
-      setCommentError(error instanceof ApiError ? error.message : "Failed to update comment.");
-      throw error;
-    }
-  }
-
-  async function removeComment(commentId: string) {
-    setCommentError(null);
-    try {
-      await apiDelete(`/issues/${issue.id}/comments/${commentId}`, companyId);
-      const result = await apiGet<IssueCommentRow[]>(`/issues/${issue.id}/comments`, companyId);
-      setComments(result.data);
-      await refreshIssueView();
-    } catch (error) {
-      setCommentError(error instanceof ApiError ? error.message : "Failed to delete comment.");
-      throw error;
+    } finally {
+      setIsSubmittingComment(false);
     }
   }
 
@@ -604,32 +703,29 @@ export function IssueDetailPageClient({
                         {comment.authorType === "agent"
                           ? agents.find((agent) => agent.id === comment.authorId)?.name ?? "Agent"
                           : comment.authorType}
-                        <span className="ui-issue-comment-date">{formatDate(comment.createdAt)}</span>
                       </div>
                       <div className="ui-issue-comment-body ui-markdown ui-markdown-compact">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
                       </div>
+                      {(comment.recipients ?? []).length > 0 ? (
+                        <div className={styles.commentMetadataRow}>
+                          {(comment.recipients ?? []).map((recipient) => (
+                            <Badge key={`${comment.id}-${recipient.recipientType}-${recipient.recipientId ?? "all"}`} variant="outline">
+                              To: {formatRecipientDisplay(recipient)} ({recipient.deliveryStatus})
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                      {comment.runId ? (
+                        <div className={styles.commentMetadataRow}>
+                          <Link href={{ pathname: `/runs/${comment.runId}`, query: { companyId } }} className={styles.issueDetailLink2}>
+                            Run: {comment.runId}
+                          </Link>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="ui-issue-action-row">
-                      <TextActionModal
-                        triggerLabel="Edit"
-                        triggerVariant="outline"
-                        title="Edit comment"
-                        description="Update this comment."
-                        submitLabel="Save"
-                        initialValue={comment.body}
-                        placeholder="Write a comment..."
-                        onSubmit={(body) => updateComment(comment.id, body)}
-                        multiline
-                      />
-                      <ConfirmActionModal
-                        triggerLabel="Delete"
-                        triggerVariant="outline"
-                        title="Delete comment?"
-                        description="This action cannot be undone."
-                        confirmLabel="Delete"
-                        onConfirm={() => removeComment(comment.id)}
-                      />
+                      <span className={styles.commentTimestamp}>{formatCommentDate(comment.createdAt)}</span>
                     </div>
                   </div>
                 </div>
@@ -641,10 +737,52 @@ export function IssueDetailPageClient({
                   onChange={(event) => setDraftComment(event.target.value)}
                   placeholder="Leave a comment..."
                   className={styles.issueDetailTextarea}
+                  disabled={isSubmittingComment}
                 />
                 <div className="ui-issue-form-actions">
-                  <Button type="submit" disabled={!draftComment.trim()}>
-                    Comment
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="outline" size="sm" disabled={isSubmittingComment}>
+                        {selectedRecipientLabel} <ChevronDownIcon className={styles.commentRecipientChevron} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuCheckboxItem
+                        checked={selectedRecipientKey === null}
+                        onCheckedChange={() => setSelectedRecipientKey(null)}
+                      >
+                        None
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={selectedRecipientKey === boardRecipientKey}
+                        onCheckedChange={() => setSelectedRecipientKey(boardRecipientKey)}
+                      >
+                        {boardRecipientLabel}
+                      </DropdownMenuCheckboxItem>
+                      {recipientOptions.map((recipient) => (
+                        <DropdownMenuCheckboxItem
+                          key={recipient.key}
+                          checked={selectedRecipientKey === recipient.key}
+                          onCheckedChange={() => setSelectedRecipientKey(recipient.key)}
+                        >
+                          {recipient.label}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {selectedAssigneeManager ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isSubmittingComment}
+                      onClick={() => applyQuickRecipientSelection(makeRecipientKey("agent", selectedAssigneeManager.id))}
+                    >
+                      Send to manager
+                    </Button>
+                  ) : null}
+                  <Button type="submit" disabled={!draftComment.trim() || isSubmittingComment}>
+                    {isSubmittingComment ? "Saving..." : "Comment"}
                   </Button>
                 </div>
               </form>

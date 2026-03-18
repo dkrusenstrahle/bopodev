@@ -261,10 +261,23 @@ describe("BopoDev core workflows", () => {
     const createResponse = await request(app)
       .post(`/issues/${issue.id}/comments`)
       .set("x-company-id", companyId)
-      .send({ body: "Initial context", authorType: "human" });
+      .send({
+        body: "Initial context",
+        authorType: "human",
+        recipients: [{ recipientType: "board" }]
+      });
 
     expect(createResponse.status).toBe(200);
     expect(createResponse.body.data.body).toBe("Initial context");
+    expect(createResponse.body.data.runId ?? null).toBeNull();
+    expect(createResponse.body.data.recipients).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          recipientType: "board",
+          recipientId: null
+        })
+      ])
+    );
 
     const createdCommentId = createResponse.body.data.id as string;
 
@@ -286,6 +299,71 @@ describe("BopoDev core workflows", () => {
 
     const afterDeleteResponse = await request(app).get(`/issues/${issue.id}/comments`).set("x-company-id", companyId);
     expect(afterDeleteResponse.body.data).toHaveLength(0);
+  });
+
+  it("links agent-authored comments to current run context and dispatches recipient heartbeats", async () => {
+    const project = await createProject(db, { companyId, name: "Comment Dispatch", description: "Recipient dispatch checks." });
+    const authorAgent = await createAgent(db, {
+      companyId,
+      role: "CTO",
+      name: "Author Agent",
+      providerType: "shell",
+      heartbeatCron: "*/5 * * * *",
+      monthlyBudgetUsd: "20.0000",
+      initialState: {
+        runtime: {
+          command: "echo",
+          args: ['{"summary":"author","tokenInput":0,"tokenOutput":0,"usdCost":0}']
+        }
+      }
+    });
+    const recipientAgent = await createAgent(db, {
+      companyId,
+      role: "Engineer",
+      name: "Recipient Agent",
+      providerType: "shell",
+      heartbeatCron: "*/5 * * * *",
+      monthlyBudgetUsd: "20.0000",
+      initialState: {
+        runtime: {
+          command: "echo",
+          args: ['{"summary":"recipient","tokenInput":0,"tokenOutput":0,"usdCost":0}']
+        }
+      }
+    });
+    const issue = await createIssue(db, { companyId, projectId: project.id, title: "Dispatch comment recipient" });
+    const seededRunId = "commentseedrun1";
+    await db.insert(heartbeatRuns).values({
+      id: seededRunId,
+      companyId,
+      agentId: authorAgent.id,
+      status: "started",
+      message: "seeded run",
+      startedAt: new Date()
+    });
+
+    const createResponse = await request(app)
+      .post(`/issues/${issue.id}/comments`)
+      .set("x-company-id", companyId)
+      .set("x-actor-type", "agent")
+      .set("x-actor-id", authorAgent.id)
+      .set("x-actor-companies", companyId)
+      .set("x-actor-permissions", "issues:write,heartbeats:run")
+      .send({
+        body: "Please review this execution plan.",
+        recipients: [{ recipientType: "agent", recipientId: recipientAgent.id }]
+      });
+
+    expect(createResponse.status).toBe(200);
+    expect(createResponse.body.data.runId).toBe(seededRunId);
+    const dispatchedRecipient = (createResponse.body.data.recipients as Array<Record<string, unknown>>)[0];
+    expect(dispatchedRecipient).toMatchObject({
+      recipientType: "agent",
+      recipientId: recipientAgent.id,
+      deliveryStatus: "dispatched"
+    });
+    expect(typeof dispatchedRecipient.dispatchedRunId).toBe("string");
+    expect(String(dispatchedRecipient.dispatchedRunId).length).toBeGreaterThan(0);
   });
 
   it("supports uploading, listing, downloading, and deleting issue attachments", async () => {

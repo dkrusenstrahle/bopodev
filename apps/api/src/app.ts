@@ -46,7 +46,15 @@ export function createApp(ctx: AppContext) {
       },
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowedHeaders: ["content-type", "x-company-id", "authorization", "x-client-trace-id", "x-bopo-actor-token"]
+      allowedHeaders: [
+        "content-type",
+        "x-company-id",
+        "authorization",
+        "x-client-trace-id",
+        "x-bopo-actor-token",
+        "x-request-id",
+        "x-bopodev-run-id"
+      ]
     })
   );
   app.use(express.json());

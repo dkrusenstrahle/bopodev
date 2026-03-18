@@ -121,6 +121,8 @@ export const issueComments = pgTable("issue_comments", {
     .references(() => companies.id, { onDelete: "cascade" }),
   authorType: text("author_type").notNull(),
   authorId: text("author_id"),
+  recipientsJson: text("recipients_json").notNull().default("[]"),
+  runId: text("run_id"),
   body: text("body").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
 });

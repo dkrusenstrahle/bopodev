@@ -2316,6 +2316,24 @@ export function createPrompt(context: HeartbeatContext) {
         )
         .join("\n")
     : "- No assigned work";
+  const wakeContextLines = context.wakeContext
+    ? [
+        "Wake context:",
+        `- Reason: ${context.wakeContext.reason ?? "unspecified"}`,
+        `- Trigger comment: ${context.wakeContext.commentId ?? "none"}`,
+        `- Comment order: ${context.wakeContext.commentBody ?? "none"}`,
+        `- Linked issues: ${context.wakeContext.issueIds?.length ? context.wakeContext.issueIds.join(", ") : "none"}`
+      ].join("\n")
+    : "";
+  const commentOrderDirectives =
+    context.wakeContext?.reason === "issue_comment_recipient"
+      ? [
+          "Comment-order directives:",
+          "- The triggering comment is the primary order for this run.",
+          "- Treat linked issue details as context only; do not restart unrelated issue backlog work.",
+          "- Apply only the requested delta from the comment unless explicitly asked to do more."
+        ].join("\n")
+      : "";
   const memoryContext = context.memoryContext;
   const memoryTacitNotes = memoryContext?.tacitNotes?.trim()
     ? memoryContext.tacitNotes.trim()
@@ -2362,6 +2380,7 @@ export function createPrompt(context: HeartbeatContext) {
     "- If control-plane API connectivity fails, report the exact failing command/error once and stop retry loops for the same endpoint.",
     "- For write_todos status values, only use: todo, in_progress, blocked, in_review, done, canceled (US spelling, not cancelled).",
     "- If any command fails, avoid further exploratory commands and still return the required final JSON summary.",
+    "- Do not use emojis in issue comments, summaries, or status messages.",
     "- Do not stop after planning. You must execute concrete steps for assigned issues in this run (file edits, API calls, or other verifiable actions).",
     "- If you cannot complete concrete execution, set summary to include the blocker explicitly instead of claiming success.",
     "- Treat file memory as source of truth for long-term context: append raw observations to daily notes first, then promote stable patterns to durable facts.",
@@ -2387,6 +2406,10 @@ ${agentGoals}
 
 Assigned issues:
 ${workItems}
+
+${wakeContextLines}
+
+${commentOrderDirectives}
 
 Memory context:
 - Memory root: ${memoryContext?.memoryRoot ?? "Unavailable"}

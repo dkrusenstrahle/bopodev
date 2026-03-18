@@ -7,7 +7,6 @@ export const sectionItems = [
   { slug: "org-chart", label: "Organization" },
   { slug: "office-space", label: "Office" },
   { slug: "inbox", label: "Inbox" },
-  { slug: "governance", label: "Approvals" },
   { slug: "runs", label: "Runs" },
   { slug: "trace-logs", label: "Logs" },
   { slug: "costs", label: "Costs" },

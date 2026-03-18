@@ -3,7 +3,7 @@ import type { ApprovalRequest } from "bopodev-contracts";
 import { AGENT_ROLE_LABELS, AGENT_ROLE_KEYS, type AgentRoleKey } from "bopodev-contracts";
 
 export function getGovernanceToastContent(approval: ApprovalRequest, companyId: string) {
-  const href = { pathname: "/governance" as Route, query: { companyId } } as const;
+  const href = { pathname: "/inbox" as Route, query: { companyId, preset: "board-decisions" } } as const;
 
   if (approval.action === "hire_agent") {
     const name = typeof approval.payload.name === "string" ? approval.payload.name : "A new agent";
@@ -12,7 +12,7 @@ export function getGovernanceToastContent(approval: ApprovalRequest, companyId: 
       title: "Approval required",
       message: role ? `${name} is waiting for governance approval as ${role}.` : `${name} is waiting for governance approval.`,
       href,
-      linkLabel: "Open approvals"
+      linkLabel: "Open inbox"
     };
   }
 
@@ -22,15 +22,15 @@ export function getGovernanceToastContent(approval: ApprovalRequest, companyId: 
       title: "Goal approval required",
       message: `${title} is ready for governance review before activation.`,
       href,
-      linkLabel: "Open approvals"
+      linkLabel: "Open inbox"
     };
   }
 
   return {
     title: "Approval action required",
-    message: `${formatApprovalAction(approval.action)} needs board approval in Governance.`,
+    message: `${formatApprovalAction(approval.action)} needs board approval in Inbox.`,
     href,
-    linkLabel: "Open approvals"
+    linkLabel: "Open inbox"
   };
 }
 

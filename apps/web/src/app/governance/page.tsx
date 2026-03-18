@@ -1,5 +1,4 @@
-import { GovernancePageClient } from "@/components/workspace/governance-page-client";
-import { loadWorkspaceData } from "@/lib/workspace-data";
+import { redirect } from "next/navigation";
 
 export default async function GovernancePage({
   searchParams
@@ -7,21 +6,10 @@ export default async function GovernancePage({
   searchParams: Promise<{ companyId?: string }>;
 }) {
   const { companyId } = await searchParams;
-  const workspaceData = await loadWorkspaceData(companyId);
-
-  return (
-    <GovernancePageClient
-      companyId={workspaceData.companyId}
-      activeCompany={workspaceData.activeCompany}
-      companies={workspaceData.companies}
-      issues={workspaceData.issues}
-      agents={workspaceData.agents}
-      heartbeatRuns={workspaceData.heartbeatRuns}
-      goals={workspaceData.goals}
-      approvals={workspaceData.approvals}
-      auditEvents={workspaceData.auditEvents}
-      costEntries={workspaceData.costEntries}
-      projects={workspaceData.projects}
-    />
-  );
+  const query = new URLSearchParams();
+  query.set("preset", "board-decisions");
+  if (companyId) {
+    query.set("companyId", companyId);
+  }
+  redirect(`/inbox?${query.toString()}`);
 }

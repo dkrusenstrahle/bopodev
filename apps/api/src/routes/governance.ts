@@ -35,6 +35,9 @@ export function createGovernanceRouter(ctx: AppContext) {
   const router = Router();
   router.use(requireCompanyScope);
 
+  // Deprecated compatibility shim:
+  // board queue consumers should use /attention as the canonical source.
+  // Keep this endpoint until all downstream consumers migrate.
   router.get("/approvals", async (req, res) => {
     const approvals = await listApprovalRequests(ctx.db, req.companyId!);
     return sendOk(

@@ -62,6 +62,10 @@ test.describe("workspace core journeys", () => {
     await page.goto(`/inbox?companyId=${companyId}`);
     await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
     await expect(page.getByText("Needs Approval · Engineer")).toBeVisible();
+
+    await page.goto(`/governance?companyId=${companyId}`);
+    await expect(page).toHaveURL(new RegExp(`/inbox\\?companyId=${companyId}.*preset=board-decisions`));
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   });
 
   test("observability pages render seeded run and trace data", async ({ page, request }) => {

@@ -23,7 +23,7 @@ test.describe("workspace smoke journeys", () => {
     await expect(page.getByText("Open Source Beta Prep")).toBeVisible();
   });
 
-  test("governance page renders pending approval", async ({ page, request }) => {
+  test("legacy governance route redirects to inbox board decisions", async ({ page, request }) => {
     const companyId = await createCompany(request, "E2E Governance Company");
 
     await apiPost(request, "/agents", companyId, {
@@ -41,7 +41,8 @@ test.describe("workspace smoke journeys", () => {
 
     await page.goto(`/governance?companyId=${companyId}`);
 
-    await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/inbox\\?companyId=${companyId}.*preset=board-decisions`));
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
     await expect(page.getByText("hire_agent")).toBeVisible();
     await expect(page.getByText("Needs Approval · Engineer")).toBeVisible();
   });
@@ -80,7 +81,8 @@ test.describe("workspace smoke journeys", () => {
 
     await page.goto(`/dashboard?companyId=${companyId}`);
     await page.getByRole("link", { name: "Review approvals" }).click();
-    await expect(page.getByRole("heading", { name: "Approvals" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/inbox\\?companyId=${companyId}.*preset=board-decisions`));
   });
 });
 

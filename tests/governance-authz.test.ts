@@ -122,6 +122,22 @@ describe("governance and company scope authorization", { timeout: 90_000 }, () =
     expect(inbox.status).toBe(200);
     expect(Array.isArray(inbox.body.data.items)).toBe(true);
     expect(inbox.body.data.items.some((item: { approval: { id: string } }) => item.approval.id === approvalId)).toBe(true);
+
+    const attention = await request(app)
+      .get("/attention")
+      .set("x-company-id", companyId)
+      .set("x-actor-type", "member")
+      .set("x-actor-id", "member-gov")
+      .set("x-actor-companies", companyId);
+    expect(attention.status).toBe(200);
+    const approvalAttention = (attention.body.data.items as Array<{
+      category: string;
+      state: string;
+      evidence?: { approvalId?: string };
+    }>).find((item) => item.category === "approval_required" && item.evidence?.approvalId === approvalId);
+    if (approvalAttention) {
+      expect(approvalAttention.state).toBe("resolved");
+    }
   });
 
   it("rejects approval resolve when hire payload runtimeCwd is outside managed root", async () => {

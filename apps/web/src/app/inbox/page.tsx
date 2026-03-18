@@ -9,6 +9,7 @@ export default async function InboxPage({
   const { companyId } = await searchParams;
   const workspaceData = await loadWorkspaceData(companyId, {
     include: {
+      approvals: true,
       governanceInbox: true,
       attentionItems: true
     }

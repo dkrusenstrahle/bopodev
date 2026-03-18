@@ -17,7 +17,6 @@ import {
   GitBranch,
   LayoutDashboard,
   Map,
-  ShieldCheck,
   Target,
   Users,
   Settings,
@@ -68,7 +67,6 @@ const navGroups: Array<{
       { slug: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { slug: "projects", label: "Projects", icon: BriefcaseBusiness },
       { slug: "issues", label: "Issues", icon: FolderKanban },
-      { slug: "goals", label: "Goals", icon: Target },
       { slug: "agents", label: "Agents", icon: Users }
     ]
   },
@@ -76,14 +74,13 @@ const navGroups: Array<{
     label: "Operations",
     items: [
       { slug: "inbox", label: "Inbox", icon: Inbox },
-      { slug: "governance", label: "Approvals", icon: ShieldCheck },
-      { slug: "runs", label: "Runs", icon: Clock3 },
-      { slug: "trace-logs", label: "Logs", icon: Activity }
+      { slug: "runs", label: "Runs", icon: Clock3 }
     ]
   },
   {
     label: "Company",
     items: [
+      { slug: "goals", label: "Goals", icon: Target },
       { slug: "org-chart", label: "Organization", icon: GitBranch },
       { slug: "office-space", label: "Office", icon: Map },
       { slug: "costs", label: "Costs", icon: BarChart3 },
@@ -101,6 +98,7 @@ const settingsNavItems: Array<{
   { href: "/settings/models", label: "Models", icon: BarChart3, isActive: (pathname) => pathname.startsWith("/settings/models") },
   { href: "/settings/templates", label: "Templates", icon: LayoutTemplate, isActive: (pathname) => pathname.startsWith("/settings/templates") },
   { href: "/settings/plugins", label: "Plugins", icon: Puzzle, isActive: (pathname) => pathname.startsWith("/settings/plugins") },
+  { href: "/trace-logs", label: "Logs", icon: Activity, isActive: (pathname) => pathname.startsWith("/trace-logs") },
   {
     href: "/settings",
     label: "Settings",
@@ -150,16 +148,27 @@ export function AppShell({
       return;
     }
     let cancelled = false;
-    void apiGet<{ count: number }>("/governance/approvals/pending-count", activeCompanyId)
+    void apiGet<{ actorId: string; items: Array<{ category: string; state: string }> }>("/attention", activeCompanyId)
       .then((result) => {
         if (!cancelled) {
-          setPendingApprovalsCountFromApi(Math.max(0, Math.floor(Number(result.data.count) || 0)));
+          const count = result.data.items.filter(
+            (item) => item.category === "approval_required" && (item.state === "open" || item.state === "acknowledged")
+          ).length;
+          setPendingApprovalsCountFromApi(Math.max(0, count));
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setPendingApprovalsCountFromApi(null);
-        }
+        void apiGet<{ count: number }>("/governance/approvals/pending-count", activeCompanyId)
+          .then((fallback) => {
+            if (!cancelled) {
+              setPendingApprovalsCountFromApi(Math.max(0, Math.floor(Number(fallback.data.count) || 0)));
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setPendingApprovalsCountFromApi(null);
+            }
+          });
       });
     return () => {
       cancelled = true;
@@ -168,7 +177,7 @@ export function AppShell({
 
   const resolvedPendingApprovalsCount =
     typeof pendingApprovalsCount === "number" ? pendingApprovalsCount : pendingApprovalsCountFromApi;
-  const isSettingsRoute = pathname.startsWith("/settings");
+  const isSettingsRoute = pathname.startsWith("/settings") || pathname.startsWith("/trace-logs");
   const resolvedSecondaryPane =
     secondaryPane ??
     (isSettingsRoute ? (
@@ -206,7 +215,7 @@ export function AppShell({
                 const Icon = item.icon;
                 const isActive = item.slug === "settings" && isSettingsRoute ? true : activeNav === item.label;
                 const showPendingApprovalsBadge =
-                  item.slug === "governance" &&
+                  item.slug === "inbox" &&
                   typeof resolvedPendingApprovalsCount === "number" &&
                   resolvedPendingApprovalsCount > 0;
                 const navLink = (

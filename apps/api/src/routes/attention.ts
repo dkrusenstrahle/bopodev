@@ -22,6 +22,7 @@ export function createAttentionRouter(ctx: AppContext) {
   const router = Router();
   router.use(requireCompanyScope);
 
+  // Canonical board action queue endpoint for Inbox and board attention UX.
   router.get("/", async (req, res) => {
     const actorId = req.actor?.id ?? "local-board";
     const items = await listBoardAttentionItems(ctx.db, req.companyId!, actorId);

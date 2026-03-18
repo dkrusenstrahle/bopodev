@@ -9,6 +9,7 @@ export default async function DashboardPage({
   const { companyId } = await searchParams;
   const workspaceData = await loadWorkspaceData(companyId, {
     include: {
+      approvals: true,
       attentionItems: true,
       governanceInbox: true
     }

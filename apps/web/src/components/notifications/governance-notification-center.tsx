@@ -296,7 +296,7 @@ export function GovernanceNotificationCenter({ companyId }: { companyId: string 
             </div>
             <div className="mt-3 flex items-center gap-2">
               <Button asChild variant="outline" size="sm">
-                <a href={`${item.actionHref}?companyId=${encodeURIComponent(companyId)}`}>{item.actionLabel}</a>
+                <a href={toAttentionActionHref(item.actionHref, companyId)}>{item.actionLabel}</a>
               </Button>
               {!item.seenAt ? (
                 <Button
@@ -358,4 +358,14 @@ function dismissAllRenderedToasts(toastIds: Set<string>) {
     toast.dismiss(toastId);
   }
   toastIds.clear();
+}
+
+function toAttentionActionHref(actionHref: string, companyId: string) {
+  const [pathname, existingQuery = ""] = actionHref.split("?");
+  const query = new URLSearchParams(existingQuery);
+  if (!query.get("companyId")) {
+    query.set("companyId", companyId);
+  }
+  const queryString = query.toString();
+  return queryString ? `${pathname}?${queryString}` : pathname;
 }

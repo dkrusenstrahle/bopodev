@@ -75,6 +75,17 @@ describe("governance inbox actions", { timeout: 30_000 }, () => {
       (item: { approval: { id: string }; dismissedAt: string | null }) => item.approval.id === approvalId
     );
     expect(undismissedItem?.dismissedAt).toBe(null);
+
+    const attention = await request(app).get("/attention").set(actorHeaders);
+    expect(attention.status).toBe(200);
+    expect(
+      (attention.body.data.items as Array<{ category: string; evidence?: { approvalId?: string }; state: string }>).some(
+        (item) =>
+          item.category === "approval_required" &&
+          item.evidence?.approvalId === approvalId &&
+          (item.state === "open" || item.state === "acknowledged")
+      )
+    ).toBe(true);
   });
 
   it("returns 404 for inbox actions on unknown approvals", async () => {

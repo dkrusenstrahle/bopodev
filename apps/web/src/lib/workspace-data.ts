@@ -309,6 +309,8 @@ async function loadGoals(companyId: string) {
 }
 
 async function loadApprovals(companyId: string) {
+  // Deprecated for board queue UX; Inbox should read canonical board actions from /attention.
+  // Kept temporarily for compatibility and historical approval-focused views.
   const result = (await apiGet("/governance/approvals", companyId)) as ApiResult<WorkspaceData["approvals"]>;
   return parseApiData("approvals", ApprovalRequestSchema.array(), result.data);
 }
@@ -378,7 +380,7 @@ export async function loadWorkspaceData(
     agents: true,
     heartbeatRuns: true,
     goals: true,
-    approvals: true,
+    approvals: false,
     governanceInbox: false,
     attentionItems: false,
     auditEvents: true,

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { Route } from "next";
@@ -376,6 +376,19 @@ function formatApprovalPayloadDetails(payload: Record<string, unknown> | undefin
   }
 }
 
+function toAttentionActionHref(actionHref: string, companyId: string | null) {
+  if (!companyId) {
+    return actionHref;
+  }
+  const [pathname, existingQuery = ""] = actionHref.split("?");
+  const query = new URLSearchParams(existingQuery);
+  if (!query.get("companyId")) {
+    query.set("companyId", companyId);
+  }
+  const queryString = query.toString();
+  return queryString ? `${pathname}?${queryString}` : pathname;
+}
+
 interface AuditRow {
   id: string;
   eventType: string;
@@ -706,6 +719,9 @@ export function WorkspaceClient({
   const [inboxDismissedFilter, setInboxDismissedFilter] = useState<"all" | "active" | "dismissed">("all");
   const [attentionSeverityFilter, setAttentionSeverityFilter] = useState<"all" | "critical" | "warning" | "info">("all");
   const [attentionStateFilter, setAttentionStateFilter] = useState<"all" | "open" | "acknowledged" | "dismissed" | "resolved">("open");
+  const [attentionCategoryFilter, setAttentionCategoryFilter] = useState<"all" | AttentionRow["category"]>("all");
+  const [attentionActorFilter, setAttentionActorFilter] = useState<"all" | AttentionRow["requiredActor"]>("all");
+  const [attentionOverdueFilter, setAttentionOverdueFilter] = useState<"all" | "overdue" | "on_track">("all");
   const [pluginsQuery, setPluginsQuery] = useState("");
   const [pluginsStatusFilter, setPluginsStatusFilter] = useState<"all" | "active" | "installed" | "not_installed">("all");
   const [pluginsKindFilter, setPluginsKindFilter] = useState<string>("all");
@@ -732,6 +748,8 @@ export function WorkspaceClient({
     inputUsdPer1M: string;
     outputUsdPer1M: string;
   } | null>(null);
+  const searchParams = useSearchParams();
+  const appliedInboxPresetRef = useRef<string>("");
   const ceoAgent = useMemo(
     () => agents.find((entry) => entry.roleKey === "ceo" || entry.name === "CEO") ?? null,
     [agents]
@@ -817,7 +835,7 @@ export function WorkspaceClient({
   const isGoalsNav = activeNav === "Goals";
   const isAgentsNav = activeNav === "Agents";
   const isInboxNav = activeNav === "Inbox";
-  const isGovernanceNav = activeNav === "Approvals";
+  const isGovernanceNav = false;
   const isLogsNav = activeNav === "Logs";
   const isRunsNav = activeNav === "Runs";
   const isCostsNav = activeNav === "Costs";
@@ -825,6 +843,67 @@ export function WorkspaceClient({
   const isModelsNav = activeNav === "Models";
   const isTemplatesNav = activeNav === "Templates";
   const includeCostAggregations = isCostsNav || isDashboardNav;
+
+  useEffect(() => {
+    if (!isInboxNav) {
+      return;
+    }
+    const querySignature = searchParams.toString();
+    if (appliedInboxPresetRef.current === querySignature) {
+      return;
+    }
+    appliedInboxPresetRef.current = querySignature;
+
+    const preset = searchParams.get("preset");
+    if (preset === "board-decisions") {
+      setAttentionCategoryFilter("approval_required");
+      setAttentionStateFilter("open");
+      setAttentionActorFilter("board");
+      setInboxDismissedFilter("active");
+      return;
+    }
+
+    const category = searchParams.get("category");
+    if (category === "approval_required" || category === "blocker_escalation" || category === "budget_hard_stop" || category === "stalled_work" || category === "run_failure_spike" || category === "board_mentioned_comment") {
+      setAttentionCategoryFilter(category);
+    } else if (category === "all") {
+      setAttentionCategoryFilter("all");
+    }
+
+    const severity = searchParams.get("severity");
+    if (severity === "critical" || severity === "warning" || severity === "info") {
+      setAttentionSeverityFilter(severity);
+    } else if (severity === "all") {
+      setAttentionSeverityFilter("all");
+    }
+
+    const state = searchParams.get("state");
+    if (state === "open" || state === "acknowledged" || state === "dismissed" || state === "resolved" || state === "all") {
+      setAttentionStateFilter(state);
+    }
+
+    const requiredActor = searchParams.get("requiredActor");
+    if (requiredActor === "board" || requiredActor === "member" || requiredActor === "agent" || requiredActor === "system") {
+      setAttentionActorFilter(requiredActor);
+    } else if (requiredActor === "all") {
+      setAttentionActorFilter("all");
+    }
+
+    const overdue = searchParams.get("overdue");
+    if (overdue === "overdue" || overdue === "on_track" || overdue === "all") {
+      setAttentionOverdueFilter(overdue);
+    }
+
+    const seen = searchParams.get("seen");
+    if (seen === "all" || seen === "seen" || seen === "unseen") {
+      setInboxSeenFilter(seen);
+    }
+
+    const dismissed = searchParams.get("dismissed");
+    if (dismissed === "all" || dismissed === "active" || dismissed === "dismissed") {
+      setInboxDismissedFilter(dismissed);
+    }
+  }, [isInboxNav, searchParams]);
 
   const isActionPending = useCallback(
     (actionKey: string) => pendingActionKeys[actionKey] === true,
@@ -1056,10 +1135,30 @@ export function WorkspaceClient({
     () => (isDashboardNav ? approvals.filter((approval) => approval.status === "pending") : []),
     [approvals, isDashboardNav]
   );
+  const approvalById = useMemo(() => new Map(approvals.map((approval) => [approval.id, approval])), [approvals]);
   const pendingApprovalsCount = useMemo(
-    () => approvals.reduce((count, approval) => count + (approval.status === "pending" ? 1 : 0), 0),
-    [approvals]
+    () =>
+      attentionItems.reduce(
+        (count, item) =>
+          count +
+          (item.category === "approval_required" && (item.state === "open" || item.state === "acknowledged") ? 1 : 0),
+        0
+      ),
+    [attentionItems]
   );
+  const isAttentionOverdue = useCallback((item: AttentionRow) => {
+    if (item.state === "resolved" || item.state === "dismissed") {
+      return false;
+    }
+    const ageMs = Date.now() - new Date(item.sourceTimestamp).getTime();
+    if (item.severity === "critical") {
+      return ageMs >= 6 * 60 * 60 * 1000;
+    }
+    if (item.category === "approval_required") {
+      return ageMs >= 12 * 60 * 60 * 1000;
+    }
+    return ageMs >= 24 * 60 * 60 * 1000;
+  }, []);
   const sortedInboxItems = useMemo(
     () => {
       if (!isInboxNav) {
@@ -1151,6 +1250,18 @@ export function WorkspaceClient({
       if (attentionSeverityFilter !== "all" && item.severity !== attentionSeverityFilter) {
         return false;
       }
+      if (attentionCategoryFilter !== "all" && item.category !== attentionCategoryFilter) {
+        return false;
+      }
+      if (attentionActorFilter !== "all" && item.requiredActor !== attentionActorFilter) {
+        return false;
+      }
+      if (attentionOverdueFilter === "overdue" && !isAttentionOverdue(item)) {
+        return false;
+      }
+      if (attentionOverdueFilter === "on_track" && isAttentionOverdue(item)) {
+        return false;
+      }
       if (inboxSeenFilter === "seen" && !item.seenAt) {
         return false;
       }
@@ -1176,9 +1287,13 @@ export function WorkspaceClient({
   }, [
     attentionSeverityFilter,
     attentionStateFilter,
+    attentionCategoryFilter,
+    attentionActorFilter,
+    attentionOverdueFilter,
     inboxDismissedFilter,
     inboxQuery,
     inboxSeenFilter,
+    isAttentionOverdue,
     isInboxNav,
     sortedAttentionItems
   ]);
@@ -3022,7 +3137,7 @@ export function WorkspaceClient({
               </Button>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href={{ pathname: "/governance", query: { companyId: companyId! } }}>
+              <Link href={{ pathname: "/inbox", query: { companyId: companyId!, preset: "board-decisions" } }}>
                 Open
               </Link>
             </Button>
@@ -3133,21 +3248,55 @@ export function WorkspaceClient({
                 Resolve
               </Button>
             ) : null}
+            {row.original.category === "approval_required" &&
+            row.original.evidence.approvalId &&
+            approvalById.get(row.original.evidence.approvalId)?.status === "pending" ? (
+              <>
+                <ConfirmActionModal
+                  triggerLabel="Approve"
+                  triggerVariant="outline"
+                  triggerSize="sm"
+                  title="Approve request?"
+                  description="Apply the queued change to the control plane."
+                  details={formatApprovalPayloadDetails(approvalById.get(row.original.evidence.approvalId)?.payload)}
+                  confirmLabel="Approve"
+                  onConfirm={() => resolveApproval(row.original.evidence.approvalId!, "approved")}
+                  triggerDisabled={isActionPending(`approval:${row.original.evidence.approvalId}:resolve`)}
+                />
+                <ConfirmActionModal
+                  triggerLabel="Reject"
+                  triggerVariant="outline"
+                  triggerSize="sm"
+                  title="Reject request?"
+                  description="Reject this governance request."
+                  details={formatApprovalPayloadDetails(approvalById.get(row.original.evidence.approvalId)?.payload)}
+                  confirmLabel="Reject"
+                  onConfirm={() => resolveApproval(row.original.evidence.approvalId!, "rejected")}
+                  triggerDisabled={isActionPending(`approval:${row.original.evidence.approvalId}:resolve`)}
+                />
+                <ConfirmActionModal
+                  triggerLabel="Override"
+                  triggerVariant="outline"
+                  triggerSize="sm"
+                  title="Override request?"
+                  description="Mark the request as overridden without applying it."
+                  details={formatApprovalPayloadDetails(approvalById.get(row.original.evidence.approvalId)?.payload)}
+                  confirmLabel="Override"
+                  onConfirm={() => resolveApproval(row.original.evidence.approvalId!, "overridden")}
+                  triggerDisabled={isActionPending(`approval:${row.original.evidence.approvalId}:resolve`)}
+                />
+              </>
+            ) : null}
             <Button asChild variant="outline" size="sm">
-              <Link
-                href={{
-                  pathname: row.original.actionHref as Route,
-                  query: { companyId: companyId ?? undefined }
-                }}
-              >
+              <a href={toAttentionActionHref(row.original.actionHref, companyId)}>
                 {row.original.actionLabel}
-              </Link>
+              </a>
             </Button>
           </div>
         )
       }
     ],
-    [companyId, isActionPending]
+    [approvalById, companyId, isActionPending]
   );
 
   const auditColumns = useMemo<ColumnDef<AuditRow>[]>(
@@ -3928,7 +4077,7 @@ export function WorkspaceClient({
                   )}
                   <div className={styles.dashboardActionQueueActions}>
                     <Button asChild size="sm">
-                      <Link href={{ pathname: "/governance", query: { companyId: companyId! } }}>Review approvals</Link>
+                      <Link href={{ pathname: "/inbox", query: { companyId: companyId!, preset: "board-decisions" } }}>Review approvals</Link>
                     </Button>
                     <Button asChild size="sm" variant="outline">
                       <Link href={{ pathname: "/inbox", query: { companyId: companyId! } }}>Open inbox</Link>
@@ -4230,6 +4379,55 @@ export function WorkspaceClient({
                       <SelectItem value="info">Info</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select
+                    value={attentionCategoryFilter}
+                    onValueChange={(value) =>
+                      setAttentionCategoryFilter(
+                        value as "all" | "approval_required" | "blocker_escalation" | "budget_hard_stop" | "stalled_work" | "run_failure_spike" | "board_mentioned_comment"
+                      )
+                    }
+                  >
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All categories</SelectItem>
+                      <SelectItem value="approval_required">Approval required</SelectItem>
+                      <SelectItem value="blocker_escalation">Blocker escalation</SelectItem>
+                      <SelectItem value="budget_hard_stop">Budget hard stop</SelectItem>
+                      <SelectItem value="stalled_work">Stalled work</SelectItem>
+                      <SelectItem value="run_failure_spike">Run failure spike</SelectItem>
+                      <SelectItem value="board_mentioned_comment">Board mention</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={attentionActorFilter}
+                    onValueChange={(value) => setAttentionActorFilter(value as "all" | "board" | "member" | "agent" | "system")}
+                  >
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="Required actor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All actors</SelectItem>
+                      <SelectItem value="board">Board</SelectItem>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="agent">Agent</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={attentionOverdueFilter}
+                    onValueChange={(value) => setAttentionOverdueFilter(value as "all" | "overdue" | "on_track")}
+                  >
+                    <SelectTrigger className={styles.governanceFiltersSelect}>
+                      <SelectValue placeholder="SLA" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Overdue + on track</SelectItem>
+                      <SelectItem value="overdue">Overdue only</SelectItem>
+                      <SelectItem value="on_track">On track only</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Select value={inboxSeenFilter} onValueChange={(value) => setInboxSeenFilter(value as "all" | "seen" | "unseen")}>
                     <SelectTrigger className={styles.governanceFiltersSelect}>
                       <SelectValue placeholder="Seen" />
@@ -4251,80 +4449,6 @@ export function WorkspaceClient({
                       <SelectItem value="all">All dismissal states</SelectItem>
                       <SelectItem value="active">Not dismissed</SelectItem>
                       <SelectItem value="dismissed">Dismissed only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              }
-            />
-          </>
-        );
-      case "Approvals":
-        return (
-          <>
-            <SectionHeading
-              title="Approvals"
-              description="Items to approve or dismiss for the board."
-            />
-            <div className="ui-stats">
-              <MetricCard label="Approvals in scope" value={governanceSummary.total} />
-              <MetricCard label="Pending" value={governanceSummary.pending} />
-              <MetricCard
-                label="Approved / Rejected / Overridden"
-                value={`${governanceSummary.approved} / ${governanceSummary.rejected} / ${governanceSummary.overridden}`}
-              />
-              <MetricCard label="Avg resolution time" value={governanceSummary.avgResolutionLabel} />
-            </div>
-            <DataTable
-              columns={approvalColumns}
-              data={filteredApprovals}
-              emptyMessage="No approvals match current filters."
-              toolbarActions={
-                <div className={styles.governanceFiltersCardContent}>
-                  <Input
-                    value={governanceQuery}
-                    onChange={(event) => setGovernanceQuery(event.target.value)}
-                    placeholder="Search action, status, or payload..."
-                    className={styles.governanceFiltersInput}
-                  />
-                  <Select value={governanceStatusFilter} onValueChange={setGovernanceStatusFilter}>
-                    <SelectTrigger className={styles.governanceFiltersSelect}>
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All statuses</SelectItem>
-                      {governanceStatusOptions.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={governanceActionFilter} onValueChange={setGovernanceActionFilter}>
-                    <SelectTrigger className={styles.governanceFiltersSelect}>
-                      <SelectValue placeholder="Action" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All actions</SelectItem>
-                      {governanceActionOptions.map((action) => (
-                        <SelectItem key={action} value={action}>
-                          {action}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={governanceWindowFilter}
-                    onValueChange={(value) => setGovernanceWindowFilter(value as "today" | "7d" | "30d" | "90d" | "all")}
-                  >
-                    <SelectTrigger className={styles.governanceFiltersSelect}>
-                      <SelectValue placeholder="Window" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="7d">Last 7 days</SelectItem>
-                      <SelectItem value="30d">Last 30 days</SelectItem>
-                      <SelectItem value="90d">Last 90 days</SelectItem>
-                      <SelectItem value="all">All time</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

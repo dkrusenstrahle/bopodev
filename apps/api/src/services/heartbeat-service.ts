@@ -2250,6 +2250,22 @@ async function appendRunSummaryComments(
     executionSummary: input.executionSummary
   });
   for (const issueId of input.issueIds) {
+    const [existingRunComment] = await db
+      .select({ id: issueComments.id })
+      .from(issueComments)
+      .where(
+        and(
+          eq(issueComments.companyId, input.companyId),
+          eq(issueComments.issueId, issueId),
+          eq(issueComments.runId, input.runId),
+          eq(issueComments.authorType, "agent"),
+          eq(issueComments.authorId, input.agentId)
+        )
+      )
+      .limit(1);
+    if (existingRunComment) {
+      continue;
+    }
     await addIssueComment(db, {
       companyId: input.companyId,
       issueId,

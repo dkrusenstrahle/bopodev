@@ -683,7 +683,7 @@ export function IssueDetailPageClient({
         authorType: "human",
         recipients: toRecipientPayload(selectedRecipientKey)
       });
-      setComments((current) => [response.data, ...current.filter((comment) => comment.id !== response.data.id)]);
+      setComments((current) => [...current.filter((comment) => comment.id !== response.data.id), response.data]);
       setDraftComment("");
       setSelectedRecipientKey(null);
       void refreshIssueView();

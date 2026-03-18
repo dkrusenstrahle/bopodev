@@ -753,7 +753,7 @@ export async function listIssueComments(db: BopoDb, companyId: string, issueId: 
     .select()
     .from(issueComments)
     .where(and(eq(issueComments.companyId, companyId), eq(issueComments.issueId, issueId)))
-    .orderBy(desc(issueComments.createdAt));
+    .orderBy(asc(issueComments.createdAt));
   return comments.map((comment) => normalizeIssueComment(comment));
 }
 

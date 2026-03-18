@@ -6,7 +6,11 @@ import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
-import { runHeartbeatSweep, stopHeartbeatRun } from "../services/heartbeat-service";
+import {
+  findPendingProjectBudgetOverrideBlocksForAgent,
+  runHeartbeatSweep,
+  stopHeartbeatRun
+} from "../services/heartbeat-service";
 import { enqueueHeartbeatQueueJob, triggerHeartbeatQueueWorker } from "../services/heartbeat-queue-service";
 
 const runAgentSchema = z.object({
@@ -45,6 +49,18 @@ export function createHeartbeatRouter(ctx: AppContext) {
     }
     if (agent.status === "paused" || agent.status === "terminated") {
       return sendError(res, `Agent is not invokable in status '${agent.status}'.`, 409);
+    }
+    const blockedProjectIds = await findPendingProjectBudgetOverrideBlocksForAgent(
+      ctx.db,
+      req.companyId!,
+      parsed.data.agentId
+    );
+    if (blockedProjectIds.length > 0) {
+      return sendError(
+        res,
+        `Agent is blocked by pending project budget approval for project(s): ${blockedProjectIds.join(", ")}.`,
+        423
+      );
     }
 
     const job = await enqueueHeartbeatQueueJob(ctx.db, {
@@ -127,6 +143,14 @@ export function createHeartbeatRouter(ctx: AppContext) {
     }
     if (agent.status === "paused" || agent.status === "terminated") {
       return { ok: false as const, statusCode: 409, message: `Agent is not invokable in status '${agent.status}'.` };
+    }
+    const blockedProjectIds = await findPendingProjectBudgetOverrideBlocksForAgent(ctx.db, input.companyId, run.agentId);
+    if (blockedProjectIds.length > 0) {
+      return {
+        ok: false as const,
+        statusCode: 423,
+        message: `Agent is blocked by pending project budget approval for project(s): ${blockedProjectIds.join(", ")}.`
+      };
     }
     const job = await enqueueHeartbeatQueueJob(ctx.db, {
       companyId: input.companyId,

@@ -6,6 +6,7 @@ import type { BopoDb } from "bopodev-db";
 import {
   approvalRequests,
   agents,
+  appendAuditEvent,
   createAgent,
   createGoal,
   createIssue,
@@ -110,11 +111,20 @@ const applyTemplatePayloadSchema = z.object({
 });
 const overrideBudgetPayloadSchema = z
   .object({
-    agentId: z.string().min(1),
+    agentId: z.string().min(1).optional(),
+    projectId: z.string().min(1).optional(),
     reason: z.string().optional(),
     additionalBudgetUsd: z.number().positive().optional(),
     revisedMonthlyBudgetUsd: z.number().positive().optional()
   })
+  .refine(
+    (value) => Boolean(value.agentId) || Boolean(value.projectId),
+    "Budget override payload requires agentId or projectId."
+  )
+  .refine(
+    (value) => !(value.agentId && value.projectId),
+    "Budget override payload must target either agentId or projectId, not both."
+  )
   .refine(
     (value) =>
       (typeof value.additionalBudgetUsd === "number" && value.additionalBudgetUsd > 0) ||
@@ -171,7 +181,7 @@ export async function resolveApproval(
     let execution:
       | {
           applied: boolean;
-          entityType?: "agent" | "goal" | "memory" | "template";
+          entityType?: "agent" | "goal" | "project" | "memory" | "template";
           entityId?: string;
           entity?: Record<string, unknown>;
         }
@@ -370,20 +380,65 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
     if (!parsed.success) {
       throw new GovernanceError("Approval payload for budget override is invalid.");
     }
-    const [agent] = await db
-      .select({
-        id: agents.id,
-        monthlyBudgetUsd: agents.monthlyBudgetUsd,
-        usedBudgetUsd: agents.usedBudgetUsd
-      })
-      .from(agents)
-      .where(and(eq(agents.companyId, companyId), eq(agents.id, parsed.data.agentId)))
-      .limit(1);
-    if (!agent) {
-      throw new GovernanceError("Agent not found for budget override request.");
+    if (parsed.data.agentId) {
+      const [agent] = await db
+        .select({
+          id: agents.id,
+          monthlyBudgetUsd: agents.monthlyBudgetUsd,
+          usedBudgetUsd: agents.usedBudgetUsd
+        })
+        .from(agents)
+        .where(and(eq(agents.companyId, companyId), eq(agents.id, parsed.data.agentId)))
+        .limit(1);
+      if (!agent) {
+        throw new GovernanceError("Agent not found for budget override request.");
+      }
+      const currentMonthlyBudget = Number(agent.monthlyBudgetUsd);
+      const currentUsedBudget = Number(agent.usedBudgetUsd);
+      const nextMonthlyBudget =
+        typeof parsed.data.revisedMonthlyBudgetUsd === "number"
+          ? parsed.data.revisedMonthlyBudgetUsd
+          : currentMonthlyBudget + (parsed.data.additionalBudgetUsd ?? 0);
+      if (!Number.isFinite(nextMonthlyBudget) || nextMonthlyBudget <= 0) {
+        throw new GovernanceError("Budget override must resolve to a positive monthly budget.");
+      }
+      if (nextMonthlyBudget <= currentUsedBudget) {
+        throw new GovernanceError("Budget override must exceed current used budget.");
+      }
+      await db
+        .update(agents)
+        .set({
+          monthlyBudgetUsd: nextMonthlyBudget.toFixed(4),
+          updatedAt: new Date()
+        })
+        .where(and(eq(agents.companyId, companyId), eq(agents.id, parsed.data.agentId)));
+      return {
+        applied: true,
+        entityType: "agent" as const,
+        entityId: parsed.data.agentId,
+        entity: {
+          agentId: parsed.data.agentId,
+          previousMonthlyBudgetUsd: currentMonthlyBudget,
+          monthlyBudgetUsd: nextMonthlyBudget,
+          usedBudgetUsd: currentUsedBudget,
+          reason: parsed.data.reason ?? null
+        }
+      };
     }
-    const currentMonthlyBudget = Number(agent.monthlyBudgetUsd);
-    const currentUsedBudget = Number(agent.usedBudgetUsd);
+    const [project] = await db
+      .select({
+        id: projects.id,
+        monthlyBudgetUsd: projects.monthlyBudgetUsd,
+        usedBudgetUsd: projects.usedBudgetUsd
+      })
+      .from(projects)
+      .where(and(eq(projects.companyId, companyId), eq(projects.id, parsed.data.projectId!)))
+      .limit(1);
+    if (!project) {
+      throw new GovernanceError("Project not found for budget override request.");
+    }
+    const currentMonthlyBudget = Number(project.monthlyBudgetUsd);
+    const currentUsedBudget = Number(project.usedBudgetUsd);
     const nextMonthlyBudget =
       typeof parsed.data.revisedMonthlyBudgetUsd === "number"
         ? parsed.data.revisedMonthlyBudgetUsd
@@ -395,18 +450,31 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
       throw new GovernanceError("Budget override must exceed current used budget.");
     }
     await db
-      .update(agents)
+      .update(projects)
       .set({
         monthlyBudgetUsd: nextMonthlyBudget.toFixed(4),
         updatedAt: new Date()
       })
-      .where(and(eq(agents.companyId, companyId), eq(agents.id, parsed.data.agentId)));
+      .where(and(eq(projects.companyId, companyId), eq(projects.id, parsed.data.projectId!)));
+    await appendAuditEvent(db, {
+      companyId,
+      actorType: "system",
+      eventType: "project_budget.override_applied",
+      entityType: "project",
+      entityId: parsed.data.projectId!,
+      payload: {
+        previousMonthlyBudgetUsd: currentMonthlyBudget,
+        monthlyBudgetUsd: nextMonthlyBudget,
+        usedBudgetUsd: currentUsedBudget,
+        reason: parsed.data.reason ?? null
+      }
+    });
     return {
       applied: true,
-      entityType: "agent" as const,
-      entityId: parsed.data.agentId,
+      entityType: "project" as const,
+      entityId: parsed.data.projectId!,
       entity: {
-        agentId: parsed.data.agentId,
+        projectId: parsed.data.projectId!,
         previousMonthlyBudgetUsd: currentMonthlyBudget,
         monthlyBudgetUsd: nextMonthlyBudget,
         usedBudgetUsd: currentUsedBudget,

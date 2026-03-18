@@ -82,9 +82,9 @@
 }
 
 .issueDetailLink2 {
-  @apply hover:underline;
-  .ui-badge--outline {
-    @apply text-sidebar-foreground/80;
+  @apply hover:underline text-sidebar-foreground;
+  a {
+    @apply text-sidebar-foreground;
   }
 }
 

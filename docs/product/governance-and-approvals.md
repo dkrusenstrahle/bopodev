@@ -64,7 +64,16 @@ Always verify post-resolution state in related views:
 Budget override behavior:
 
 - When an agent hard-stops on budget, the system can queue a pending `override_budget` approval for governance review.
-- Approved budget overrides update the target agent's monthly budget.
+- When a project hard-stops on budget, the system queues one pending `override_budget` approval per project while pending.
+- Approved budget overrides update the target agent or project monthly budget.
+- Project budget hard-stop also blocks new work starts for that project until approval is resolved.
+
+Project budget governance flow:
+
+- Run request gathers target projects.
+- If any project is exhausted, run is skipped before claim/execution.
+- System emits `project_budget.hard_stop` and `project_budget.override_requested` audit events.
+- Governance approval applies the new project monthly budget and emits `project_budget.override_applied`.
 
 ## Operating Recommendations
 

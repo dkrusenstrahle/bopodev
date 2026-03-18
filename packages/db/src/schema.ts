@@ -17,6 +17,13 @@ export const projects = pgTable("projects", {
   description: text("description"),
   status: text("status").notNull().default("planned"),
   plannedStartAt: timestamp("planned_start_at", { mode: "date" }),
+  monthlyBudgetUsd: numeric("monthly_budget_usd", { precision: 12, scale: 4 })
+    .notNull()
+    .default("100"),
+  usedBudgetUsd: numeric("used_budget_usd", { precision: 12, scale: 4 })
+    .notNull()
+    .default("0"),
+  budgetWindowStartAt: timestamp("budget_window_start_at", { mode: "date" }).notNull().defaultNow(),
   executionWorkspacePolicy: text("execution_workspace_policy"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()

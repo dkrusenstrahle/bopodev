@@ -36,6 +36,7 @@ interface AgentRow {
   providerType: string;
   heartbeatCron?: string;
   monthlyBudgetUsd?: number;
+  usedBudgetUsd?: number;
   canHireAgents?: boolean;
   runtimeCommand?: string | null;
   runtimeArgsJson?: string | null;
@@ -438,6 +439,7 @@ export function AgentDetailPageClient({
       ),
     [agentCosts]
   );
+  const usedBudgetUsd = typeof agent.usedBudgetUsd === "number" ? agent.usedBudgetUsd : 0;
 
   const state = useMemo(() => {
     const parsed = parseStateBlob(agent.stateBlob);
@@ -802,8 +804,11 @@ export function AgentDetailPageClient({
         <div className={styles.costGridCardContent}>
           <MetricCard label="Input tokens" value={costSummary.input.toLocaleString()} />
           <MetricCard label="Output tokens" value={costSummary.output.toLocaleString()} />
-          <MetricCard label="Cost entries" value={agentCosts.length.toLocaleString()} />
-          <MetricCard label="Total cost" value={'$' + costSummary.usd.toFixed(2)} />
+          <MetricCard
+            label="Monthly budget"
+            value={typeof agent.monthlyBudgetUsd === "number" ? `$${agent.monthlyBudgetUsd.toFixed(2)}` : "Not set"}
+          />
+          <MetricCard label="Budget used (month)" value={`$${usedBudgetUsd.toFixed(2)}`} />
         </div>
       </div>
 
@@ -968,7 +973,6 @@ export function AgentDetailPageClient({
           <ConfigRow label="Adapter" value={getProviderLabel(agent.providerType)} />
           <ConfigRow label="Status" value={agent.status} />
           <ConfigRow label="Heartbeat" value={formatHeartbeatCadence(agent.heartbeatCron)} />
-          <ConfigRow label="Monthly budget" value={typeof agent.monthlyBudgetUsd === "number" ? `$${agent.monthlyBudgetUsd}` : "Not set"} />
         </CardContent>
       </Card>
     </div>

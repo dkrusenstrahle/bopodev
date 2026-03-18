@@ -51,6 +51,7 @@ const createProjectSchema = z.object({
   description: z.string().optional(),
   status: projectStatusSchema.default("planned"),
   plannedStartAt: z.string().optional(),
+  monthlyBudgetUsd: z.number().positive().default(100),
   executionWorkspacePolicy: executionWorkspacePolicySchema.optional().nullable(),
   workspace: z
     .object({
@@ -70,6 +71,7 @@ const updateProjectSchema = z
     description: z.string().nullable().optional(),
     status: projectStatusSchema.optional(),
     plannedStartAt: z.string().nullable().optional(),
+    monthlyBudgetUsd: z.number().positive().optional(),
     executionWorkspacePolicy: executionWorkspacePolicySchema.nullable().optional(),
     goalIds: z.array(z.string().min(1)).optional()
   })
@@ -141,6 +143,7 @@ export function createProjectsRouter(ctx: AppContext) {
       description: parsed.data.description,
       status: parsed.data.status,
       plannedStartAt: parsePlannedStartAt(parsed.data.plannedStartAt),
+      monthlyBudgetUsd: parsed.data.monthlyBudgetUsd.toFixed(4),
       executionWorkspacePolicy: parsed.data.executionWorkspacePolicy ?? null
     });
     if (!project) {
@@ -217,6 +220,7 @@ export function createProjectsRouter(ctx: AppContext) {
       status: parsed.data.status,
       plannedStartAt:
         parsed.data.plannedStartAt === undefined ? undefined : parsePlannedStartAt(parsed.data.plannedStartAt),
+      monthlyBudgetUsd: parsed.data.monthlyBudgetUsd === undefined ? undefined : parsed.data.monthlyBudgetUsd.toFixed(4),
       executionWorkspacePolicy: parsed.data.executionWorkspacePolicy
     });
     if (!project) {

@@ -75,6 +75,7 @@ export function CreateProjectModal({
     description: string | null;
     status: ProjectStatus;
     plannedStartAt: string | null;
+    monthlyBudgetUsd?: number;
     workspaces: Array<{
       id: string;
       name: string;
@@ -109,6 +110,9 @@ export function CreateProjectModal({
   const [description, setDescription] = useState(project?.description ?? "");
   const [status, setStatus] = useState<ProjectStatus>(project?.status ?? "planned");
   const [plannedStartAt, setPlannedStartAt] = useState(project?.plannedStartAt ? project.plannedStartAt.slice(0, 10) : "");
+  const [monthlyBudgetUsd, setMonthlyBudgetUsd] = useState(
+    typeof project?.monthlyBudgetUsd === "number" ? project.monthlyBudgetUsd.toString() : "100"
+  );
   const [workspaceName, setWorkspaceName] = useState(project?.primaryWorkspace?.name ?? "");
   const [workspaceCwd, setWorkspaceCwd] = useState(project?.primaryWorkspace?.cwd ?? "");
   const [workspaceRepoUrl, setWorkspaceRepoUrl] = useState(project?.primaryWorkspace?.repoUrl ?? "");
@@ -128,6 +132,7 @@ export function CreateProjectModal({
     setDescription(project?.description ?? "");
     setStatus(project?.status ?? "planned");
     setPlannedStartAt(project?.plannedStartAt ? project.plannedStartAt.slice(0, 10) : "");
+    setMonthlyBudgetUsd(typeof project?.monthlyBudgetUsd === "number" ? project.monthlyBudgetUsd.toString() : "100");
     setWorkspaceName(project?.primaryWorkspace?.name ?? "");
     setWorkspaceCwd(project?.primaryWorkspace?.cwd ?? "");
     setWorkspaceRepoUrl(project?.primaryWorkspace?.repoUrl ?? "");
@@ -154,6 +159,12 @@ export function CreateProjectModal({
     setIsSubmitting(true);
     setError(null);
     try {
+      const parsedMonthlyBudget = Number(monthlyBudgetUsd);
+      if (!Number.isFinite(parsedMonthlyBudget) || parsedMonthlyBudget <= 0) {
+        setError("Monthly budget must be a positive number.");
+        setIsSubmitting(false);
+        return;
+      }
       const trimmedWorkspaceCwd = (workspaceMode === "github" ? "" : workspaceCwd).trim();
       const trimmedWorkspaceRepoUrl = (workspaceMode === "local" ? "" : workspaceRepoUrl).trim();
       const trimmedWorkspaceRepoRef = workspaceRepoRef.trim();
@@ -173,6 +184,7 @@ export function CreateProjectModal({
         description: description || undefined,
         status,
         plannedStartAt: plannedStartAt || undefined,
+        monthlyBudgetUsd: parsedMonthlyBudget,
         workspace: normalizedWorkspace,
         goalIds
       };
@@ -181,6 +193,7 @@ export function CreateProjectModal({
           description: description || null,
           goalIds,
           name,
+          monthlyBudgetUsd: parsedMonthlyBudget,
           plannedStartAt: plannedStartAt || null,
           status
         });
@@ -221,6 +234,7 @@ export function CreateProjectModal({
         setDescription("");
         setStatus("planned");
         setPlannedStartAt("");
+        setMonthlyBudgetUsd("100");
         setWorkspaceName("");
         setWorkspaceCwd("");
         setWorkspaceRepoUrl("");
@@ -387,6 +401,21 @@ export function CreateProjectModal({
               <Field>
                 <FieldLabel htmlFor="project-planned-start-at">Planned start date</FieldLabel>
                 <Input id="project-planned-start-at" type="date" value={plannedStartAt} onChange={(e) => setPlannedStartAt(e.target.value)} autoComplete="off" />
+              </Field>
+            </FieldGroup>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="project-monthly-budget-usd">Monthly project budget (USD)</FieldLabel>
+                <Input
+                  id="project-monthly-budget-usd"
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  value={monthlyBudgetUsd}
+                  onChange={(e) => setMonthlyBudgetUsd(e.target.value)}
+                  placeholder="100"
+                  autoComplete="off"
+                />
               </Field>
             </FieldGroup>
 

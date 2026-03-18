@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import {
+  cancelHeartbeatJob,
   getHeartbeatRun,
   claimNextHeartbeatJob,
   enqueueHeartbeatJob,
@@ -189,6 +190,13 @@ async function processHeartbeatQueueJob(
   }
 
   if (run.status === "skipped") {
+    if (isProjectBudgetHardStopMessage(run.message)) {
+      await cancelHeartbeatJob(db, {
+        companyId: input.companyId,
+        id: input.job.id
+      });
+      return;
+    }
     await handleQueueRetryOrDeadLetter(db, {
       companyId: input.companyId,
       jobId: input.job.id,
@@ -250,6 +258,13 @@ function resolveRetryDelayMs(attemptCount: number) {
   const baseDelayMs = Number(process.env.BOPO_HEARTBEAT_QUEUE_RETRY_BASE_MS ?? 1000);
   const cappedAttempt = Math.max(0, Math.min(attemptCount, 8));
   return Math.max(500, baseDelayMs) * 2 ** cappedAttempt;
+}
+
+function isProjectBudgetHardStopMessage(message: string | null | undefined) {
+  const normalized = String(message ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized.includes("project budget hard-stop");
 }
 
 async function markCommentRecipientDeliveryIfNeeded(

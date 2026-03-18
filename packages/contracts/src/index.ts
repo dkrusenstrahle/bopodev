@@ -17,6 +17,9 @@ export const ProjectSchema = z.object({
   description: z.string().nullable().optional(),
   status: z.enum(["planned", "active", "paused", "blocked", "completed", "archived"]),
   plannedStartAt: z.string().nullable().optional(),
+  monthlyBudgetUsd: z.number().positive(),
+  usedBudgetUsd: z.number().nonnegative(),
+  budgetWindowStartAt: z.string().nullable().optional(),
   executionWorkspacePolicy: z.record(z.string(), z.unknown()).nullable().optional(),
   gitDiagnostics: z
     .object({

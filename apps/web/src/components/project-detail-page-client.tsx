@@ -26,6 +26,9 @@ interface ProjectRow {
   description: string | null;
   status: "planned" | "active" | "paused" | "blocked" | "completed" | "archived";
   plannedStartAt: string | null;
+  monthlyBudgetUsd: number;
+  usedBudgetUsd: number;
+  budgetWindowStartAt: string | null;
   executionWorkspacePolicy?: Record<string, unknown> | null;
   workspaces: Array<{
     id: string;
@@ -282,10 +285,10 @@ export function ProjectDetailPageClient({
         </Alert>
       ) : null}
       <div className="ui-stats">
-          <MetricCard label="Status" value={project.status} />
           <MetricCard label="Total issues" value={issues.length} />
-          <MetricCard label="Open issues" value={issues.filter((issue) => issue.status !== "done" && issue.status !== "canceled").length} />
           <MetricCard label="Total cost" value={'$' + costSummary.usd.toFixed(2)} />
+          <MetricCard label="Monthly budget" value={`$${project.monthlyBudgetUsd.toFixed(2)}`} />
+          <MetricCard label="Budget used (month)" value={`$${project.usedBudgetUsd.toFixed(2)}`} />
       </div>
 
       <SectionHeading

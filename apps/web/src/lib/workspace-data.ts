@@ -54,6 +54,7 @@ export interface WorkspaceData {
     providerType: string;
     heartbeatCron?: string;
     monthlyBudgetUsd?: number;
+    usedBudgetUsd?: number;
     canHireAgents?: boolean;
     runtimeCommand?: string | null;
     runtimeArgsJson?: string | null;
@@ -138,6 +139,9 @@ export interface WorkspaceData {
     description: string | null;
     status: "planned" | "active" | "paused" | "blocked" | "completed" | "archived";
     plannedStartAt: string | null;
+    monthlyBudgetUsd: number;
+    usedBudgetUsd: number;
+    budgetWindowStartAt?: string | null;
     executionWorkspacePolicy?: Record<string, unknown> | null;
     workspaces: Array<{
       id: string;

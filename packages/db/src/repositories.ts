@@ -135,6 +135,9 @@ export async function createProject(
     description?: string | null;
     status?: "planned" | "active" | "paused" | "blocked" | "completed" | "archived";
     plannedStartAt?: Date | null;
+    monthlyBudgetUsd?: string;
+    usedBudgetUsd?: string;
+    budgetWindowStartAt?: Date | null;
     executionWorkspacePolicy?: Record<string, unknown> | null;
     workspaceLocalPath?: string | null;
     workspaceGithubRepo?: string | null;
@@ -148,6 +151,9 @@ export async function createProject(
     description: input.description ?? null,
     status: input.status ?? "planned",
     plannedStartAt: input.plannedStartAt ?? null,
+    monthlyBudgetUsd: input.monthlyBudgetUsd ?? "100.0000",
+    usedBudgetUsd: input.usedBudgetUsd ?? "0.0000",
+    budgetWindowStartAt: input.budgetWindowStartAt ?? new Date(),
     executionWorkspacePolicy: input.executionWorkspacePolicy ? JSON.stringify(input.executionWorkspacePolicy) : null
   });
   const legacyWorkspaceLocalPath = input.workspaceLocalPath?.trim();
@@ -174,6 +180,9 @@ export async function updateProject(
     description?: string | null;
     status?: "planned" | "active" | "paused" | "blocked" | "completed" | "archived";
     plannedStartAt?: Date | null;
+    monthlyBudgetUsd?: string;
+    usedBudgetUsd?: string;
+    budgetWindowStartAt?: Date | null;
     executionWorkspacePolicy?: Record<string, unknown> | null;
     workspaceLocalPath?: string | null;
     workspaceGithubRepo?: string | null;
@@ -187,6 +196,9 @@ export async function updateProject(
         description: input.description,
         status: input.status,
         plannedStartAt: input.plannedStartAt,
+        monthlyBudgetUsd: input.monthlyBudgetUsd,
+        usedBudgetUsd: input.usedBudgetUsd,
+        budgetWindowStartAt: input.budgetWindowStartAt,
         executionWorkspacePolicy:
           input.executionWorkspacePolicy === undefined
             ? undefined
@@ -473,6 +485,9 @@ async function hydrateProjectsWithWorkspaces(
     return [] as Array<
       typeof projects.$inferSelect & {
         executionWorkspacePolicy: Record<string, unknown> | null;
+        monthlyBudgetUsd: number;
+        usedBudgetUsd: number;
+        budgetWindowStartAt: string | null;
         workspaces: Array<typeof projectWorkspaces.$inferSelect>;
         primaryWorkspace: typeof projectWorkspaces.$inferSelect | null;
       }
@@ -505,6 +520,9 @@ async function hydrateProjectsWithWorkspaces(
     }
     return {
       ...project,
+      monthlyBudgetUsd: Number(project.monthlyBudgetUsd),
+      usedBudgetUsd: Number(project.usedBudgetUsd),
+      budgetWindowStartAt: project.budgetWindowStartAt ? project.budgetWindowStartAt.toISOString() : null,
       workspaceLocalPath: primaryWorkspace?.cwd ?? null,
       workspaceGithubRepo: primaryWorkspace?.repoUrl ?? null,
       executionWorkspacePolicy,

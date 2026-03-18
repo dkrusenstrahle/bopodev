@@ -20,6 +20,9 @@ export async function bootstrapDatabase(dbPath?: string) {
       description TEXT,
       status TEXT NOT NULL DEFAULT 'planned',
       planned_start_at TIMESTAMP,
+      monthly_budget_usd NUMERIC(12, 4) NOT NULL DEFAULT 100,
+      used_budget_usd NUMERIC(12, 4) NOT NULL DEFAULT 0,
+      budget_window_start_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       execution_workspace_policy TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -36,6 +39,18 @@ export async function bootstrapDatabase(dbPath?: string) {
   await db.execute(sql`
     ALTER TABLE projects
     ADD COLUMN IF NOT EXISTS execution_workspace_policy TEXT;
+  `);
+  await db.execute(sql`
+    ALTER TABLE projects
+    ADD COLUMN IF NOT EXISTS monthly_budget_usd NUMERIC(12, 4) NOT NULL DEFAULT 100;
+  `);
+  await db.execute(sql`
+    ALTER TABLE projects
+    ADD COLUMN IF NOT EXISTS used_budget_usd NUMERIC(12, 4) NOT NULL DEFAULT 0;
+  `);
+  await db.execute(sql`
+    ALTER TABLE projects
+    ADD COLUMN IF NOT EXISTS budget_window_start_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
   `);
   await db.execute(sql`
     ALTER TABLE projects

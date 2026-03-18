@@ -35,7 +35,7 @@ import { assertRuntimeCwdForCompany, getProjectWorkspaceContextMap, hasText, res
 import type { RealtimeHub } from "../realtime/hub";
 import { createHeartbeatRunsRealtimeEvent } from "../realtime/heartbeat-runs";
 import { publishOfficeOccupantForAgent } from "../realtime/office-space";
-import { checkAgentBudget } from "./budget-service";
+import { appendProjectBudgetUsage, checkAgentBudget, checkProjectBudget } from "./budget-service";
 import { appendDurableFact, loadAgentMemoryContext, persistHeartbeatMemory } from "./memory-file-service";
 import { calculateModelPricedUsdCost } from "./model-pricing";
 import { runPluginHook } from "./plugin-runtime";
@@ -206,6 +206,50 @@ export async function stopHeartbeatRun(
   return { ok: true as const, runId, agentId: run.agentId, status: run.status };
 }
 
+export async function findPendingProjectBudgetOverrideBlocksForAgent(
+  db: BopoDb,
+  companyId: string,
+  agentId: string
+) {
+  const assignedRows = await db
+    .select({ projectId: issues.projectId })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.companyId, companyId),
+        eq(issues.assigneeAgentId, agentId),
+        inArray(issues.status, ["todo", "in_progress"])
+      )
+    );
+  const assignedProjectIds = new Set(assignedRows.map((row) => row.projectId));
+  if (assignedProjectIds.size === 0) {
+    return [] as string[];
+  }
+  const pendingOverrides = await db
+    .select({ payloadJson: approvalRequests.payloadJson })
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.companyId, companyId),
+        eq(approvalRequests.action, "override_budget"),
+        eq(approvalRequests.status, "pending")
+      )
+    );
+  const blockedProjectIds = new Set<string>();
+  for (const approval of pendingOverrides) {
+    try {
+      const payload = JSON.parse(approval.payloadJson) as Record<string, unknown>;
+      const projectId = typeof payload.projectId === "string" ? payload.projectId.trim() : "";
+      if (projectId && assignedProjectIds.has(projectId)) {
+        blockedProjectIds.add(projectId);
+      }
+    } catch {
+      // Ignore malformed payloads to keep enforcement resilient.
+    }
+  }
+  return Array.from(blockedProjectIds);
+}
+
 export async function runHeartbeatForAgent(
   db: BopoDb,
   companyId: string,
@@ -264,6 +308,62 @@ export async function runHeartbeatForAgent(
 
   const budgetCheck = await checkAgentBudget(db, companyId, agentId);
   const runId = nanoid(14);
+  let blockedProjectBudgetChecks: Array<{ projectId: string; utilizationPct: number; monthlyBudgetUsd: number; usedBudgetUsd: number }> =
+    [];
+  if (budgetCheck.allowed) {
+    const projectIds = await loadProjectIdsForRunBudgetCheck(db, companyId, agentId, options?.wakeContext);
+    const projectChecks = await Promise.all(projectIds.map((projectId) => checkProjectBudget(db, companyId, projectId)));
+    blockedProjectBudgetChecks = projectChecks
+      .filter((entry) => entry.hardStopped)
+      .map((entry) => ({
+        projectId: entry.projectId,
+        utilizationPct: entry.utilizationPct,
+        monthlyBudgetUsd: entry.monthlyBudgetUsd,
+        usedBudgetUsd: entry.usedBudgetUsd
+      }));
+  }
+  if (blockedProjectBudgetChecks.length > 0) {
+    const blockedProjectIds = blockedProjectBudgetChecks.map((entry) => entry.projectId);
+    const message = `Heartbeat skipped due to project budget hard-stop: ${blockedProjectIds.join(",")}.`;
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      status: "skipped",
+      message
+    });
+    publishHeartbeatRunStatus(options?.realtimeHub, {
+      companyId,
+      runId,
+      status: "skipped",
+      message
+    });
+    for (const blockedProject of blockedProjectBudgetChecks) {
+      await ensureProjectBudgetOverrideApprovalRequest(db, {
+        companyId,
+        projectId: blockedProject.projectId,
+        utilizationPct: blockedProject.utilizationPct,
+        monthlyBudgetUsd: blockedProject.monthlyBudgetUsd,
+        usedBudgetUsd: blockedProject.usedBudgetUsd,
+        runId
+      });
+      await appendAuditEvent(db, {
+        companyId,
+        actorType: "system",
+        eventType: "project_budget.hard_stop",
+        entityType: "project",
+        entityId: blockedProject.projectId,
+        payload: {
+          utilizationPct: blockedProject.utilizationPct,
+          monthlyBudgetUsd: blockedProject.monthlyBudgetUsd,
+          usedBudgetUsd: blockedProject.usedBudgetUsd,
+          runId
+        }
+      });
+    }
+    await publishOfficeOccupantForAgent(db, options?.realtimeHub, companyId, agentId);
+    return runId;
+  }
   if (budgetCheck.allowed) {
     const claimed = await insertStartedRunAtomic(db, {
       id: runId,
@@ -375,6 +475,7 @@ export async function runHeartbeatForAgent(
 
   let issueIds: string[] = [];
   let claimedIssueIds: string[] = [];
+  let executionWorkItemsForBudget: Array<{ issueId: string; projectId: string }> = [];
   let state: AgentState & {
     runtime?: {
       command?: string;
@@ -539,6 +640,7 @@ export async function runHeartbeatForAgent(
     const workItems = isCommentOrderWake ? [] : await claimIssuesForAgent(db, companyId, agentId, runId);
     const wakeWorkItems = await loadWakeContextWorkItems(db, companyId, options?.wakeContext?.issueIds);
     const contextWorkItems = resolveExecutionWorkItems(workItems, wakeWorkItems, options?.wakeContext);
+    executionWorkItemsForBudget = contextWorkItems.map((item) => ({ issueId: item.id, projectId: item.project_id }));
     claimedIssueIds = workItems.map((item) => item.id);
     issueIds = contextWorkItems.map((item) => item.id);
     primaryIssueId = contextWorkItems[0]?.id ?? null;
@@ -867,6 +969,10 @@ export async function runHeartbeatForAgent(
       status: execution.status
     });
     const executionUsdCost = costDecision.usdCost;
+    await appendProjectBudgetUsage(db, {
+      companyId,
+      projectCostsUsd: buildProjectBudgetCostAllocations(executionWorkItemsForBudget, executionUsdCost)
+    });
     const parsedOutcome = ExecutionOutcomeSchema.safeParse(execution.outcome);
     executionOutcome = parsedOutcome.success ? parsedOutcome.data : null;
     const persistedMemory = await persistHeartbeatMemory({
@@ -1219,7 +1325,7 @@ export async function runHeartbeatForAgent(
       runtimeModel: persistedRuntime.runtimeModel,
       stateBlob: agent.stateBlob
     });
-    await appendFinishedRunCostEntry({
+    const failureCostDecision = await appendFinishedRunCostEntry({
       db,
       companyId,
       providerType: agent.providerType,
@@ -1232,6 +1338,10 @@ export async function runHeartbeatForAgent(
       projectId: primaryProjectId,
       agentId,
       status: "failed"
+    });
+    await appendProjectBudgetUsage(db, {
+      companyId,
+      projectCostsUsd: buildProjectBudgetCostAllocations(executionWorkItemsForBudget, failureCostDecision.usdCost)
     });
     await db
       .update(heartbeatRuns)
@@ -1433,6 +1543,7 @@ export async function runHeartbeatSweep(
   const dueAgents: Array<{ id: string }> = [];
   let skippedNotDue = 0;
   let skippedStatus = 0;
+  let skippedBudgetBlocked = 0;
   let failedStarts = 0;
   const sweepStartedAt = Date.now();
   for (const agent of companyAgents) {
@@ -1442,6 +1553,11 @@ export async function runHeartbeatSweep(
     }
     if (!isHeartbeatDue(agent.heartbeatCron, latestRunByAgent.get(agent.id) ?? null, now)) {
       skippedNotDue += 1;
+      continue;
+    }
+    const blockedProjectIds = await findPendingProjectBudgetOverrideBlocksForAgent(db, companyId, agent.id);
+    if (blockedProjectIds.length > 0) {
+      skippedBudgetBlocked += 1;
       continue;
     }
     dueAgents.push({ id: agent.id });
@@ -1481,6 +1597,7 @@ export async function runHeartbeatSweep(
       failedStarts,
       skippedStatus,
       skippedNotDue,
+      skippedBudgetBlocked,
       concurrency: sweepConcurrency,
       elapsedMs: Date.now() - sweepStartedAt,
       requestId: options?.requestId ?? null
@@ -1849,6 +1966,79 @@ function parseStringArray(value: string | null) {
   }
 }
 
+async function loadProjectIdsForRunBudgetCheck(
+  db: BopoDb,
+  companyId: string,
+  agentId: string,
+  wakeContext?: HeartbeatWakeContext
+) {
+  const projectIds = new Set<string>();
+  const isCommentOrderWake = wakeContext?.reason === "issue_comment_recipient";
+  if (!isCommentOrderWake) {
+    const assignedRows = await db
+      .select({ projectId: issues.projectId })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, companyId),
+          eq(issues.assigneeAgentId, agentId),
+          inArray(issues.status, ["todo", "in_progress"]),
+          eq(issues.isClaimed, false)
+        )
+      );
+    for (const row of assignedRows) {
+      projectIds.add(row.projectId);
+    }
+  }
+  const wakeIssueIds = Array.from(new Set((wakeContext?.issueIds ?? []).map((entry) => entry.trim()).filter(Boolean)));
+  if (wakeIssueIds.length > 0) {
+    const wakeRows = await db
+      .select({ projectId: issues.projectId })
+      .from(issues)
+      .where(and(eq(issues.companyId, companyId), inArray(issues.id, wakeIssueIds)));
+    for (const row of wakeRows) {
+      projectIds.add(row.projectId);
+    }
+  }
+  return Array.from(projectIds);
+}
+
+function buildProjectBudgetCostAllocations(
+  workItems: Array<{ issueId: string; projectId: string }>,
+  usdCost: number
+): Array<{ projectId: string; usdCost: number }> {
+  const effectiveCost = Math.max(0, usdCost);
+  if (effectiveCost <= 0 || workItems.length === 0) {
+    return [];
+  }
+  const issueCountByProject = new Map<string, number>();
+  for (const item of workItems) {
+    issueCountByProject.set(item.projectId, (issueCountByProject.get(item.projectId) ?? 0) + 1);
+  }
+  const totalIssues = Array.from(issueCountByProject.values()).reduce((sum, count) => sum + count, 0);
+  if (totalIssues <= 0) {
+    return [];
+  }
+  const projectIds = Array.from(issueCountByProject.keys());
+  let allocated = 0;
+  const allocations = projectIds.map((projectId, index) => {
+    if (index === projectIds.length - 1) {
+      return {
+        projectId,
+        usdCost: Number((effectiveCost - allocated).toFixed(6))
+      };
+    }
+    const count = issueCountByProject.get(projectId) ?? 0;
+    const share = Number(((effectiveCost * count) / totalIssues).toFixed(6));
+    allocated += share;
+    return {
+      projectId,
+      usdCost: share
+    };
+  });
+  return allocations.filter((entry) => entry.usdCost > 0);
+}
+
 async function ensureBudgetOverrideApprovalRequest(
   db: BopoDb,
   input: {
@@ -1905,6 +2095,71 @@ async function ensureBudgetOverrideApprovalRequest(
     correlationId: input.runId,
     payload: {
       agentId: input.agentId,
+      runId: input.runId,
+      currentMonthlyBudgetUsd: input.monthlyBudgetUsd,
+      usedBudgetUsd: input.usedBudgetUsd,
+      utilizationPct: input.utilizationPct,
+      additionalBudgetUsd: recommendedAdditionalBudgetUsd
+    }
+  });
+}
+
+async function ensureProjectBudgetOverrideApprovalRequest(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    projectId: string;
+    utilizationPct: number;
+    usedBudgetUsd: number;
+    monthlyBudgetUsd: number;
+    runId: string;
+  }
+) {
+  const pendingOverrides = await db
+    .select({ id: approvalRequests.id, payloadJson: approvalRequests.payloadJson })
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.companyId, input.companyId),
+        eq(approvalRequests.action, "override_budget"),
+        eq(approvalRequests.status, "pending")
+      )
+    );
+  const alreadyPending = pendingOverrides.some((approval) => {
+    try {
+      const payload = JSON.parse(approval.payloadJson) as Record<string, unknown>;
+      return payload.projectId === input.projectId;
+    } catch {
+      return false;
+    }
+  });
+  if (alreadyPending) {
+    return;
+  }
+  const recommendedAdditionalBudgetUsd = Math.max(1, Math.ceil(Math.max(input.monthlyBudgetUsd * 0.25, 1)));
+  const approvalId = await createApprovalRequest(db, {
+    companyId: input.companyId,
+    action: "override_budget",
+    payload: {
+      projectId: input.projectId,
+      reason: "Project reached budget hard-stop and needs additional funds.",
+      currentMonthlyBudgetUsd: input.monthlyBudgetUsd,
+      usedBudgetUsd: input.usedBudgetUsd,
+      utilizationPct: input.utilizationPct,
+      additionalBudgetUsd: recommendedAdditionalBudgetUsd,
+      revisedMonthlyBudgetUsd: Number((input.monthlyBudgetUsd + recommendedAdditionalBudgetUsd).toFixed(4)),
+      triggerRunId: input.runId
+    }
+  });
+  await appendAuditEvent(db, {
+    companyId: input.companyId,
+    actorType: "system",
+    eventType: "project_budget.override_requested",
+    entityType: "approval",
+    entityId: approvalId,
+    correlationId: input.runId,
+    payload: {
+      projectId: input.projectId,
       runId: input.runId,
       currentMonthlyBudgetUsd: input.monthlyBudgetUsd,
       usedBudgetUsd: input.usedBudgetUsd,

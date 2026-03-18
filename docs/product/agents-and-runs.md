@@ -28,8 +28,11 @@ From `agents` and related modals, you can:
 
 Budget scope:
 
-- Budget enforcement is currently agent-level (`monthlyBudgetUsd` vs `usedBudgetUsd`).
-- Project and issue entities do not currently enforce independent budget caps.
+- Agent budgets are enforced (`monthlyBudgetUsd` vs `usedBudgetUsd`).
+- Project budgets are also enforced monthly (`projects.monthlyBudgetUsd`, `projects.usedBudgetUsd`, `projects.budgetWindowStartAt`).
+- Issue entities do not enforce independent budget caps.
+- If any targeted project is exhausted, the run is hard-stopped before work starts.
+- Hard-stopped project runs auto-request `override_budget` governance approval and remain blocked until approved.
 
 Leadership delegation:
 
@@ -58,6 +61,12 @@ Run paths:
 - **Run controls**: stop, resume, and redo supported for run lifecycle management.
 
 Run status values include `started`, `completed`, `failed`, and `skipped`.
+
+Budget-blocked run behavior:
+
+- Project budget checks happen before issue claiming and execution.
+- Manual run endpoints return a blocked response when pending project budget approvals exist for the agent's assigned work.
+- Queue workers treat project budget hard-stops as terminal blocked outcomes to avoid retry/dead-letter churn loops.
 
 Runtime permission model:
 
@@ -88,6 +97,12 @@ Expected behavior:
 - every run exits with a terminal status,
 - claimed issues are released even on failure paths,
 - diagnostics are available without re-running blindly.
+
+Troubleshooting budget-blocked runs:
+
+- Check pending approvals for action `override_budget` with `projectId`.
+- Confirm project budget values (`monthlyBudgetUsd`, `usedBudgetUsd`, `budgetWindowStartAt`) on the project record.
+- Approve the override to unblock future runs, then re-trigger manual run or wait for sweep.
 
 ## Operational Guardrails
 

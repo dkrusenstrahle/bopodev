@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { IssuePriority, IssueStatus } from "bopodev-contracts";
 import { AGENT_ROLE_LABELS, AGENT_ROLE_KEYS, type AgentRoleKey } from "bopodev-contracts";
@@ -139,6 +139,8 @@ const issuePriorityOptions = [
 ] as const;
 const boardRecipientKey = "board:all";
 const boardRecipientLabel = "Board";
+const issueDescriptionMaxHeightPx = 280;
+const issueCommentMaxHeightPx = 220;
 
 function normalizeIssuePriority(value: string | null | undefined): IssuePriority {
   if (value === "low" || value === "medium" || value === "high" || value === "urgent") {
@@ -178,6 +180,73 @@ function PropertyRow({ label, value }: { label: string; value: React.ReactNode }
     <div className={styles.propertyRowContainer1}>
       <div className={styles.propertyRowContainer2}>{label}</div>
       <div className={styles.propertyRowValue}>{value}</div>
+    </div>
+  );
+}
+
+function CollapsibleMarkdown({
+  content,
+  className,
+  maxHeightPx
+}: {
+  content: string;
+  className: string;
+  maxHeightPx: number;
+}) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [content, maxHeightPx]);
+
+  useEffect(() => {
+    const node = contentRef.current;
+    if (!node) {
+      return;
+    }
+
+    const measureHeight = () => {
+      setIsOverflowing(node.scrollHeight > maxHeightPx + 1);
+    };
+
+    measureHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measureHeight);
+      return () => window.removeEventListener("resize", measureHeight);
+    }
+
+    const observer = new ResizeObserver(() => {
+      measureHeight();
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [content, maxHeightPx]);
+
+  const isCollapsed = isOverflowing && !isExpanded;
+  const markdownClassName = isCollapsed ? `${className} ${styles.collapsibleMarkdownContent}` : className;
+
+  return (
+    <div>
+      <div className={styles.collapsibleMarkdownFrame}>
+        <div ref={contentRef} className={markdownClassName} style={isCollapsed ? { maxHeight: `${maxHeightPx}px` } : undefined}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        </div>
+        {isCollapsed ? <div className={styles.collapsibleMarkdownCurtain} aria-hidden /> : null}
+      </div>
+      {isOverflowing ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={styles.collapsibleMarkdownShowMoreButton}
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? "Show less" : "Show more"}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -815,9 +884,7 @@ export function IssueDetailPageClient({
       <Card>
         <CardContent className={styles.issueSidebarCardContent}>
           {issue.body?.trim() ? (
-            <div className="ui-markdown">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{issue.body}</ReactMarkdown>
-            </div>
+            <CollapsibleMarkdown content={issue.body} className="ui-markdown" maxHeightPx={issueDescriptionMaxHeightPx} />
           ) : (
             <span className="ui-issue-muted-text">No description provided.</span>
           )}
@@ -871,11 +938,11 @@ export function IssueDetailPageClient({
                         )}
                         <div className="ui-issue-comment-author">{formatCommentAuthorLabel(comment, agents)}</div>
                       </div>
-                      <div className="ui-issue-comment-body ui-markdown ui-markdown-compact">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {comment.authorType === "agent" ? normalizeAgentCommentBodyForDisplay(comment.body) : comment.body}
-                        </ReactMarkdown>
-                      </div>
+                      <CollapsibleMarkdown
+                        content={comment.authorType === "agent" ? normalizeAgentCommentBodyForDisplay(comment.body) : comment.body}
+                        className="ui-issue-comment-body ui-markdown ui-markdown-compact"
+                        maxHeightPx={issueCommentMaxHeightPx}
+                      />
                       {(comment.recipients ?? []).length > 0 ? (
                         <div className={styles.commentMetadataRow}>
                           {(comment.recipients ?? []).map((recipient) => (

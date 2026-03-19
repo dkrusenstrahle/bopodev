@@ -165,3 +165,19 @@
 .commentTimestamp {
   @apply whitespace-nowrap text-base text-sidebar-foreground/50;
 }
+
+.collapsibleMarkdownFrame {
+  @apply relative;
+}
+
+.collapsibleMarkdownContent {
+  @apply overflow-hidden;
+}
+
+.collapsibleMarkdownCurtain {
+  @apply pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-linear-to-b from-transparent to-card;
+}
+
+.collapsibleMarkdownShowMoreButton {
+  @apply mt-4 h-auto px-0 text-base text-sidebar-foreground/50 hover:text-sidebar-foreground;
+}

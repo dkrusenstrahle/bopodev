@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
@@ -301,6 +301,61 @@ describe("observability routes", { timeout: 30_000 }, () => {
       .set("x-company-id", companyId);
     expect(downloadResponse.status).toBe(200);
     expect(Buffer.from(downloadResponse.body).toString("utf8")).toContain("artifact body");
+  });
+
+  it("downloads artifacts when report path is workspace/company scoped", async () => {
+    const project = await createProject(db, {
+      companyId,
+      name: "Workspace Scoped Artifact Download"
+    });
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Worker",
+      name: "Workspace Artifact Worker",
+      providerType: "shell",
+      heartbeatCron: "* * * * *",
+      monthlyBudgetUsd: "25.0000",
+      canHireAgents: false,
+      runtimeCommand: "echo",
+      runtimeArgsJson: JSON.stringify([
+        JSON.stringify({
+          employee_comment: "done",
+          results: ["created workspace-scoped report"],
+          errors: [],
+          artifacts: [{ kind: "file", path: `workspace/${companyId}/agents/download-worker/operating/AGENTS.md` }],
+          tokenInput: 1,
+          tokenOutput: 1,
+          usdCost: 0.0001
+        })
+      ])
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Produce workspace-scoped artifact",
+      assigneeAgentId: agent.id
+    });
+
+    const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    expect(runId).toBeTruthy();
+    const workspaceScopedArtifactDir = join(
+      process.env.BOPO_INSTANCE_ROOT!,
+      "workspaces",
+      companyId,
+      "agents",
+      "download-worker",
+      "operating"
+    );
+    const workspaceScopedArtifactPath = join(workspaceScopedArtifactDir, "AGENTS.md");
+    await mkdir(workspaceScopedArtifactDir, { recursive: true });
+    await writeFile(workspaceScopedArtifactPath, "workspace scoped artifact\n");
+
+    const downloadResponse = await request(app)
+      .get(`/observability/heartbeats/${encodeURIComponent(runId!)}/artifacts/0/download`)
+      .query({ companyId })
+      .set("x-company-id", companyId);
+    expect(downloadResponse.status).toBe(200);
+    expect(Buffer.from(downloadResponse.body).toString("utf8")).toContain("workspace scoped artifact");
   });
 
   it("preserves nextCursor when filters reduce returned items", async () => {

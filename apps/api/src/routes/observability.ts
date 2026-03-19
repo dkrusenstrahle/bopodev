@@ -414,12 +414,13 @@ function resolveRunArtifactAbsolutePath(companyId: string, artifact: Record<stri
       ? artifact.relativePath.trim()
       : typeof artifact.path === "string"
         ? artifact.path.trim()
-        : ""
+        : "",
+    companyId
   );
-  const candidate = absolutePathRaw
-    ? absolutePathRaw
-    : relativePathRaw
-      ? resolve(companyWorkspaceRoot, relativePathRaw)
+  const candidate = relativePathRaw
+    ? resolve(companyWorkspaceRoot, relativePathRaw)
+    : absolutePathRaw
+      ? absolutePathRaw
       : "";
   if (!candidate) {
     return null;
@@ -439,7 +440,7 @@ function normalizeAbsoluteArtifactPath(value: string) {
   return resolve(trimmed);
 }
 
-function normalizeWorkspaceRelativeArtifactPath(value: string) {
+function normalizeWorkspaceRelativeArtifactPath(value: string, companyId: string) {
   const trimmed = value.trim();
   if (!trimmed) {
     return "";
@@ -463,7 +464,23 @@ function normalizeWorkspaceRelativeArtifactPath(value: string) {
     }
     parts.push(part);
   }
-  return parts.join("/");
+  const normalized = parts.join("/");
+  if (!normalized) {
+    return "";
+  }
+  const workspaceScopedMatch = normalized.match(/(?:^|\/)workspace\/([^/]+)\/(.+)$/);
+  if (!workspaceScopedMatch) {
+    return normalized;
+  }
+  const scopedCompanyId = workspaceScopedMatch[1];
+  const scopedRelativePath = workspaceScopedMatch[2];
+  if (!scopedCompanyId || !scopedRelativePath) {
+    return "";
+  }
+  if (scopedCompanyId !== companyId) {
+    return "";
+  }
+  return scopedRelativePath;
 }
 
 function serializeRunRow(

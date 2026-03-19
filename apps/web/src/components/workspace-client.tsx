@@ -1394,6 +1394,82 @@ export function WorkspaceClient({
     },
     [activeCostMonth, costEntries, includeCostAggregations]
   );
+  const costEntryProviderOptions = useMemo(() => {
+    if (!includeCostAggregations) {
+      return [];
+    }
+    const set = new Set<string>();
+    for (const entry of filteredCostEntries) {
+      set.add(entry.providerType);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [filteredCostEntries, includeCostAggregations]);
+  const costEntryAgentOptions = useMemo(() => {
+    if (!includeCostAggregations) {
+      return [] as { id: string; name: string }[];
+    }
+    const ids = new Set<string>();
+    for (const entry of filteredCostEntries) {
+      if (entry.agentId) {
+        ids.add(entry.agentId);
+      }
+    }
+    return Array.from(ids)
+      .map((id) => ({ id, name: agentNameById.get(id) ?? id }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [agentNameById, filteredCostEntries, includeCostAggregations]);
+  const [costEntriesSearchQuery, setCostEntriesSearchQuery] = useState("");
+  const [costEntriesProviderFilter, setCostEntriesProviderFilter] = useState("all");
+  const [costEntriesAgentFilter, setCostEntriesAgentFilter] = useState("all");
+  const [costEntriesScopeFilter, setCostEntriesScopeFilter] = useState<"all" | "agent" | "issue">("all");
+  useEffect(() => {
+    if (costEntriesProviderFilter !== "all" && !costEntryProviderOptions.includes(costEntriesProviderFilter)) {
+      setCostEntriesProviderFilter("all");
+    }
+  }, [costEntriesProviderFilter, costEntryProviderOptions]);
+  useEffect(() => {
+    if (costEntriesAgentFilter !== "all" && !costEntryAgentOptions.some((row) => row.id === costEntriesAgentFilter)) {
+      setCostEntriesAgentFilter("all");
+    }
+  }, [costEntriesAgentFilter, costEntryAgentOptions]);
+  const costTableFilteredEntries = useMemo(() => {
+    if (!includeCostAggregations) {
+      return [];
+    }
+    const normalizedQuery = costEntriesSearchQuery.trim().toLowerCase();
+    return filteredCostEntries.filter((entry) => {
+      if (costEntriesProviderFilter !== "all" && entry.providerType !== costEntriesProviderFilter) {
+        return false;
+      }
+      if (costEntriesAgentFilter !== "all" && entry.agentId !== costEntriesAgentFilter) {
+        return false;
+      }
+      if (costEntriesScopeFilter === "agent" && !entry.agentId) {
+        return false;
+      }
+      if (costEntriesScopeFilter === "issue" && !entry.issueId) {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+      const model = (entry.runtimeModelId ?? entry.pricingModelId ?? "").toLowerCase();
+      return (
+        entry.providerType.toLowerCase().includes(normalizedQuery) ||
+        model.includes(normalizedQuery) ||
+        (entry.agentId?.toLowerCase().includes(normalizedQuery) ?? false) ||
+        (entry.issueId?.toLowerCase().includes(normalizedQuery) ?? false) ||
+        entry.id.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [
+    costEntriesAgentFilter,
+    costEntriesProviderFilter,
+    costEntriesScopeFilter,
+    costEntriesSearchQuery,
+    filteredCostEntries,
+    includeCostAggregations
+  ]);
   const todayCostEntries = useMemo(() => {
     if (!includeCostAggregations) {
       return [];
@@ -1486,15 +1562,27 @@ export function WorkspaceClient({
       current.tokens += entry.tokenInput + entry.tokenOutput;
       byMonth.set(month, current);
     }
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([month, value]) => ({
+    const sortedMonths = Array.from(byMonth.keys()).sort((a, b) => a.localeCompare(b));
+    let windowMonths: string[];
+    if (activeCostMonth === "all") {
+      windowMonths = sortedMonths.slice(-6);
+    } else {
+      const idx = sortedMonths.indexOf(activeCostMonth);
+      if (idx === -1) {
+        windowMonths = [activeCostMonth];
+      } else {
+        windowMonths = sortedMonths.slice(Math.max(0, idx - 5), idx + 1);
+      }
+    }
+    return windowMonths.map((month) => {
+      const value = byMonth.get(month) ?? { usd: 0, tokens: 0 };
+      return {
         label: month.slice(2),
         usd: value.usd,
         tokens: value.tokens
-      }));
-  }, [costEntries, includeCostAggregations]);
+      };
+    });
+  }, [activeCostMonth, costEntries, includeCostAggregations]);
   const costDailyConfig = {
     usd: { label: "Daily spend", color: "var(--chart-2)" }
   } satisfies ChartConfig;
@@ -4762,7 +4850,25 @@ export function WorkspaceClient({
       case "Costs":
         return (
           <>
-            <SectionHeading title="Costs" description="Tracked token and cost usage for agents and issue execution." />
+            <SectionHeading
+              title="Costs"
+              description="Tracked token and cost usage for agents and issue execution."
+              actions={
+                <Select value={activeCostMonth} onValueChange={setSelectedCostMonth}>
+                  <SelectTrigger className={styles.costLedgerSelectTrigger}>
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All time</SelectItem>
+                    {costMonthOptions.map((month) => (
+                      <SelectItem key={month} value={month}>
+                        {formatMonthLabel(month)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              }
+            />
             <div className="ui-stats">
               <MetricCard
                 label="Today · Input Tokens"
@@ -4916,7 +5022,11 @@ export function WorkspaceClient({
                 <Card>
                   <CardHeader>
                     <CardTitle>Monthly spend trend</CardTitle>
-                    <CardDescription>Last 6 months total spend in USD.</CardDescription>
+                    <CardDescription>
+                      {activeCostMonth === "all"
+                        ? "Last 6 months total spend in USD."
+                        : `Up to 6 months through ${selectedMonthLabel} (USD).`}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {hasMonthlySpendData ? (
@@ -4947,25 +5057,59 @@ export function WorkspaceClient({
                   </CardContent>
                 </Card>
               </div>
-            <SectionHeading title="Entries" description="Tracked token and cost usage for agents and issue execution." />
+            <SectionHeading title="Entries" description="Filter rows within the month shown above; charts reflect the selected month only." />
             <DataTable
               columns={costColumns}
-              data={filteredCostEntries}
-              emptyMessage="No runtime cost data for the selected scope."
+              data={costTableFilteredEntries}
+              emptyMessage="No entries match the current filters."
               toolbarActions={
-                <Select value={activeCostMonth} onValueChange={setSelectedCostMonth}>
-                  <SelectTrigger className={styles.costLedgerSelectTrigger}>
-                    <SelectValue placeholder="Select month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All time</SelectItem>
-                    {costMonthOptions.map((month) => (
-                      <SelectItem key={month} value={month}>
-                        {formatMonthLabel(month)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className={styles.runFiltersCardContent}>
+                  <Input
+                    value={costEntriesSearchQuery}
+                    onChange={(event) => setCostEntriesSearchQuery(event.target.value)}
+                    placeholder="Search provider, model, agent or issue id…"
+                    className={styles.runFiltersInput}
+                  />
+                  <Select value={costEntriesProviderFilter} onValueChange={setCostEntriesProviderFilter}>
+                    <SelectTrigger className={styles.runFiltersSelect}>
+                      <SelectValue placeholder="Provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All providers</SelectItem>
+                      {costEntryProviderOptions.map((provider) => (
+                        <SelectItem key={provider} value={provider}>
+                          {provider}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={costEntriesAgentFilter} onValueChange={setCostEntriesAgentFilter}>
+                    <SelectTrigger className={styles.runFiltersSelect}>
+                      <SelectValue placeholder="Agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All agents</SelectItem>
+                      {costEntryAgentOptions.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={costEntriesScopeFilter}
+                    onValueChange={(value) => setCostEntriesScopeFilter(value as "all" | "agent" | "issue")}
+                  >
+                    <SelectTrigger className={styles.runFiltersSelect}>
+                      <SelectValue placeholder="Scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All scopes</SelectItem>
+                      <SelectItem value="agent">With agent</SelectItem>
+                      <SelectItem value="issue">With issue</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               }
             />
           </>

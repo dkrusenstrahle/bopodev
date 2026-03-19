@@ -209,8 +209,13 @@
   @apply h-full space-y-5;
 }
 
-.issueCardDragging {
-  @apply opacity-70 shadow-lg;
+.issueBoardCardPlaceholder {
+  @apply opacity-0;
+}
+
+.issueBoardDragGhost {
+  @apply pointer-events-none cursor-grabbing shadow-2xl ring-2 ring-border/70;
+  width: 16.5rem;
 }
 
 .issueBoardHint {

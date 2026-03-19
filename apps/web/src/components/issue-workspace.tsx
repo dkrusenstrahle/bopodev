@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import { DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { IssueStatus } from "bopodev-contracts";
 import { CreateIssueModal } from "@/components/modals/create-issue-modal";
@@ -57,6 +57,9 @@ const issueStatusOptions = [
 
 const priorityOptions = ["all", "none", "low", "medium", "high", "urgent"] as const;
 const boardColumns = issueStatusOptions as readonly { value: IssueStatus; label: string }[];
+
+const boardSortableTransition = { duration: 70, easing: "ease-out" } as const;
+const boardDragDropAnimation = { duration: 90, easing: "ease-out" } as const;
 
 function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className={styles.issueWorkspaceEmptyStateContainer}>{children}</div>;
@@ -116,7 +119,7 @@ export function IssueWorkspace({
   const [actionError, setActionError] = useState<string | null>(null);
   const [boardIssues, setBoardIssues] = useState<IssueRow[]>(issues);
   const [draggingIssueId, setDraggingIssueId] = useState<string | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const filteredIssues = useMemo(
     () =>
@@ -190,6 +193,27 @@ export function IssueWorkspace({
     router.push(`/issues/${issueId}?companyId=${companyId}` as Parameters<typeof router.push>[0]);
   }
 
+  function BoardIssueCardFace({
+    issue,
+    className,
+    ...cardProps
+  }: { issue: IssueRow; className?: string } & Omit<ComponentProps<typeof Card>, "children">) {
+    return (
+      <Card className={cn(styles.issueCard1, className)} {...cardProps}>
+        <CardContent className={styles.issueCardContent1}>
+          <div className={styles.issueCardContainer1}>
+            <button type="button" className={styles.issueCardContainer2} onClick={() => openIssue(issue.id)}>
+              <div className={styles.issueCardContainer3}>{issue.title}</div>
+              <div className={styles.issueCardContainer4}>
+                {issue.priority} · {selectedProjectNameFor(issue.projectId, projects)}
+              </div>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const issueColumns = useMemo<ColumnDef<IssueRow>[]>(
     () => [
       {
@@ -256,7 +280,8 @@ export function IssueWorkspace({
 
   function SortableIssueCard({ issue }: { issue: IssueRow }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-      id: issue.id
+      id: issue.id,
+      transition: boardSortableTransition
     });
     const cardStyle = transform
       ? {
@@ -267,23 +292,12 @@ export function IssueWorkspace({
 
     return (
       <div ref={setNodeRef} style={cardStyle}>
-        <Card
-          className={cn(styles.issueCard1, isDragging ? styles.issueCardDragging : undefined)}
+        <BoardIssueCardFace
+          issue={issue}
+          className={isDragging ? styles.issueBoardCardPlaceholder : undefined}
           {...attributes}
           {...listeners}
-          data-dragging={isDragging ? "true" : undefined}
-        >
-          <CardContent className={styles.issueCardContent1}>
-            <div className={styles.issueCardContainer1}>
-              <button type="button" className={styles.issueCardContainer2} onClick={() => openIssue(issue.id)}>
-                <div className={styles.issueCardContainer3}>{issue.title}</div>
-                <div className={styles.issueCardContainer4}>
-                  {issue.priority} · {selectedProjectNameFor(issue.projectId, projects)}
-                </div>
-              </button>
-            </div>
-          </CardContent>
-        </Card>
+        />
       </div>
     );
   }
@@ -434,6 +448,8 @@ export function IssueWorkspace({
     </div>
   );
 
+  const boardDragOverlayIssue = draggingIssueId ? boardIssues.find((i) => i.id === draggingIssueId) : undefined;
+
   return (
     <div className={styles.issueCardContainer6}>
       <div className={styles.issueCardContainer6}>
@@ -480,6 +496,11 @@ export function IssueWorkspace({
                       ))}
                     </div>
                   </div>
+                  <DragOverlay dropAnimation={boardDragDropAnimation}>
+                    {boardDragOverlayIssue ? (
+                      <BoardIssueCardFace issue={boardDragOverlayIssue} className={styles.issueBoardDragGhost} />
+                    ) : null}
+                  </DragOverlay>
                 </DndContext>
               </div>
             </div>

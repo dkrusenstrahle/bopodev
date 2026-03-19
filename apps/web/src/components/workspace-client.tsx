@@ -4800,27 +4800,33 @@ export function WorkspaceClient({
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ChartContainer config={costDailyConfig} className={styles.costLedgerChartContainer}>
-                      <BarChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                        <defs>
-                          <linearGradient id="costDailyUsdBarGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="4%" stopColor="var(--color-usd)" stopOpacity={0.95} />
-                            <stop offset="96%" stopColor="var(--color-usd)" stopOpacity={0.55} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
-                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
-                        <YAxis hide />
-                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                        <Bar
-                          dataKey="usd"
-                          fill="url(#costDailyUsdBarGradient)"
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={24}
-                          minPointSize={3}
-                        />
-                      </BarChart>
-                    </ChartContainer>
+                    {hasCostTokenMixData ? (
+                      <ChartContainer config={costDailyConfig} className={styles.costLedgerChartContainer}>
+                        <BarChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                          <defs>
+                            <linearGradient id="costDailyUsdBarGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="4%" stopColor="var(--color-usd)" stopOpacity={0.95} />
+                              <stop offset="96%" stopColor="var(--color-usd)" stopOpacity={0.55} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={22} />
+                          <YAxis hide />
+                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                          <Bar
+                            dataKey="usd"
+                            fill="url(#costDailyUsdBarGradient)"
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={24}
+                            minPointSize={3}
+                          />
+                        </BarChart>
+                      </ChartContainer>
+                    ) : (
+                      <div className={styles.emptyStateContainer}>
+                        No input or output token usage was reported for this month.
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
                 <Card>
@@ -4877,28 +4883,34 @@ export function WorkspaceClient({
                     <CardDescription>{selectedMonthLabel} running spend progression in USD.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ChartContainer config={costCumulativeConfig} className={styles.costLedgerChartContainer}>
-                      <AreaChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
-                        <defs>
-                          <linearGradient id="costCumulativeUsdGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="8%" stopColor="var(--color-cumulativeUsd)" stopOpacity={0.5} />
-                            <stop offset="90%" stopColor="var(--color-cumulativeUsd)" stopOpacity={0.04} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.35} />
-                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
-                        <YAxis hide />
-                        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
-                        <Area
-                          type="monotone"
-                          dataKey="cumulativeUsd"
-                          stroke="var(--color-cumulativeUsd)"
-                          fill="url(#costCumulativeUsdGradient)"
-                          fillOpacity={1}
-                          strokeWidth={2.2}
-                        />
-                      </AreaChart>
-                    </ChartContainer>
+                    {hasCostTokenMixData ? (
+                      <ChartContainer config={costCumulativeConfig} className={styles.costLedgerChartContainer}>
+                        <AreaChart accessibilityLayer data={selectedMonthChartData} margin={{ top: 8, left: -8, right: -8 }}>
+                          <defs>
+                            <linearGradient id="costCumulativeUsdGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="8%" stopColor="var(--color-cumulativeUsd)" stopOpacity={0.5} />
+                              <stop offset="90%" stopColor="var(--color-cumulativeUsd)" stopOpacity={0.04} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.35} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={20} />
+                          <YAxis hide />
+                          <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+                          <Area
+                            type="monotone"
+                            dataKey="cumulativeUsd"
+                            stroke="var(--color-cumulativeUsd)"
+                            fill="url(#costCumulativeUsdGradient)"
+                            fillOpacity={1}
+                            strokeWidth={2.2}
+                          />
+                        </AreaChart>
+                      </ChartContainer>
+                    ) : (
+                      <div className={styles.emptyStateContainer}>
+                        No input or output token usage was reported for this month.
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
                 <Card>

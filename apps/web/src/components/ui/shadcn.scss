@@ -897,14 +897,14 @@ body {
 }
 
 .ui-tabs-list {
-  @apply inline-flex h-12 items-center justify-start rounded-lg border bg-muted/30 p-1 text-muted-foreground;
+  @apply inline-flex h-12 items-center justify-start rounded-lg border bg-muted/30 px-2 py-1 text-muted-foreground;
 }
 
 .ui-tabs-trigger {
   @apply inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-base font-medium transition-all text-sidebar-foreground/80;
   @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   @apply disabled:pointer-events-none disabled:opacity-50;
-  @apply data-[state=active]:bg-background data-[state=active]:text-foreground;
+  @apply data-[state=active]:bg-card data-[state=active]:text-sidebar-foreground font-semibold;
 }
 
 .ui-tabs-content {

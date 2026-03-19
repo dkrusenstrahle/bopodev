@@ -111,11 +111,17 @@ describe("BopoDev core workflows", () => {
 
     const startupIssues = await listIssues(db, companyId);
     expect(startupIssues.length).toBeGreaterThan(0);
-    const startupForHiredAgent = startupIssues.find((issue) => issue.assigneeAgentId === agentsResponse.body.data[0].id);
+    const hiredAgentId = agentsResponse.body.data[0].id as string;
+    const startupForHiredAgent = startupIssues.find((issue) => issue.assigneeAgentId === hiredAgentId);
     expect(startupForHiredAgent?.title).toContain("operating files");
-    expect(startupForHiredAgent?.body ?? "").toContain("HEARTBEAT.md");
-    expect(startupForHiredAgent?.body ?? "").toContain("SOUL.md");
-    expect(startupForHiredAgent?.body ?? "").toContain("TOOLS.md");
+    const startupBody = startupForHiredAgent?.body ?? "";
+    const expectedOperatingFolder = `workspace/${companyId}/agents/${hiredAgentId}/operating`;
+    expect(startupBody).toContain(`${expectedOperatingFolder}/AGENTS.md`);
+    expect(startupBody).toContain(`${expectedOperatingFolder}/HEARTBEAT.md`);
+    expect(startupBody).toContain(`${expectedOperatingFolder}/SOUL.md`);
+    expect(startupBody).toContain(`${expectedOperatingFolder}/TOOLS.md`);
+    expect(startupBody).toContain(`Keep operating files inside \`workspace/${companyId}/agents/${hiredAgentId}/\` only.`);
+    expect(startupBody).not.toContain("current issue workspace");
 
     const logsResponse = await request(app).get("/observability/logs").set("x-company-id", companyId);
     expect(logsResponse.status).toBe(200);
@@ -1690,6 +1696,63 @@ describe("BopoDev core workflows", () => {
     );
     expect((runSummaryComment?.body ?? "").toLowerCase()).not.toContain("command:");
     expect((runSummaryComment?.body ?? "").toLowerCase()).not.toContain("/users/");
+  });
+
+  it("normalizes agent operating artifact paths to the company agent workspace path", async () => {
+    const project = await createProject(db, {
+      companyId,
+      name: "Operating path normalization",
+      description: "Agent operating artifacts should never report issue-scoped locations.",
+      workspaceLocalPath: tempDir
+    });
+    const now = new Date();
+    const dueCron = `${now.getMinutes()} ${now.getHours()} * * *`;
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Engineer",
+      name: "Operating Path Worker",
+      providerType: "shell",
+      heartbeatCron: dueCron,
+      monthlyBudgetUsd: "20.0000",
+      initialState: {
+        runtime: {
+          command: process.execPath,
+          cwd: tempDir,
+          args: [
+            "-e",
+            `console.log(JSON.stringify({employee_comment:'Created operating-file baseline.',results:['Created AGENTS.md.'],errors:[],artifacts:[{kind:'file',path:'agents/policy-worker/operating/AGENTS.md'},{kind:'file',path:'workspace/${companyId}/agents/policy-worker/operating/HEARTBEAT.md'}],tokenInput:3,tokenOutput:2,usdCost:0.0001}));`
+          ]
+        }
+      }
+    });
+    const issue = await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Enforce operating artifact path policy",
+      assigneeAgentId: agent.id
+    });
+
+    const runId = await runHeartbeatForAgent(db, companyId, agent.id);
+    expect(runId).toBeTruthy();
+
+    const heartbeatRows = await listHeartbeatRuns(db, companyId);
+    const latestRun = heartbeatRows.find((row) => row.id === runId);
+    expect(latestRun?.status).toBe("completed");
+    expect(latestRun?.message ?? "").toContain(`workspace/${companyId}/agents/policy-worker/operating/AGENTS.md`);
+    expect(latestRun?.message ?? "").not.toContain(`/issues/${issue.id}/agents/`);
+
+    const issueComments = await listIssueComments(db, companyId, issue.id);
+    const runSummaryComment = issueComments.find(
+      (comment) => comment.runId === runId && comment.authorType === "agent" && comment.authorId === agent.id
+    );
+    expect(runSummaryComment?.body ?? "").toContain(
+      `[workspace/${companyId}/agents/policy-worker/operating/AGENTS.md](http://127.0.0.1:4020/observability/heartbeats/${encodeURIComponent(runId!)}/artifacts/0/download?companyId=${encodeURIComponent(companyId)})`
+    );
+    expect(runSummaryComment?.body ?? "").toContain(
+      `[workspace/${companyId}/agents/policy-worker/operating/HEARTBEAT.md](http://127.0.0.1:4020/observability/heartbeats/${encodeURIComponent(runId!)}/artifacts/1/download?companyId=${encodeURIComponent(companyId)})`
+    );
+    expect(runSummaryComment?.body ?? "").not.toContain(`/issues/${issue.id}/agents/`);
+    expect(runSummaryComment?.body ?? "").not.toContain(`/issues/${issue.id}/workspace/${companyId}/agents/`);
   });
 
   it("marks runs as contract_invalid when the final JSON shape is wrong", async () => {

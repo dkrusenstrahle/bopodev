@@ -271,9 +271,6 @@ function OfficeSpaceCanvas({
                               )}
                               onClick={() => onSelectOccupant(occupant.id)}
                             >
-                              {occupant.status === "working" && occupant.taskLabel ? (
-                                <span className={styles.taskLabel}>{occupant.taskLabel}</span>
-                              ) : null}
                               <AgentAvatar
                                 seed={agentAvatarSeed(occupant.id, occupant.displayName, occupant.avatarSeed)}
                                 name={occupant.displayName}

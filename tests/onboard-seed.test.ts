@@ -74,11 +74,18 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
       expect(issues[0]?.title).toBe("Set up CEO operating files and hire founding engineer");
       expect(issues[0]?.assigneeAgentId).toBe(agents[0]?.id);
       const startupBody = issues[0]?.body ?? "";
+      const expectedOperatingFolder = `workspace/${first.companyId}/agents/${agents[0]?.id}/operating`;
       expect(startupBody).toContain("[bopodev:onboarding:ceo-startup:v1]");
+      expect(startupBody).toContain(`${expectedOperatingFolder}/AGENTS.md`);
+      expect(startupBody).toContain(`${expectedOperatingFolder}/HEARTBEAT.md`);
+      expect(startupBody).toContain(`${expectedOperatingFolder}/SOUL.md`);
+      expect(startupBody).toContain(`${expectedOperatingFolder}/TOOLS.md`);
+      expect(startupBody).toContain(`Keep operating/system files inside \`workspace/${first.companyId}/agents/${agents[0]?.id}/\` only.`);
       expect(startupBody).toContain("runtimeConfig.bootstrapPrompt");
       expect(startupBody).toContain("Do not call `GET /agents/:agentId`");
       expect(startupBody).toContain("Do not call a checkout endpoint");
       expect(startupBody).toContain("Do not use unsupported hire fields such as `adapterType`, `adapterConfig`, or `reportsTo`.");
+      expect(startupBody).not.toContain("current issue workspace");
       expect(startupBody).not.toContain("instruction file path");
     } finally {
       await (client as { close?: () => Promise<void> }).close?.();

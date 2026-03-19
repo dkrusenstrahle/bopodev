@@ -3195,7 +3195,7 @@ export function WorkspaceClient({
               {hasApprovalPrimaryAction ? (
                 <ConfirmActionModal
                   triggerLabel="Approve"
-                  triggerVariant="outline"
+                  triggerVariant="primary"
                   triggerSize="sm"
                   title="Approve request?"
                   description="Apply the queued change to the control plane."

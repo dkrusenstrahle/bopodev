@@ -220,8 +220,8 @@ export function createGovernanceRouter(ctx: AppContext) {
                 companyId: req.companyId!,
                 issueId,
                 body: commentBody,
-                authorType: "system",
-                authorId: null
+                authorType: auditActor.actorType === "agent" ? "agent" : "human",
+                authorId: auditActor.actorId
               });
             }
           } catch (error) {

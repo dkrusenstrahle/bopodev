@@ -3006,6 +3006,7 @@ function buildRunArtifacts(input: {
   finalRunOutput?: AgentFinalRunOutput | null;
   runtimeCwd?: string | null;
   workspaceRootPath?: string | null;
+  companyId?: string;
 }): RunArtifact[] {
   const sourceArtifacts =
     input.finalRunOutput?.artifacts && input.finalRunOutput.artifacts.length > 0
@@ -3016,6 +3017,7 @@ function buildRunArtifacts(input: {
   }
   const runtimeCwd = input.runtimeCwd?.trim() ? input.runtimeCwd.trim() : null;
   const workspaceRootPath = input.workspaceRootPath?.trim() ? input.workspaceRootPath.trim() : null;
+  const companyId = input.companyId?.trim() ? input.companyId.trim() : null;
   return sourceArtifacts.map((artifact) => {
     const originalPath = artifact.path.trim();
     const artifactIsAbsolute = isAbsolute(originalPath);
@@ -3028,6 +3030,18 @@ function buildRunArtifacts(input: {
     } else if (runtimeCwd) {
       const candidate = toNormalizedWorkspaceRelativePath(relative(runtimeCwd, absolutePath ?? originalPath));
       relativePathValue = candidate && !candidate.startsWith("../") ? candidate : null;
+    }
+    if (companyId) {
+      const normalizedRelative = normalizeAgentOperatingArtifactRelativePath(relativePathValue, companyId);
+      if (normalizedRelative) {
+        relativePathValue = normalizedRelative;
+      } else {
+        const normalizedOriginal = toNormalizedWorkspaceRelativePath(originalPath);
+        const normalizedFromOriginal = normalizeAgentOperatingArtifactRelativePath(normalizedOriginal, companyId);
+        if (normalizedFromOriginal) {
+          relativePathValue = normalizedFromOriginal;
+        }
+      }
     }
     const location = relativePathValue ?? absolutePath ?? originalPath;
     return {
@@ -3065,6 +3079,42 @@ function toNormalizedWorkspaceRelativePath(inputPath: string | null | undefined)
   return normalized || null;
 }
 
+function normalizeAgentOperatingArtifactRelativePath(pathValue: string | null, companyId: string) {
+  const normalized = toNormalizedWorkspaceRelativePath(pathValue);
+  if (!normalized) {
+    return null;
+  }
+  const workspaceScopedMatch = normalized.match(/(?:^|\/)(workspace\/[^/]+\/agents\/[^/]+\/operating(?:\/.*)?)$/);
+  if (workspaceScopedMatch) {
+    const scopedPath = toNormalizedWorkspaceRelativePath(workspaceScopedMatch[1]);
+    if (!scopedPath) {
+      return null;
+    }
+    const parsed = scopedPath.match(/^workspace\/([^/]+)\/agents\/([^/]+)\/operating(\/.*)?$/);
+    if (!parsed) {
+      return null;
+    }
+    const embeddedCompanyId = parsed[1]?.trim() || companyId;
+    const agentId = parsed[2];
+    const suffix = parsed[3] ?? "";
+    const effectiveCompanyId = embeddedCompanyId;
+    return `workspace/${effectiveCompanyId}/agents/${agentId}/operating${suffix}`;
+  }
+  const directMatch = normalized.match(/^agents\/([^/]+)\/operating(\/.*)?$/);
+  if (directMatch) {
+    const [, agentId, suffix = ""] = directMatch;
+    return `workspace/${companyId}/agents/${agentId}/operating${suffix}`;
+  }
+  const issueScopedMatch = normalized.match(
+    /^(?:[^/]+\/)?projects\/[^/]+\/issues\/[^/]+\/agents\/([^/]+)\/operating(\/.*)?$/
+  );
+  if (issueScopedMatch) {
+    const [, agentId, suffix = ""] = issueScopedMatch;
+    return `workspace/${companyId}/agents/${agentId}/operating${suffix}`;
+  }
+  return null;
+}
+
 function describeArtifact(kind: string, location: string) {
   const normalizedKind = kind.toLowerCase();
   if (normalizedKind.includes("folder") || normalizedKind.includes("directory") || normalizedKind === "website") {
@@ -3097,7 +3147,8 @@ function buildRunCompletionReport(input: {
     outcome: input.outcome,
     finalRunOutput: input.finalRunOutput,
     runtimeCwd: input.runtimeCwd,
-    workspaceRootPath
+    workspaceRootPath,
+    companyId: input.companyId
   });
   const fallbackSummary = sanitizeAgentSummaryCommentBody(extractNaturalRunUpdate(input.executionSummary));
   const employeeComment =

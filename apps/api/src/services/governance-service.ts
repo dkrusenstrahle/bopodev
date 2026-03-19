@@ -697,7 +697,7 @@ async function ensureAgentStartupIssue(
   roleTitle: string
 ) {
   const title = `Set up ${roleTitle} operating files`;
-  const body = buildAgentStartupTaskBody(agentId);
+  const body = buildAgentStartupTaskBody(companyId, agentId);
   const existingIssues = await listIssues(db, companyId);
   const existing = existingIssues.find(
     (issue) =>
@@ -768,15 +768,15 @@ function resolveAgentDisplayTitle(title: string | null | undefined, roleKeyInput
   return role;
 }
 
-function buildAgentStartupTaskBody(agentId: string) {
-  const issueScopedAgentRoot = `agents/${agentId}`;
-  const agentOperatingFolder = `${issueScopedAgentRoot}/operating`;
+function buildAgentStartupTaskBody(companyId: string, agentId: string) {
+  const companyScopedAgentRoot = `workspace/${companyId}/agents/${agentId}`;
+  const agentOperatingFolder = `${companyScopedAgentRoot}/operating`;
   return [
     AGENT_STARTUP_TASK_MARKER,
     "",
     `Create your operating baseline before starting feature delivery work.`,
     "",
-    `1. Create your operating folder at \`${agentOperatingFolder}/\` (relative to the current issue workspace).`,
+    `1. Create your operating folder at \`${agentOperatingFolder}/\`.`,
     "2. Author these files with your own responsibilities and working style:",
     `   - \`${agentOperatingFolder}/AGENTS.md\``,
     `   - \`${agentOperatingFolder}/HEARTBEAT.md\``,
@@ -786,7 +786,7 @@ function buildAgentStartupTaskBody(agentId: string) {
     "4. Post an issue comment summarizing completed setup artifacts.",
     "",
     "Safety checks:",
-    "- Keep operating files inside the current issue workspace.",
+    `- Keep operating files inside \`workspace/${companyId}/agents/${agentId}/\` only.`,
     "- Do not overwrite another agent's operating folder.",
     "- Keep content original to your role and scope."
   ].join("\n");

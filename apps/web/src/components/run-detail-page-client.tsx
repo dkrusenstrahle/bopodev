@@ -31,8 +31,6 @@ export function RunDetailPageClient({
   companies,
   runDetail,
   initialMessages,
-  nextCursor,
-  agentName,
   scopedAgentId,
   recentRuns
 }: {
@@ -40,8 +38,6 @@ export function RunDetailPageClient({
   companies: Array<{ id: string; name: string }>;
   runDetail: HeartbeatRunDetailData;
   initialMessages: HeartbeatRunMessageRow[];
-  nextCursor: string | null;
-  agentName: string;
   scopedAgentId: string | null;
   recentRuns: Array<{
     id: string;
@@ -56,16 +52,12 @@ export function RunDetailPageClient({
 }) {
   const [run, setRun] = useState(runDetail.run);
   const [messages, setMessages] = useState(initialMessages);
-  const [cursor, setCursor] = useState<string | null>(nextCursor);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | HeartbeatRunMessageRow["kind"]>("all");
   const [signalFilter, setSignalFilter] = useState<"all" | HeartbeatRunMessageRow["signalLevel"]>("all");
   const [sourceFilter, setSourceFilter] = useState<"all" | HeartbeatRunMessageRow["source"]>("all");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [showRawDebug, setShowRawDebug] = useState(false);
-  const report = runDetail.details?.report ?? null;
-  const displayStatus = run.publicStatus ?? report?.finalStatus ?? run.status;
 
   useEffect(() => {
     const unsubscribe = subscribeToRealtime({
@@ -100,7 +92,6 @@ export function RunDetailPageClient({
                 .map((entry) => ({ ...entry, companyId }));
               return [...prev, ...appended];
             });
-            setCursor(transcriptSnapshot.nextCursor);
           }
           return;
         }
@@ -132,7 +123,6 @@ export function RunDetailPageClient({
               .map((entry) => ({ ...entry, companyId }));
             return [...prev, ...appended];
           });
-          setCursor(event.nextCursor);
           return;
         }
         if (event.type === "run.transcript.append") {
@@ -327,11 +317,11 @@ export function RunDetailPageClient({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
             <div className="hidden md:flex run-transcript-filters-action">
-              <Button variant="outline" size="sm" onClick={() => setShowRawDebug((value) => !value)}>
-                {showRawDebug ? "Hide raw debug output" : "Show raw debug output"}
+              <Button variant="outline" onClick={() => setShowRawDebug((value) => !value)}>
+                {showRawDebug ? "Hide debug" : "Show debug"}
               </Button>
+            </div>
             </div>
             <div className="md:hidden">
               <Input
@@ -440,7 +430,6 @@ function toTranscriptRows(messages: HeartbeatRunMessageRow[], showRawDebug: bool
       createdAt: entry.createdAt,
       kind: entry.kind,
       kindLabel: toKindLabel(entry.kind),
-      groupKey: entry.groupKey ?? entry.kind,
       kindClass: toKindClass(entry.kind),
       body: formatEventBody(entry, showRawDebug),
       isToolBlock: entry.kind === "tool_call" || entry.kind === "tool_result",
@@ -454,7 +443,6 @@ function toTranscriptRows(messages: HeartbeatRunMessageRow[], showRawDebug: bool
     endedAt: string;
     kind: HeartbeatRunMessageRow["kind"];
     kindLabel: string;
-    groupKey: string;
     kindClass: string;
     body: string;
     isToolBlock: boolean;
@@ -469,7 +457,6 @@ function toTranscriptRows(messages: HeartbeatRunMessageRow[], showRawDebug: bool
       endedAt: item.createdAt,
       kind: item.kind,
       kindLabel: item.kindLabel,
-      groupKey: item.groupKey,
       kindClass: item.kindClass,
       body: item.body,
       isToolBlock: item.isToolBlock,
@@ -651,14 +638,6 @@ function summarizeCommandExecution(value: string) {
   const statusLabel = status.toLowerCase() === "completed" ? "completed" : status.toLowerCase();
   const suffix = exitCode ? ` (exit ${exitCode})` : "";
   return truncateBody(`Command ${statusLabel}${suffix}: ${command}`, 220);
-}
-
-function formatUsdCost(value: number | null | undefined, status?: string | null) {
-  if (status === "unknown" || value === null || value === undefined) {
-    return "unknown";
-  }
-  const prefix = status === "estimated" ? "estimated " : "exact ";
-  return `${prefix}$${value.toFixed(6)}`;
 }
 
 function extractSummaryFromJsonLikeMessage(input: string) {

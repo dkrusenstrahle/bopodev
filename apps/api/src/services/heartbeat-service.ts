@@ -35,7 +35,12 @@ import {
 import { appendAuditEvent, appendCost } from "bopodev-db";
 import { parseRuntimeConfigFromAgentRow } from "../lib/agent-config";
 import { bootstrapRepositoryWorkspace, ensureIsolatedGitWorktree, GitRuntimeError } from "../lib/git-runtime";
-import { isInsidePath, normalizeCompanyWorkspacePath, resolveProjectWorkspacePath } from "../lib/instance-paths";
+import {
+  isInsidePath,
+  normalizeCompanyWorkspacePath,
+  resolveCompanyWorkspaceRootPath,
+  resolveProjectWorkspacePath
+} from "../lib/instance-paths";
 import { assertRuntimeCwdForCompany, getProjectWorkspaceContextMap, hasText, resolveAgentFallbackWorkspace } from "../lib/workspace-policy";
 import type { RealtimeHub } from "../realtime/hub";
 import { createHeartbeatRunsRealtimeEvent } from "../realtime/heartbeat-runs";
@@ -380,6 +385,7 @@ export async function runHeartbeatForAgent(
       signals: []
     });
     const runReport = buildRunCompletionReport({
+      companyId,
       agentName: agent.name,
       providerType: agent.providerType as HeartbeatProviderType,
       issueIds: [],
@@ -495,6 +501,7 @@ export async function runHeartbeatForAgent(
         signals: []
       });
       const runReport = buildRunCompletionReport({
+        companyId,
         agentName: agent.name,
         providerType: agent.providerType as HeartbeatProviderType,
         issueIds: [],
@@ -571,6 +578,7 @@ export async function runHeartbeatForAgent(
       signals: []
     });
     const runReport = buildRunCompletionReport({
+      companyId,
       agentName: agent.name,
       providerType: agent.providerType as HeartbeatProviderType,
       issueIds: [],
@@ -1433,6 +1441,7 @@ export async function runHeartbeatForAgent(
       source: readTraceString(execution.trace, "usageSource") ?? "unknown"
     });
     const runReport = buildRunCompletionReport({
+      companyId,
       agentName: agent.name,
       providerType: agent.providerType as HeartbeatProviderType,
       issueIds,
@@ -1793,6 +1802,7 @@ export async function runHeartbeatForAgent(
       source: readTraceString(executionTrace, "usageSource") ?? "unknown"
     });
     const runReport = buildRunCompletionReport({
+      companyId,
       agentName: agent.name,
       providerType: agent.providerType as HeartbeatProviderType,
       issueIds,
@@ -2695,121 +2705,6 @@ function sanitizeAgentSummaryCommentBody(body: string) {
   return sanitized.length > 0 ? sanitized : "Run update.";
 }
 
-function buildHumanRunUpdateComment(input: {
-  status: "completed" | "failed";
-  executionSummary: string;
-  outcome: ExecutionOutcome | null;
-  signals: RunDigestSignal[];
-}) {
-  const highlights = buildHumanRunHighlights(input);
-  const lines = ["## Update", "", highlights.statusLine, ""];
-  for (const bullet of highlights.bullets) {
-    lines.push(`- ${bullet}`);
-  }
-  if (highlights.bullets.length === 0) {
-    lines.push("- Completed a run update.");
-  }
-  return lines.join("\n");
-}
-
-function buildRunListMessage(input: {
-  status: "completed" | "failed" | "skipped";
-  executionSummary: string;
-  outcome: ExecutionOutcome | null;
-  signals: RunDigestSignal[];
-  digest: RunDigest;
-}) {
-  const statusForHighlights: "completed" | "failed" = input.status === "failed" ? "failed" : "completed";
-  const highlights = buildHumanRunHighlights({
-    status: statusForHighlights,
-    executionSummary: input.executionSummary,
-    outcome: input.outcome,
-    signals: input.signals
-  });
-  const topBullets = highlights.bullets.slice(0, 2);
-  if (topBullets.length > 0) {
-    const compact = topBullets.join(" ");
-    const bounded = compact.length > 180 ? `${compact.slice(0, 177).trimEnd()}...` : compact;
-    return bounded;
-  }
-  const digestSummary = summarizeRunDigestPoint(input.digest.summary);
-  if (digestSummary) {
-    return digestSummary;
-  }
-  return sanitizeAgentSummaryCommentBody(extractNaturalRunUpdate(input.executionSummary));
-}
-
-function buildHumanRunHighlights(input: {
-  status: "completed" | "failed";
-  executionSummary: string;
-  outcome: ExecutionOutcome | null;
-  signals: RunDigestSignal[];
-}) {
-  const completedBullets: string[] = [];
-  const blockedBullets: string[] = [];
-  if (input.outcome) {
-    for (const action of input.outcome.actions) {
-      const normalized = normalizeHumanUpdateBullet(action.detail, { requireActionVerb: true });
-      if (!normalized) {
-        continue;
-      }
-      if (action.status === "error") {
-        blockedBullets.push(`Blocked: ${lowercaseSentenceStart(normalized)}`);
-      } else {
-        completedBullets.push(normalized);
-      }
-    }
-    for (const blocker of input.outcome.blockers) {
-      const normalized = normalizeHumanUpdateBullet(blocker.message, { requireActionVerb: false });
-      if (!normalized) {
-        continue;
-      }
-      blockedBullets.push(`Blocked: ${lowercaseSentenceStart(normalized)}`);
-    }
-  }
-  if (completedBullets.length + blockedBullets.length < 2) {
-    for (const signal of input.signals) {
-      if (signal.signalLevel !== "high" && signal.signalLevel !== "medium") {
-        continue;
-      }
-      const normalized = normalizeHumanUpdateBullet(signal.text ?? signal.payload ?? "", { requireActionVerb: false });
-      if (!normalized) {
-        continue;
-      }
-      if (looksLikeRunFailureSignal(normalized)) {
-        blockedBullets.push(`Blocked: ${lowercaseSentenceStart(normalized)}`);
-      } else {
-        completedBullets.push(normalized);
-      }
-    }
-  }
-  if (completedBullets.length + blockedBullets.length === 0) {
-    const summaryFallback = normalizeHumanUpdateBullet(input.executionSummary, { requireActionVerb: false });
-    if (summaryFallback) {
-      if (input.status === "failed") {
-        blockedBullets.push(`Blocked: ${lowercaseSentenceStart(summaryFallback)}`);
-      } else {
-        completedBullets.push(summaryFallback);
-      }
-    } else if (input.status === "failed") {
-      blockedBullets.push("Blocked: Could not complete the assigned work due to runtime errors.");
-    } else {
-      completedBullets.push("Completed the assigned work for this run.");
-    }
-  }
-  const finalBullets = dedupeRunDigestPoints([...completedBullets, ...blockedBullets], 6);
-  const statusLine =
-    input.status === "completed"
-      ? blockedBullets.length > 0
-        ? "Completed the run, but some steps are still blocked."
-        : "Completed the run and made progress on the assigned work."
-      : "Attempted the assigned work, but it is currently blocked.";
-  return {
-    statusLine,
-    bullets: finalBullets
-  };
-}
-
 function extractNaturalRunUpdate(executionSummary: string) {
   const normalized = executionSummary.trim();
   const jsonSummary = extractSummaryFromJsonLikeText(normalized);
@@ -3110,6 +3005,7 @@ function buildRunArtifacts(input: {
   outcome: ExecutionOutcome | null;
   finalRunOutput?: AgentFinalRunOutput | null;
   runtimeCwd?: string | null;
+  workspaceRootPath?: string | null;
 }): RunArtifact[] {
   const sourceArtifacts =
     input.finalRunOutput?.artifacts && input.finalRunOutput.artifacts.length > 0
@@ -3119,12 +3015,16 @@ function buildRunArtifacts(input: {
     return [];
   }
   const runtimeCwd = input.runtimeCwd?.trim() ? input.runtimeCwd.trim() : null;
+  const workspaceRootPath = input.workspaceRootPath?.trim() ? input.workspaceRootPath.trim() : null;
   return sourceArtifacts.map((artifact) => {
     const originalPath = artifact.path.trim();
     const isAbsolute = originalPath.startsWith("/");
     const absolutePath = isAbsolute ? originalPath : runtimeCwd ? resolve(runtimeCwd, originalPath) : null;
     let relativePathValue: string | null = null;
-    if (!isAbsolute) {
+    if (absolutePath && workspaceRootPath && isInsidePath(workspaceRootPath, absolutePath)) {
+      const candidate = relative(workspaceRootPath, absolutePath);
+      relativePathValue = candidate || null;
+    } else if (!isAbsolute) {
       relativePathValue = originalPath;
     } else if (runtimeCwd) {
       const candidate = relative(runtimeCwd, originalPath);
@@ -3152,6 +3052,7 @@ function describeArtifact(kind: string, location: string) {
 }
 
 function buildRunCompletionReport(input: {
+  companyId?: string;
   agentName: string;
   providerType: HeartbeatProviderType;
   issueIds: string[];
@@ -3166,10 +3067,12 @@ function buildRunCompletionReport(input: {
   errorType?: string | null;
   errorMessage?: string | null;
 }): RunCompletionReport {
+  const workspaceRootPath = input.companyId ? resolveCompanyWorkspaceRootPath(input.companyId) : null;
   const artifacts = buildRunArtifacts({
     outcome: input.outcome,
     finalRunOutput: input.finalRunOutput,
-    runtimeCwd: input.runtimeCwd
+    runtimeCwd: input.runtimeCwd,
+    workspaceRootPath
   });
   const fallbackSummary = sanitizeAgentSummaryCommentBody(extractNaturalRunUpdate(input.executionSummary));
   const employeeComment =
@@ -3295,7 +3198,10 @@ function formatRunCostLine(cost: RunCostSummary) {
   return `${tokens}; ${qualifier} cost $${cost.usdCost.toFixed(6)}`;
 }
 
-function buildHumanRunUpdateCommentFromReport(report: RunCompletionReport) {
+function buildHumanRunUpdateCommentFromReport(
+  report: RunCompletionReport,
+  options: { runId: string; companyId: string }
+) {
   const lines = [
     report.employeeComment.trim(),
     "",
@@ -3312,9 +3218,9 @@ function buildHumanRunUpdateCommentFromReport(report: RunCompletionReport) {
     lines.push("");
   }
   lines.push("### Result", "", `- What was done: ${report.managerReport.whatWasDone}`, `- Summary: ${report.managerReport.resultSummary}`);
-  if (report.managerReport.artifactPaths.length > 0) {
-    for (const artifactPath of report.managerReport.artifactPaths) {
-      lines.push(`- Artifact: \`${artifactPath}\``);
+  if (report.artifacts.length > 0) {
+    for (const [artifactIndex, artifact] of report.artifacts.entries()) {
+      lines.push(`- Artifact: ${formatRunArtifactMarkdownLink(artifact, { ...options, artifactIndex })}`);
     }
   }
   lines.push("");
@@ -3329,9 +3235,30 @@ function buildHumanRunUpdateCommentFromReport(report: RunCompletionReport) {
       lines.push(`- ${error}`);
     }
   }
-  lines.push("");
-  lines.push("### Next Step", "", `- Next: ${report.managerReport.nextAction}`);
   return lines.join("\n");
+}
+
+function formatRunArtifactMarkdownLink(
+  artifact: RunArtifact,
+  options: { runId: string; companyId: string; artifactIndex: number }
+) {
+  const label = artifact.relativePath ?? artifact.absolutePath ?? artifact.path;
+  const href = buildRunArtifactLinkHref(options);
+  if (!label) {
+    return "`artifact`";
+  }
+  if (!href) {
+    return `\`${label}\``;
+  }
+  return `[${label}](${href})`;
+}
+
+function buildRunArtifactLinkHref(options: { runId: string; companyId: string; artifactIndex: number }) {
+  const apiBaseUrl = resolveControlPlaneApiBaseUrl().replace(/\/+$/, "");
+  const runId = encodeURIComponent(options.runId);
+  const artifactIndex = encodeURIComponent(String(options.artifactIndex));
+  const companyId = encodeURIComponent(options.companyId);
+  return `${apiBaseUrl}/observability/heartbeats/${runId}/artifacts/${artifactIndex}/download?companyId=${companyId}`;
 }
 
 function formatRunCostForHumanReport(cost: RunCostSummary) {
@@ -3362,36 +3289,6 @@ function buildRunListMessageFromReport(report: RunCompletionReport) {
   return compact.length > 220 ? `${compact.slice(0, 217).trimEnd()}...` : compact;
 }
 
-function normalizeHumanUpdateBullet(value: string | null | undefined, options?: { requireActionVerb?: boolean }) {
-  const normalized = summarizeRunDigestPoint(value);
-  if (!normalized) {
-    return "";
-  }
-  let text = normalized
-    .replace(/^run (completed|failed|skipped)\s*:\s*/i, "")
-    .replace(/^(succeeded|failed|blocked by|next)\s*:\s*/i, "")
-    .replace(/^[a-z0-9_ -]*runtime completed\.?$/i, "Completed the assigned task.")
-    .replace(/\s+at\s+\/[^\s]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!text || isMachineNoiseLine(text)) {
-    return "";
-  }
-  if (options?.requireActionVerb && !hasHumanActionVerb(text)) {
-    return "";
-  }
-  if (text.length > 180) {
-    text = `${text.slice(0, 177).trimEnd()}...`;
-  }
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
-
-function hasHumanActionVerb(text: string) {
-  return /\b(created|added|updated|configured|set|submitted|implemented|fixed|wrote|generated|migrated|documented|reviewed|completed|blocked|requested|opened|closed|assigned|prepared|bootstrapped|linked|paused|resumed)\b/i.test(
-    text
-  );
-}
-
 function isMachineNoiseLine(text: string) {
   const normalized = text.trim();
   if (!normalized) {
@@ -3411,13 +3308,6 @@ function isMachineNoiseLine(text: string) {
     /\{[\s\S]*"(summary|tokenInput|tokenOutput|usdCost|trace|error)"[\s\S]*\}/i
   ];
   return patterns.some((pattern) => pattern.test(normalized));
-}
-
-function lowercaseSentenceStart(text: string) {
-  if (!text) {
-    return text;
-  }
-  return `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 }
 
 function extractSummaryFromJsonLikeText(input: string) {
@@ -3457,7 +3347,10 @@ async function appendRunSummaryComments(
   if (input.issueIds.length === 0) {
     return;
   }
-  const commentBody = buildHumanRunUpdateCommentFromReport(input.report);
+  const commentBody = buildHumanRunUpdateCommentFromReport(input.report, {
+    runId: input.runId,
+    companyId: input.companyId
+  });
   for (const issueId of input.issueIds) {
     const existingRunComments = await db
       .select({ id: issueComments.id })

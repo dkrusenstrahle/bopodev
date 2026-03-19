@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { readFile, stat } from "node:fs/promises";
+import { basename, isAbsolute, resolve } from "node:path";
 import { z } from "zod";
 import {
   getHeartbeatRun,
@@ -15,6 +17,7 @@ import {
 } from "bopodev-db";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
+import { isInsidePath, resolveCompanyWorkspaceRootPath } from "../lib/instance-paths";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { requirePermission } from "../middleware/request-actor";
 import { listAgentMemoryFiles, loadAgentMemoryContext, readAgentMemoryFile } from "../services/memory-file-service";
@@ -148,6 +151,46 @@ export function createObservabilityRouter(ctx: AppContext) {
         truncated: traceTranscript.length >= 120
       }
     });
+  });
+
+  router.get("/heartbeats/:runId/artifacts/:artifactIndex/download", async (req, res) => {
+    const companyId = req.companyId!;
+    const runId = req.params.runId;
+    const rawArtifactIndex = Number(req.params.artifactIndex);
+    const artifactIndex = Number.isFinite(rawArtifactIndex) ? Math.floor(rawArtifactIndex) : NaN;
+    if (!Number.isInteger(artifactIndex) || artifactIndex < 0) {
+      return sendError(res, "Artifact index must be a non-negative integer.", 422);
+    }
+    const [run, auditRows] = await Promise.all([getHeartbeatRun(ctx.db, companyId, runId), listAuditEvents(ctx.db, companyId, 500)]);
+    if (!run) {
+      return sendError(res, "Run not found", 404);
+    }
+    const details = buildRunDetailsMap(auditRows).get(runId) ?? null;
+    const report = toRecord(details?.report);
+    const artifacts = Array.isArray(report?.artifacts)
+      ? report.artifacts.filter((entry) => typeof entry === "object" && entry !== null)
+      : [];
+    const artifact = (artifacts[artifactIndex] ?? null) as Record<string, unknown> | null;
+    if (!artifact) {
+      return sendError(res, "Artifact not found.", 404);
+    }
+    const resolvedPath = resolveRunArtifactAbsolutePath(companyId, artifact);
+    if (!resolvedPath) {
+      return sendError(res, "Artifact path is invalid.", 422);
+    }
+    let stats: Awaited<ReturnType<typeof stat>>;
+    try {
+      stats = await stat(resolvedPath);
+    } catch {
+      return sendError(res, "Artifact not found on disk.", 404);
+    }
+    if (!stats.isFile()) {
+      return sendError(res, "Artifact is not a file.", 422);
+    }
+    const buffer = await readFile(resolvedPath);
+    res.setHeader("content-type", "application/octet-stream");
+    res.setHeader("content-disposition", `inline; filename="${encodeURIComponent(basename(resolvedPath))}"`);
+    return res.send(buffer);
   });
 
   router.get("/heartbeats/:runId/messages", async (req, res) => {
@@ -359,6 +402,30 @@ function parsePayload(payloadJson: string): Record<string, unknown> {
 
 function toRecord(value: unknown) {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function resolveRunArtifactAbsolutePath(companyId: string, artifact: Record<string, unknown>) {
+  const companyWorkspaceRoot = resolveCompanyWorkspaceRootPath(companyId);
+  const absolutePathRaw = typeof artifact.absolutePath === "string" ? artifact.absolutePath.trim() : "";
+  const relativePathRaw =
+    typeof artifact.relativePath === "string"
+      ? artifact.relativePath.trim()
+      : typeof artifact.path === "string"
+        ? artifact.path.trim()
+        : "";
+  const candidate = absolutePathRaw
+    ? absolutePathRaw
+    : relativePathRaw
+      ? resolve(companyWorkspaceRoot, relativePathRaw)
+      : "";
+  if (!candidate) {
+    return null;
+  }
+  const resolved = isAbsolute(candidate) ? resolve(candidate) : resolve(companyWorkspaceRoot, candidate);
+  if (!isInsidePath(companyWorkspaceRoot, resolved)) {
+    return null;
+  }
+  return resolved;
 }
 
 function serializeRunRow(

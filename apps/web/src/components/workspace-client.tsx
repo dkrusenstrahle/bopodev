@@ -15,7 +15,6 @@ import { ConfirmActionModal } from "@/components/modals/confirm-action-modal";
 import { CreateGoalModal } from "@/components/modals/create-goal-modal";
 import { CreateIssueModal } from "@/components/modals/create-issue-modal";
 import { CreateProjectModal } from "@/components/modals/create-project-modal";
-import { RunDetailsModal } from "@/components/modals/run-details-modal";
 import { TextActionModal } from "@/components/modals/text-action-modal";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { agentAvatarSeed } from "@/lib/agent-avatar";
@@ -3309,19 +3308,6 @@ export function WorkspaceClient({
         cell: ({ row }) => <div className={styles.formatDurationContainer5}>{formatDateTime(row.original.startedAt)}</div>
       },
       {
-        accessorKey: "message",
-        header: "Message",
-        cell: ({ row }) => {
-          const displayMessage = formatRunMessage(row.original.message);
-          const previewMessage = displayMessage.length > 88 ? `${displayMessage.slice(0, 85)}...` : displayMessage;
-          return (
-            <div className={styles.runMessageCellContainer} title={displayMessage}>
-              {previewMessage}
-            </div>
-          );
-        }
-      },
-      {
         id: "actions",
         header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
         enableSorting: false,
@@ -4267,6 +4253,7 @@ export function WorkspaceClient({
               <MetricCard label="Critical / Warnings" value={`${attentionSummary.critical} / ${attentionSummary.unresolvedWarnings}`} />
               <MetricCard label="Unresolved now" value={attentionSummary.unresolved} />
             </div>
+            <SectionHeading title="Attention items" description="Unified board action queue for approvals, blockers, budget hard-stops, and escalations." />
             <DataTable
               columns={attentionColumns}
               data={filteredAttentionItems}
@@ -4555,6 +4542,8 @@ export function WorkspaceClient({
                 </Card>
               </div>
             ) : null}
+
+<SectionHeading title="Audit events" description="Audit events emitted by workspace actions and governance flows." />
             <DataTable
               columns={auditColumns}
               data={filteredAuditEvents}
@@ -4690,6 +4679,7 @@ export function WorkspaceClient({
                 </Card>
               </div>
             ) : null}
+            <SectionHeading title="Heartbeats" description="Heartbeat runs scoped to this agent." />
             <DataTable
               columns={heartbeatRunColumns}
               data={filteredHeartbeatRuns}
@@ -4945,6 +4935,7 @@ export function WorkspaceClient({
                   </CardContent>
                 </Card>
               </div>
+            <SectionHeading title="Entries" description="Tracked token and cost usage for agents and issue execution." />
             <DataTable
               columns={costColumns}
               data={filteredCostEntries}

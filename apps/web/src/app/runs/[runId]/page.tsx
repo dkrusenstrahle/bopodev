@@ -42,8 +42,6 @@ export default async function RunDetailPage({
     const fallbackMessages =
       transcript.items.length === 0 ? extractFallbackMessagesFromTrace(runDetail, workspaceData.companyId) : [];
     const initialMessages = transcript.items.length > 0 ? transcript.items : fallbackMessages;
-    const agentName =
-      workspaceData.agents.find((agent) => agent.id === runDetail.run.agentId)?.name ?? runDetail.run.agentId;
     const recentRuns = workspaceData.heartbeatRuns
       .filter((entry) => !isNoAssignedWorkRun(entry))
       .filter((entry) => (agentId ? entry.agentId === agentId : true))
@@ -54,8 +52,6 @@ export default async function RunDetailPage({
         companies={workspaceData.companies}
         runDetail={runDetail}
         initialMessages={initialMessages}
-        nextCursor={transcript.nextCursor}
-        agentName={agentName}
         scopedAgentId={agentId ?? null}
         recentRuns={recentRuns}
       />

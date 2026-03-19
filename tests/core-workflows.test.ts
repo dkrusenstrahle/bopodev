@@ -1622,7 +1622,7 @@ describe("BopoDev core workflows", () => {
       (comment) => comment.runId === runId && comment.authorType === "agent" && comment.authorId === failingAgent.id
     );
     expect(runSummaryComment?.body ?? "").toContain("Status: failed");
-    expect(runSummaryComment?.body ?? "").toContain("Next:");
+    expect(runSummaryComment?.body ?? "").not.toContain("### Next Step");
 
     const logsResponse = await request(app).get("/observability/logs").set("x-company-id", companyId);
     expect(logsResponse.status).toBe(200);

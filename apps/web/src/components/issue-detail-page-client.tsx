@@ -679,18 +679,6 @@ export function IssueDetailPageClient({
     return recipient.recipientId ? `Member ${recipient.recipientId}` : "Member";
   }
 
-  function formatRecipientDeliveryStatus(
-    recipient: IssueCommentRow["recipients"][number]
-  ) {
-    if (recipient.deliveryStatus === "pending") {
-      return "queued";
-    }
-    if (recipient.deliveryStatus === "dispatched") {
-      return "running";
-    }
-    return recipient.deliveryStatus;
-  }
-
   async function updateIssue(payload: {
     title?: string;
     body?: string | null;

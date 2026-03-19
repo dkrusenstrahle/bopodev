@@ -185,7 +185,6 @@ export function AppShell({
         <ScrollArea className="ui-shell-secondary-scroll min-h-0 flex-1">
           <div className="ui-shell-sidebar-scroll-content">{renderSettingsLinks(false)}</div>
         </ScrollArea>
-        <Separator className="ui-shell-separator" />
         <div className="ui-shell-stack-sm pt-4">
           <ThemePaletteSelect />
           <ThemeToggle />

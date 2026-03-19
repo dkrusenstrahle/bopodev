@@ -16,7 +16,7 @@ export function DataTableViewOptions<TData>({ table }: { table: Table<TData> }) 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="ui-data-table-view-options-button">
+        <Button variant="outline" className="ui-data-table-view-options-button">
           <Settings2 className="ui-data-table-view-options-icon" />
           View
         </Button>

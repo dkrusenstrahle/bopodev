@@ -412,7 +412,6 @@ export function IssueWorkspace({
     <ButtonGroup className={styles.issueViewToggleGroup}>
       <Button
         variant="outline"
-        size="xs"
         className={cn(styles.issueViewToggleButton, viewMode === "list" ? styles.issueViewToggleButtonActive : undefined)}
         onClick={() => setViewMode("list")}
       >
@@ -420,7 +419,6 @@ export function IssueWorkspace({
       </Button>
       <Button
         variant="outline"
-        size="xs"
         className={cn(styles.issueViewToggleButton, viewMode === "board" ? styles.issueViewToggleButtonActive : undefined)}
         onClick={() => setViewMode("board")}
       >

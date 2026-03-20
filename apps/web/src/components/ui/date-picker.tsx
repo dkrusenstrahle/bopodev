@@ -35,12 +35,12 @@ export function DatePicker({
           disabled={disabled}
           data-empty={!date}
           className={cn(
-            "w-full justify-start text-left font-normal data-[empty=true]:text-muted-foreground",
+            "w-full justify-start! text-left font-normal data-[empty=true]:text-muted-foreground",
             className
           )}
         >
           <CalendarIcon />
-          {date ? format(date, "PPP") : <span>{placeholder}</span>}
+          <span className="text-left">{date ? format(date, "PPP") : placeholder}</span>
         </Button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
@@ -54,6 +54,7 @@ export function DatePicker({
         >
           <Calendar
             mode="single"
+            className="[--cell-size:1.9rem]"
             selected={date}
             onSelect={(nextDate) => {
               onDateChange(nextDate);

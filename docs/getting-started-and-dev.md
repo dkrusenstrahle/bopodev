@@ -110,6 +110,7 @@ For full VPS guidance, see [`operations/deployment.md`](./operations/deployment.
 - `pnpm test:coverage` - run tests with coverage thresholds
 - `pnpm test:e2e` - run Playwright smoke tests
 - `pnpm build` - build all packages/apps
+- `pnpm unstick` - stop stray dev/API processes and free `WEB_PORT` / `API_PORT` without deleting data (works from any package dir; resolves monorepo root via `pnpm-workspace.yaml`)
 - `pnpm clear` - stop local Bopo runtime processes, reset instance storage, clear onboarding env keys, and reinitialize API DB
 - `pnpm smoke:vps` - run post-deploy smoke checks against configured VPS endpoints
 - `pnpm publish:all` - build and publish public packages
@@ -156,6 +157,8 @@ Issue creation requires a real project in the selected company:
   - also auto-selects open ports near `WEB_PORT`/`API_PORT`,
   - injects `NEXT_PUBLIC_API_URL` for web runtime,
   - optionally auto-opens browser unless disabled (`BOPO_OPEN_BROWSER=0`).
+- `pnpm unstick` (`scripts/unstick.mjs` + `unstickBopoRuntime` in `scripts/clear.mjs`):
+  - walks up to the directory that contains `pnpm-workspace.yaml`, loads that root’s `.env`, then applies the same port + process scan as the first phase of `pnpm clear` (no file or DB deletion).
 - `pnpm clear` (`scripts/clear.mjs`):
   - detects and stops local Bopo processes bound to runtime ports,
   - removes the active instance root and optional external DB path,

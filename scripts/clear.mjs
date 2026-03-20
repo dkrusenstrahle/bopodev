@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -27,20 +27,34 @@ const WORKSPACE_RUNTIME_MARKERS = [
   "turbo --no-update-notifier dev"
 ];
 
+function resolveMonorepoRoot(startDir) {
+  let current = resolve(startDir);
+  for (;;) {
+    if (existsSync(join(current, "pnpm-workspace.yaml"))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return resolve(startDir);
+    }
+    current = parent;
+  }
+}
+
 async function main() {
-  const workspaceRoot = process.cwd();
+  const workspaceRoot = resolveMonorepoRoot(process.cwd());
   const envFromFile = await loadDotEnv(join(workspaceRoot, ".env"));
   applyEnvDefaults(envFromFile);
-  await stopOrphanBopoProcesses(workspaceRoot, process.env);
+  await stopOrphanBopoProcesses(workspaceRoot, process.env, logClearStep);
 
   const instanceRoot = resolveInstanceRoot(process.env);
   const dbPath = normalizeOptionalPath(process.env.BOPO_DB_PATH);
 
-  logStep(`Removing instance folder: ${instanceRoot}`);
+  logClearStep(`Removing instance folder: ${instanceRoot}`);
   await rm(instanceRoot, { recursive: true, force: true });
 
   if (dbPath && !isPathInside(instanceRoot, dbPath)) {
-    logStep(`Removing explicit DB path: ${dbPath}`);
+    logClearStep(`Removing explicit DB path: ${dbPath}`);
     await rm(dbPath, { recursive: true, force: true });
   }
 
@@ -50,16 +64,16 @@ async function main() {
     delete process.env[key];
   }
 
-  runPnpm(["--filter", "bopodev-api", "db:init"]);
+  runPnpm(["--filter", "bopodev-api", "db:init"], workspaceRoot);
 
-  logStep("Clear complete: instance reset and empty DB initialized.");
-  logStep("Next: run `pnpm onboard` to choose a new company, provider, and model.");
+  logClearStep("Clear complete: instance reset and empty DB initialized.");
+  logClearStep("Next: run `pnpm onboard` to choose a new company, provider, and model.");
 }
 
-function runPnpm(args) {
+function runPnpm(args, cwd = process.cwd()) {
   const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const result = spawnSync(command, args, {
-    cwd: process.cwd(),
+    cwd,
     stdio: "inherit",
     env: process.env
   });
@@ -68,7 +82,7 @@ function runPnpm(args) {
   }
 }
 
-async function stopOrphanBopoProcesses(workspaceRoot, env) {
+async function stopOrphanBopoProcesses(workspaceRoot, env, log = logClearStep) {
   const ports = resolveRuntimePorts(env);
   const processTable = readProcessTable();
   const candidatePids = new Set();
@@ -86,17 +100,17 @@ async function stopOrphanBopoProcesses(workspaceRoot, env) {
   const withDescendants = collectDescendantPids(processTable, candidatePids);
   withDescendants.delete(process.pid);
   if (withDescendants.size === 0) {
-    logStep("No active Bopo runtime processes detected.");
+    log("No active Bopo runtime processes detected.");
     return;
   }
 
   const sorted = Array.from(withDescendants).sort((a, b) => a - b);
-  logStep(`Stopping ${sorted.length} runtime process${sorted.length === 1 ? "" : "es"}: ${sorted.join(", ")}`);
+  log(`Stopping ${sorted.length} runtime process${sorted.length === 1 ? "" : "es"}: ${sorted.join(", ")}`);
   terminatePids(sorted, "SIGTERM");
   await wait(1200);
   const stillRunning = sorted.filter((pid) => isPidAlive(pid));
   if (stillRunning.length > 0) {
-    logStep(`Force-stopping stubborn process${stillRunning.length === 1 ? "" : "es"}: ${stillRunning.join(", ")}`);
+    log(`Force-stopping stubborn process${stillRunning.length === 1 ? "" : "es"}: ${stillRunning.join(", ")}`);
     terminatePids(stillRunning, "SIGKILL");
     await wait(400);
   }
@@ -328,9 +342,22 @@ function isPathInside(parent, target) {
   return target === parent || (target.startsWith(parent) && (relative.startsWith("/") || relative.startsWith("\\")));
 }
 
-function logStep(message) {
+function logClearStep(message) {
   // eslint-disable-next-line no-console
   console.log(`[clear] ${message}`);
+}
+
+function logUnstickStep(message) {
+  // eslint-disable-next-line no-console
+  console.log(`[unstick] ${message}`);
+}
+
+/** Stop dev/api listeners and matching runtime processes without deleting data (safe before `pnpm dev`). */
+export async function unstickBopoRuntime(options = {}) {
+  const workspaceRoot = options.workspaceRoot ?? resolveMonorepoRoot(process.cwd());
+  const envFromFile = await loadDotEnv(join(workspaceRoot, ".env"));
+  applyEnvDefaults(envFromFile);
+  await stopOrphanBopoProcesses(workspaceRoot, process.env, logUnstickStep);
 }
 
 const isDirectExecution = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
@@ -351,6 +378,7 @@ export {
   parseIntegerPort,
   parseListeningPidsOutput,
   parseProcessTableOutput,
+  resolveMonorepoRoot,
   resolveRuntimePorts,
   stripWrappingQuotes
 };

@@ -140,6 +140,19 @@ For full VPS guidance, see [`operations/deployment.md`](./operations/deployment.
 
 `/` redirects to `/issues`.
 
+## Back up your local instance (onboarding costs time and API spend)
+
+Your companies, agents, and issues live in PGlite under the instance **`db`** directory (default: `~/.bopodev/instances/default/db/bopodev.db`). If that store is deleted or corrupted, you must **onboard again**.
+
+After a successful `pnpm onboard`, keep a copy you can restore without paying again:
+
+```bash
+# Example: timestamped backup of the whole db folder
+cp -R ~/.bopodev/instances/default/db ~/Desktop/bopodev-db-backup-$(date +%Y%m%d)
+```
+
+To restore: stop the API (`Ctrl+C`), replace `db/` with your backup, start the API again. For a broken store, recovery steps are in [`docs/operations/troubleshooting.md`](./operations/troubleshooting.md) (PGlite).
+
 ## First-Run Notes
 
 Issue creation requires a real project in the selected company:
@@ -187,6 +200,9 @@ Release/tag workflow is documented in [`docs/release-process.md`](./release-proc
 
 ## Troubleshooting
 
+- **`pnpm start` then `pnpm dev` “loses” the DB or data:** The API uses embedded PGlite on disk (`~/.bopodev/instances/default/db/…` by default). If the API process is **force-killed** (IDE stop, closing the terminal tab without Ctrl+C, etc.), the DB file can stay **locked** or corrupted and the next run may abort on startup or look empty. **Use Ctrl+C** to stop `pnpm start` or `pnpm dev` so the API can close PGlite cleanly. If it still breaks, run `pnpm unstick` to stop stray Node processes, then retry. Worst case, follow PGlite recovery in [`docs/operations/troubleshooting.md`](./operations/troubleshooting.md).
+- **Production `pnpm start` UI can’t reach the API:** `next build` **bakes** `NEXT_PUBLIC_API_URL` at build time (often `http://localhost:4020`). If `start-runner` shifts the API to another port because `4020` is busy, the **built** web app still calls `4020` until you rebuild with the matching URL or free `4020`. The `pnpm start` banner warns when the API port is non-default.
+- **Dev saves do not appear in the browser:** `pnpm dev` prints the exact **Web** and **API** URLs at startup. If default ports `4010` / `4020` are already in use, the dev runner binds the next free ports (`4011`, etc.). An old tab on `:4010` will show a stale or different server—open the URL from the terminal banner instead. Run `pnpm unstick` from the monorepo root and restart `pnpm dev` if ports or stray processes are confused.
 - API health endpoint: `GET /health` includes DB readiness and runtime command readiness.
 - Codex troubleshooting runbook: `docs/codex-connection-debugging.md`.
 - Agent runtime execution supports local CLI commands for Claude Code and Codex.

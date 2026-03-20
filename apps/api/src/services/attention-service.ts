@@ -17,6 +17,40 @@ import type { BoardAttentionItem } from "bopodev-contracts";
 
 type AttentionStateRow = Awaited<ReturnType<typeof listAttentionInboxStates>>[number];
 
+/** Keep in sync with `RESOLVED_APPROVAL_INBOX_WINDOW_DAYS` in governance routes (resolved history in Inbox). */
+const RESOLVED_APPROVAL_ATTENTION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+type StoredApprovalRow = Awaited<ReturnType<typeof listApprovalRequests>>[number];
+
+function approvalIncludedInAttentionList(approval: Pick<StoredApprovalRow, "status" | "resolvedAt">): boolean {
+  if (approval.status === "pending") {
+    return true;
+  }
+  if (!approval.resolvedAt) {
+    return false;
+  }
+  return Date.now() - approval.resolvedAt.getTime() <= RESOLVED_APPROVAL_ATTENTION_WINDOW_MS;
+}
+
+function finalizeApprovalAttentionItem(item: BoardAttentionItem, approval: Pick<StoredApprovalRow, "status" | "resolvedAt" | "action">): BoardAttentionItem {
+  if (approval.status === "pending") {
+    return item;
+  }
+  const outcome =
+    approval.status === "approved" ? "Approved" : approval.status === "rejected" ? "Rejected" : "Overridden";
+  const title =
+    approval.action === "override_budget" ? `Budget hard-stop · ${outcome}` : `Approval · ${outcome}`;
+  const resolvedAtIso = approval.resolvedAt?.toISOString() ?? item.resolvedAt;
+  return {
+    ...item,
+    title,
+    state: "resolved",
+    resolvedAt: resolvedAtIso,
+    severity: "info",
+    sourceTimestamp: resolvedAtIso ?? item.sourceTimestamp
+  };
+}
+
 export async function listBoardAttentionItems(db: BopoDb, companyId: string, actorId: string): Promise<BoardAttentionItem[]> {
   const [approvals, blockedIssues, heartbeatRuns, stateRows, boardComments] = await Promise.all([
     listApprovalRequests(db, companyId),
@@ -42,7 +76,7 @@ export async function listBoardAttentionItems(db: BopoDb, companyId: string, act
   const items: BoardAttentionItem[] = [];
 
   for (const approval of approvals) {
-    if (approval.status !== "pending") {
+    if (!approvalIncludedInAttentionList(approval)) {
       continue;
     }
     const payload = parsePayload(approval.payloadJson);
@@ -55,25 +89,61 @@ export async function listBoardAttentionItems(db: BopoDb, companyId: string, act
       const usedBudget = asNumber(payload.usedBudgetUsd);
       const key = `budget:${approval.id}`;
       items.push(
+        finalizeApprovalAttentionItem(
+          withState(
+            {
+              key,
+              category: "budget_hard_stop",
+              severity: ageHours >= 12 ? "critical" : "warning",
+              requiredActor: "board",
+              title: "Budget hard-stop requires board decision",
+              contextSummary: projectId
+                ? `Project ${shortId(projectId)} is blocked by budget hard-stop.`
+                : agentId
+                  ? `Agent ${shortId(agentId)} is blocked by budget hard-stop.`
+                  : "Agent work is blocked by budget hard-stop.",
+              actionLabel: "Review budget override",
+              actionHref: "/governance",
+              impactSummary: "Heartbeat work stays paused until budget override is approved or rejected.",
+              evidence: {
+                approvalId: approval.id,
+                projectId: projectId ?? undefined,
+                agentId: agentId ?? undefined
+              },
+              sourceTimestamp: approval.createdAt.toISOString(),
+              state: "open",
+              seenAt: null,
+              acknowledgedAt: null,
+              dismissedAt: null,
+              resolvedAt: null
+            },
+            stateByKey.get(key),
+            `Budget utilization ${formatPercent(utilizationPct)} (${formatUsd(usedBudget)} / ${formatUsd(currentBudget)}).`
+          ),
+          approval
+        )
+      );
+      continue;
+    }
+
+    const key = `approval:${approval.id}`;
+    items.push(
+      finalizeApprovalAttentionItem(
         withState(
           {
             key,
-            category: "budget_hard_stop",
-            severity: ageHours >= 12 ? "critical" : "warning",
+            category: "approval_required",
+            severity: ageHours >= 24 ? "critical" : "warning",
             requiredActor: "board",
-            title: "Budget hard-stop requires board decision",
-            contextSummary: projectId
-              ? `Project ${shortId(projectId)} is blocked by budget hard-stop.`
-              : agentId
-                ? `Agent ${shortId(agentId)} is blocked by budget hard-stop.`
-                : "Agent work is blocked by budget hard-stop.",
-            actionLabel: "Review budget override",
+            title: "Approval required",
+            contextSummary: formatApprovalContext(approval.action, payload),
+            actionLabel: "Open approvals",
             actionHref: "/governance",
-            impactSummary: "Heartbeat work stays paused until budget override is approved or rejected.",
+            impactSummary: "Execution remains blocked until this governance decision is resolved.",
             evidence: {
               approvalId: approval.id,
-              projectId: projectId ?? undefined,
-              agentId: agentId ?? undefined
+              projectId: asString(payload.projectId) ?? undefined,
+              agentId: asString(payload.agentId) ?? undefined
             },
             sourceTimestamp: approval.createdAt.toISOString(),
             state: "open",
@@ -82,39 +152,9 @@ export async function listBoardAttentionItems(db: BopoDb, companyId: string, act
             dismissedAt: null,
             resolvedAt: null
           },
-          stateByKey.get(key),
-          `Budget utilization ${formatPercent(utilizationPct)} (${formatUsd(usedBudget)} / ${formatUsd(currentBudget)}).`
-        )
-      );
-      continue;
-    }
-
-    const key = `approval:${approval.id}`;
-    items.push(
-      withState(
-        {
-          key,
-          category: "approval_required",
-          severity: ageHours >= 24 ? "critical" : "warning",
-          requiredActor: "board",
-          title: "Approval required",
-          contextSummary: formatApprovalContext(approval.action, payload),
-          actionLabel: "Open approvals",
-          actionHref: "/governance",
-          impactSummary: "Execution remains blocked until this governance decision is resolved.",
-          evidence: {
-            approvalId: approval.id,
-            projectId: asString(payload.projectId) ?? undefined,
-            agentId: asString(payload.agentId) ?? undefined
-          },
-          sourceTimestamp: approval.createdAt.toISOString(),
-          state: "open",
-          seenAt: null,
-          acknowledgedAt: null,
-          dismissedAt: null,
-          resolvedAt: null
-        },
-        stateByKey.get(key)
+          stateByKey.get(key)
+        ),
+        approval
       )
     );
   }

@@ -5241,7 +5241,7 @@ export function WorkspaceClient({
                 <Card>
                   <CardHeader>
                     <CardTitle>Run trend</CardTitle>
-                    <CardDescription>Daily completed vs failed runs (last 14 days, based on current filters).</CardDescription>
+                    <CardDescription>1Daily completed vs failed runs (last 14 days, based on current filters).</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ChartContainer config={runsChartConfig} className={styles.runTrendChartContainer}>

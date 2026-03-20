@@ -3,6 +3,11 @@ import { createServer } from "node:net";
 
 const quiet = process.argv.includes("--quiet");
 const openBrowser = resolveOpenBrowserFlag();
+const RESET = "\x1b[0m";
+const BOLD = "\x1b[1m";
+const DIM = "\x1b[2m";
+const WARN = "\x1b[33m";
+
 const defaultWebPort = Number(process.env.WEB_PORT ?? "4010");
 const defaultApiPort = Number(process.env.API_PORT ?? "4020");
 
@@ -11,9 +16,23 @@ const apiPort = await findOpenPort(defaultApiPort, new Set([webPort]));
 const apiUrl = `http://127.0.0.1:${apiPort}`;
 const webUrl = `http://127.0.0.1:${webPort}`;
 
-if (webPort !== defaultWebPort || apiPort !== defaultApiPort) {
-  process.stdout.write(`[start] selected open ports: web=${webPort}, api=${apiPort}\n`);
+process.stdout.write(
+  `\n${BOLD}[start]${RESET} Production bundle — open:\n` +
+    `  ${BOLD}Web${RESET}  → ${webUrl}\n` +
+    `  ${BOLD}API${RESET}  → ${apiUrl}\n`
+);
+if (apiPort !== defaultApiPort) {
+  process.stdout.write(
+    `${WARN}[start] API is not on :${defaultApiPort}. The web client was built with NEXT_PUBLIC_API_URL (often http://localhost:${defaultApiPort}).${RESET}\n` +
+      `${DIM}API calls may fail until you rebuild with ${RESET}NEXT_PUBLIC_API_URL=${apiUrl}${DIM} pnpm build${RESET}, or free :${defaultApiPort} and restart.${RESET}\n`
+  );
 }
+if (webPort !== defaultWebPort) {
+  process.stdout.write(`${WARN}[start] Web is not on :${defaultWebPort} — use ${webUrl} (not an old dev tab).${RESET}\n`);
+}
+process.stdout.write(
+  `${DIM}[start] Stop with Ctrl+C so PGlite can close cleanly; avoid force-quit or the next dev server may not open the DB.${RESET}\n\n`
+);
 
 const args = [
   "turbo",

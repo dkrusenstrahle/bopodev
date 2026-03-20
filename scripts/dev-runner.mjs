@@ -20,11 +20,24 @@ const defaultApiPort = Number(process.env.API_PORT ?? "4020");
 const webPort = await findOpenPort(defaultWebPort);
 const apiPort = await findOpenPort(defaultApiPort, new Set([webPort]));
 
+const BOLD = "\x1b[1m";
+const DIM = "\x1b[2m";
+const WARN = "\x1b[33m";
+
+process.stdout.write(
+  `\n${BOLD}[dev]${RESET} Open in this browser session:\n` +
+    `  ${BOLD}Web${RESET}  ${RESET}→ http://127.0.0.1:${webPort}\n` +
+    `  ${BOLD}API${RESET}  ${RESET}→ http://127.0.0.1:${apiPort}\n`
+);
 if (webPort !== defaultWebPort || apiPort !== defaultApiPort) {
   process.stdout.write(
-    `${DIM}[dev] selected open ports: web=${webPort}, api=${apiPort}${RESET}\n`
+    `${WARN}[dev] Default ports (${defaultWebPort}/${defaultApiPort}) were busy — you are NOT on the usual URLs.${RESET}\n` +
+      `${DIM}If edits never show up, you may still have an old tab on :${defaultWebPort}. Run ${RESET}pnpm unstick${DIM} and restart.${RESET}\n`
   );
 }
+process.stdout.write(
+  `${DIM}[dev] Stop with Ctrl+C so the API can close PGlite cleanly (avoid force-kill when switching from ${RESET}pnpm start${DIM}).${RESET}\n\n`
+);
 
 const child = spawn(
   "pnpm",

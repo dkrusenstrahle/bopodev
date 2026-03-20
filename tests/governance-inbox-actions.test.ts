@@ -97,4 +97,27 @@ describe("governance inbox actions", { timeout: 30_000 }, () => {
     expect(response.status).toBe(404);
     expect(String(response.body.error ?? "")).toContain("not found");
   });
+
+  it("keeps resolved approvals on /attention for the same history window as governance inbox", async () => {
+    const resolveResponse = await request(app)
+      .post("/governance/resolve")
+      .set("x-company-id", companyId)
+      .send({ approvalId, status: "rejected" });
+    expect(resolveResponse.status).toBe(200);
+
+    const attention = await request(app).get("/attention").set("x-company-id", companyId);
+    expect(attention.status).toBe(200);
+    const items = attention.body.data.items as Array<{
+      category: string;
+      evidence?: { approvalId?: string };
+      state: string;
+      title: string;
+    }>;
+    const resolvedItem = items.find(
+      (item) => item.category === "approval_required" && item.evidence?.approvalId === approvalId
+    );
+    expect(resolvedItem).toBeDefined();
+    expect(resolvedItem?.state).toBe("resolved");
+    expect(resolvedItem?.title).toContain("Rejected");
+  });
 });

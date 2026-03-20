@@ -15,3 +15,6 @@ data
 tmp
 .pnpm-store/*
 .cursor/
+
+# PGlite can create this literal directory name if :memory: is resolved as a relative path (e.g. wrong cwd).
+packages/db/:memory:/

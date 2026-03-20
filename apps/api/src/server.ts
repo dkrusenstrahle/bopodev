@@ -35,8 +35,11 @@ async function main() {
   const port = Number(process.env.PORT ?? 4020);
   const effectiveDbPath = dbPath ?? resolveDefaultDbPath();
   let db: Awaited<ReturnType<typeof bootstrapDatabase>>["db"];
+  let dbClient: Awaited<ReturnType<typeof bootstrapDatabase>>["client"];
   try {
-    ({ db } = await bootstrapDatabase(dbPath));
+    const boot = await bootstrapDatabase(dbPath);
+    db = boot.db;
+    dbClient = boot.client;
   } catch (error) {
     if (isProbablyPgliteWasmAbort(error)) {
       // eslint-disable-next-line no-console
@@ -138,15 +141,68 @@ async function main() {
 
   const defaultCompanyId = process.env.BOPO_DEFAULT_COMPANY_ID;
   const schedulerCompanyId = await resolveSchedulerCompanyId(db, defaultCompanyId ?? null);
+  let stopScheduler: (() => void) | undefined;
   if (schedulerCompanyId && shouldStartScheduler()) {
-    createHeartbeatScheduler(db, schedulerCompanyId, realtimeHub);
+    stopScheduler = createHeartbeatScheduler(db, schedulerCompanyId, realtimeHub);
   } else if (schedulerCompanyId) {
     // eslint-disable-next-line no-console
     console.log("[startup] Scheduler disabled for this instance (BOPO_SCHEDULER_ROLE is follower/off).");
   }
+
+  let shutdownInFlight: Promise<void> | null = null;
+  function shutdown(signal: string) {
+    shutdownInFlight ??= (async () => {
+      // eslint-disable-next-line no-console
+      console.log(`[shutdown] ${signal} — closing realtime, HTTP server, and embedded DB…`);
+      stopScheduler?.();
+      try {
+        await realtimeHub.close();
+      } catch (closeError) {
+        // eslint-disable-next-line no-console
+        console.error("[shutdown] realtime hub close error", closeError);
+      }
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve();
+        });
+      });
+      try {
+        await closePgliteClient(dbClient);
+      } catch (closeDbError) {
+        // eslint-disable-next-line no-console
+        console.error("[shutdown] PGlite close error", closeDbError);
+      }
+      // eslint-disable-next-line no-console
+      console.log("[shutdown] clean exit");
+      process.exit(0);
+    })().catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error("[shutdown] failed", error);
+      process.exit(1);
+    });
+    return shutdownInFlight;
+  }
+
+  process.once("SIGINT", () => void shutdown("SIGINT"));
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
 void main();
+
+async function closePgliteClient(client: unknown) {
+  if (!client || typeof client !== "object") {
+    return;
+  }
+  const closeFn = (client as { close?: unknown }).close;
+  if (typeof closeFn !== "function") {
+    return;
+  }
+  await (closeFn as () => Promise<void>)();
+}
 
 async function hasCodexAgentsConfigured(db: Awaited<ReturnType<typeof bootstrapDatabase>>["db"]) {
   const result = await db.execute(sql`

@@ -36,7 +36,21 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  PolarAngleAxis,
+  PolarGrid,
+  RadialBar,
+  RadialBarChart,
+  XAxis,
+  YAxis
+} from "recharts";
 import { AGENT_ROLE_LABELS, AGENT_ROLE_KEYS, type AgentRoleKey } from "bopodev-contracts";
 import styles from "./workspace-client.module.scss";
 import {
@@ -179,6 +193,7 @@ interface AgentRow {
   interruptGraceSec?: number | null;
   runPolicyJson?: string | null;
   stateBlob?: string;
+  usedBudgetUsd?: number;
 }
 
 type RuntimeDefaultsProviderType =
@@ -695,6 +710,102 @@ function CostDailyBreakdownChartCard({
         ) : (
           <div className={styles.emptyStateContainer}>{emptyLabel}</div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AgentBudgetSpendCard({
+  agentName,
+  chartMonthLabel,
+  monthlyBudgetUsd,
+  usedBudgetUsd,
+  ledgerUsdMonth,
+  daily
+}: {
+  agentName: string;
+  chartMonthLabel: string;
+  monthlyBudgetUsd: number;
+  usedBudgetUsd: number;
+  ledgerUsdMonth: number;
+  daily: CostDailyChartRow[];
+}) {
+  const gradientBaseId = useId().replace(/:/g, "");
+  const radialConfig = {
+    utilization: { label: "Budget used", color: "var(--chart-2)" }
+  } satisfies ChartConfig;
+  const barConfig = {
+    usd: { label: "Ledger spend (USD)", color: "var(--chart-1)" }
+  } satisfies ChartConfig;
+  const barGradientId = `abs-usd-${gradientBaseId}`;
+  const hasCap = monthlyBudgetUsd > 0;
+  const hasDailySpend = daily.some((row) => row.usd > 0);
+  const utilizationRawPct = hasCap ? (usedBudgetUsd / monthlyBudgetUsd) * 100 : 0;
+  const utilizationRadial = hasCap ? Math.min(100, utilizationRawPct) : 0;
+  const utilizationLabel = hasCap ? `${Math.round(utilizationRawPct)}%` : "—";
+  const radialRow = [{ utilization: utilizationRadial }];
+
+  return (
+    <Card className={styles.costAgentBudgetCard}>
+      <CardHeader className={styles.costAgentBudgetCardHeader}>
+        <CardTitle className={styles.costAgentBudgetCardTitle}>{agentName}</CardTitle>
+        <CardDescription className={styles.costAgentBudgetCardDescription}>
+          Envelope · {formatUsdCost(usedBudgetUsd)} of {hasCap ? formatUsdCost(monthlyBudgetUsd) : "no cap"} · Ledger{" "}
+          {formatUsdCost(ledgerUsdMonth)} in {chartMonthLabel}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className={styles.costAgentBudgetCardContent}>
+        <div className={styles.costAgentBudgetBody}>
+          <div className={styles.costAgentBudgetRadialCol}>
+            <div className={styles.costAgentBudgetRadialMeta}>
+              <span className={styles.costAgentBudgetRadialFigure}>{utilizationLabel}</span>
+            </div>
+            <ChartContainer config={radialConfig} className={styles.costAgentBudgetRadialChart}>
+              <RadialBarChart
+                accessibilityLayer
+                data={radialRow}
+                innerRadius="58%"
+                outerRadius="100%"
+                startAngle={90}
+                endAngle={-270}
+                margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+              >
+                <PolarGrid gridType="circle" radialLines={false} stroke="none" className={styles.costAgentBudgetPolarGrid} />
+                <PolarAngleAxis type="number" domain={[0, 100]} tick={false} tickLine={false} axisLine={false} />
+                <RadialBar dataKey="utilization" cornerRadius={6} fill="var(--color-utilization)" background className={styles.costAgentBudgetRadialBar} />
+                <ChartTooltip content={<ChartTooltipContent hideLabel />} cursor={false} />
+              </RadialBarChart>
+            </ChartContainer>
+            {hasCap ? null : <p className={styles.costAgentBudgetRadialHint}>Set a monthly budget on the agent to track utilization.</p>}
+          </div>
+          <div className={styles.costAgentBudgetSpendCol}>
+            {hasDailySpend ? (
+              <ChartContainer config={barConfig} className={styles.costAgentBudgetBarChart}>
+                <BarChart accessibilityLayer data={daily} margin={{ top: 8, left: -8, right: -8, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id={barGradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="8%" stopColor="var(--color-usd)" stopOpacity={0.92} />
+                      <stop offset="94%" stopColor="var(--color-usd)" stopOpacity={0.52} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+                  <XAxis dataKey="dateLabel" tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} interval="preserveStartEnd" />
+                  <YAxis hide />
+                  <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={{ fill: "var(--muted)", opacity: 0.2 }} />
+                  <Bar
+                    dataKey="usd"
+                    fill={`url(#${barGradientId})`}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={12}
+                    minPointSize={2}
+                  />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <div className={styles.emptyStateContainer}>No ledger spend for this agent in this month.</div>
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1905,6 +2016,86 @@ export function WorkspaceClient({
       };
     });
   }, [costDailyTargetMonthKey, costEntries, includeCostAggregations]);
+  const agentCostBudgetBreakdown = useMemo(() => {
+    if (!includeCostAggregations || !costDailyTargetMonthKey) {
+      return [];
+    }
+    const match = costDailyTargetMonthKey.match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      return [];
+    }
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const rows: Array<{
+      agentId: string;
+      agentName: string;
+      monthlyBudgetUsd: number;
+      usedBudgetUsd: number;
+      ledgerUsdMonth: number;
+      daily: CostDailyChartRow[];
+    }> = [];
+    for (const agent of agents) {
+      const cap = agent.monthlyBudgetUsd ?? 0;
+      const used = agent.usedBudgetUsd ?? 0;
+      let ledgerUsdMonth = 0;
+      for (const entry of costEntries) {
+        if (entry.agentId !== agent.id) {
+          continue;
+        }
+        if (monthKeyFromDate(entry.createdAt) !== costDailyTargetMonthKey) {
+          continue;
+        }
+        ledgerUsdMonth += entry.usdCost;
+      }
+      if (cap <= 0 && used <= 0 && ledgerUsdMonth <= 0) {
+        continue;
+      }
+      const byDay = new Map<number, { usd: number; inputTokens: number; outputTokens: number }>();
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        byDay.set(day, { usd: 0, inputTokens: 0, outputTokens: 0 });
+      }
+      for (const entry of costEntries) {
+        if (entry.agentId !== agent.id) {
+          continue;
+        }
+        if (monthKeyFromDate(entry.createdAt) !== costDailyTargetMonthKey) {
+          continue;
+        }
+        const day = new Date(entry.createdAt).getDate();
+        const current = byDay.get(day);
+        if (!current) {
+          continue;
+        }
+        current.usd += entry.usdCost;
+        current.inputTokens += entry.tokenInput;
+        current.outputTokens += entry.tokenOutput;
+      }
+      const daily: CostDailyChartRow[] = [];
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const v = byDay.get(day)!;
+        const d = new Date(year, month - 1, day);
+        daily.push({
+          day,
+          label: String(day).padStart(2, "0"),
+          dateLabel: d.toLocaleString(undefined, { month: "short", day: "numeric" }),
+          usd: v.usd,
+          inputTokens: v.inputTokens,
+          outputTokens: v.outputTokens,
+          tokens: v.inputTokens + v.outputTokens
+        });
+      }
+      rows.push({
+        agentId: agent.id,
+        agentName: agent.name,
+        monthlyBudgetUsd: cap,
+        usedBudgetUsd: used,
+        ledgerUsdMonth,
+        daily
+      });
+    }
+    return rows.sort((a, b) => b.ledgerUsdMonth - a.ledgerUsdMonth || a.agentName.localeCompare(b.agentName));
+  }, [agents, costEntries, costDailyTargetMonthKey, includeCostAggregations]);
   const runDetailsByRunId = useMemo(() => {
     if (!isRunsNav) {
       return new Map<string, RunDetailsPayload>();
@@ -3835,7 +4026,15 @@ export function WorkspaceClient({
       {
         accessorKey: "createdAt",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Created" />,
-        cell: ({ row }) => <div className={styles.formatDurationContainer5}>{formatDateTime(row.original.createdAt)}</div>
+        cell: ({ row }) => (
+          <time
+            className={cn(styles.formatDurationContainer5, "tabular-nums")}
+            dateTime={row.original.createdAt}
+            title={formatDateTime(row.original.createdAt)}
+          >
+            {formatSmartDateTime(row.original.createdAt)}
+          </time>
+        )
       }
     ],
     [companyId]
@@ -5208,6 +5407,7 @@ export function WorkspaceClient({
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="by-provider">By provider</TabsTrigger>
                 <TabsTrigger value="by-model">By model</TabsTrigger>
+                <TabsTrigger value="by-agent">By agent</TabsTrigger>
               </TabsList>
               <TabsContent value="overview" className={styles.costTabsOverviewContent}>
             <div className="ui-stats">
@@ -5507,6 +5707,35 @@ export function WorkspaceClient({
                         totalUsd={row.totalUsd}
                         totalTokens={row.totalTokens}
                         emptyLabel="No usage for this model in this month."
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent value="by-agent" className={styles.costTabsByProviderContent}>
+                {activeCostMonth === "all" ? (
+                  <p className={styles.costProviderDailyAllTimeHint}>
+                    Daily charts use {providerDailyChartMonthLabel} — the same calendar month as the Overview &quot;Daily spend
+                    trend&quot; when &quot;All time&quot; is selected.
+                  </p>
+                ) : null}
+                {!costDailyTargetMonthKey ? (
+                  <div className={styles.emptyStateContainer}>No months with cost data yet.</div>
+                ) : agentCostBudgetBreakdown.length === 0 ? (
+                  <div className={styles.emptyStateContainer}>
+                    No agents with budget, usage, or ledger spend for {providerDailyChartMonthLabel}.
+                  </div>
+                ) : (
+                  <div className={styles.costProviderDailyGrid}>
+                    {agentCostBudgetBreakdown.map((row) => (
+                      <AgentBudgetSpendCard
+                        key={row.agentId}
+                        agentName={row.agentName}
+                        chartMonthLabel={providerDailyChartMonthLabel}
+                        monthlyBudgetUsd={row.monthlyBudgetUsd}
+                        usedBudgetUsd={row.usedBudgetUsd}
+                        ledgerUsdMonth={row.ledgerUsdMonth}
+                        daily={row.daily}
                       />
                     ))}
                   </div>

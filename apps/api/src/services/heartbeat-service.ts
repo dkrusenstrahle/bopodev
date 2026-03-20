@@ -23,6 +23,7 @@ import {
   agents,
   appendActivity,
   appendHeartbeatRunMessages,
+  auditEvents,
   companies,
   createApprovalRequest,
   goals,
@@ -49,7 +50,7 @@ import {
   resolveAgentFallbackWorkspace
 } from "../lib/workspace-policy";
 import type { RealtimeHub } from "../realtime/hub";
-import { createHeartbeatRunsRealtimeEvent } from "../realtime/heartbeat-runs";
+import { createHeartbeatRunsRealtimeEvent, loadHeartbeatRunsRealtimeSnapshot } from "../realtime/heartbeat-runs";
 import { publishAttentionSnapshot } from "../realtime/attention";
 import { publishOfficeOccupantForAgent } from "../realtime/office-space";
 import { appendProjectBudgetUsage, checkAgentBudget, checkProjectBudget } from "./budget-service";
@@ -713,6 +714,8 @@ export async function runHeartbeatForAgent(
 
   let issueIds: string[] = [];
   let claimedIssueIds: string[] = [];
+  /** After transcript flush: remove DB row + audit noise for idle heartbeats with no issues. */
+  let discardIdleNoWorkRunAfterFlush = false;
   let executionWorkItemsForBudget: Array<{ issueId: string; projectId: string }> = [];
   let state: AgentState & {
     runtime?: {
@@ -1716,6 +1719,11 @@ export async function runHeartbeatForAgent(
         }
       }
     });
+    discardIdleNoWorkRunAfterFlush =
+      issueIds.length === 0 &&
+      !isCommentOrderWake &&
+      (terminalPresentation.completionReason === "no_assigned_work" ||
+        (isIdleNoWork && heartbeatIdlePolicy === "skip_adapter" && persistedRunStatus === "completed"));
   } catch (error) {
     const classified = classifyHeartbeatError(error);
     executionSummary =
@@ -1951,6 +1959,17 @@ export async function runHeartbeatForAgent(
     }
   } finally {
     await transcriptWriteQueue;
+    if (discardIdleNoWorkRunAfterFlush) {
+      try {
+        await purgeIdleNoWorkHeartbeatRun(db, companyId, runId);
+        if (options?.realtimeHub) {
+          options.realtimeHub.publish(await loadHeartbeatRunsRealtimeSnapshot(db, companyId));
+        }
+      } catch (purgeError) {
+        // eslint-disable-next-line no-console
+        console.error("[heartbeat] failed to purge idle no-work run", runId, purgeError);
+      }
+    }
     unregisterActiveHeartbeatRun(runId);
     try {
       await releaseClaimedIssues(db, companyId, claimedIssueIds);
@@ -1982,6 +2001,15 @@ export async function runHeartbeatForAgent(
   }
 
   return runId;
+}
+
+async function purgeIdleNoWorkHeartbeatRun(db: BopoDb, companyId: string, runId: string) {
+  await db
+    .delete(auditEvents)
+    .where(
+      and(eq(auditEvents.companyId, companyId), eq(auditEvents.entityType, "heartbeat_run"), eq(auditEvents.entityId, runId))
+    );
+  await db.delete(heartbeatRuns).where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.id, runId)));
 }
 
 async function insertStartedRunAtomic(

@@ -243,6 +243,8 @@ type WorkspaceDataSection =
 
 export interface WorkspaceDataLoadOptions {
   include?: Partial<Record<WorkspaceDataSection, boolean>>;
+  /** Max rows from GET /observability/heartbeats (API caps at 500). */
+  heartbeatRunsLimit?: number;
 }
 
 async function loadIssues(companyId: string) {
@@ -265,9 +267,13 @@ async function loadAgents(companyId: string) {
   return parseApiData("agents", AgentSchema.array(), result.data);
 }
 
-async function loadHeartbeatRuns(companyId: string) {
-  const result = (await apiGet("/observability/heartbeats", companyId)) as ApiResult<WorkspaceData["heartbeatRuns"]>;
-  return result.data;
+async function loadHeartbeatRuns(companyId: string, limit?: number) {
+  const query =
+    typeof limit === "number" && Number.isFinite(limit)
+      ? `?limit=${Math.min(500, Math.max(1, Math.floor(limit)))}`
+      : "";
+  const result = (await apiGet(`/observability/heartbeats${query}`, companyId)) as ApiResult<WorkspaceData["heartbeatRuns"]>;
+  return Array.isArray(result.data) ? result.data : [];
 }
 
 export async function loadHeartbeatRunDetail(companyId: string, runId: string) {
@@ -376,6 +382,7 @@ export async function loadWorkspaceData(
   requestedCompanyId?: string | null,
   options: WorkspaceDataLoadOptions = {}
 ): Promise<WorkspaceData> {
+  const heartbeatRunsLimit = options.heartbeatRunsLimit;
   const include = {
     issues: true,
     agents: true,
@@ -431,7 +438,7 @@ export async function loadWorkspaceData(
     [
       include.issues ? loadIssues(companyId) : Promise.resolve([]),
       include.agents ? loadAgents(companyId) : Promise.resolve([]),
-      include.heartbeatRuns ? loadHeartbeatRuns(companyId) : Promise.resolve([]),
+      include.heartbeatRuns ? loadHeartbeatRuns(companyId, heartbeatRunsLimit) : Promise.resolve([]),
       include.goals ? loadGoals(companyId) : Promise.resolve([]),
       include.approvals ? loadApprovals(companyId) : Promise.resolve([]),
       include.governanceInbox ? loadGovernanceInbox(companyId) : Promise.resolve([]),

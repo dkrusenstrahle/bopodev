@@ -173,7 +173,10 @@ export function RunDetailPageClient({
     ? { pathname: `/agents/${scopedAgentId}`, query: { companyId } }
     : { pathname: "/runs", query: { companyId } };
   const backLabel = scopedAgentId ? "Back to agent" : "Back to runs";
-  const visibleRecentRuns = useMemo(() => recentRuns.filter((entry) => !isSkippedRun(entry)), [recentRuns]);
+  const visibleRecentRuns = useMemo(
+    () => recentRuns.filter((entry) => entry.id === run.id || !isSkippedRun(entry)),
+    [recentRuns, run.id]
+  );
   const sidebarRecentRuns = useMemo(() => visibleRecentRuns.slice(0, 20), [visibleRecentRuns]);
 
   const transcriptScrollRef = useRef<HTMLDivElement>(null);

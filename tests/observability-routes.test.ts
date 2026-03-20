@@ -242,7 +242,7 @@ describe("observability routes", { timeout: 30_000 }, () => {
     expect(memoryFileResponse.body.data.content).toContain(runId);
   });
 
-  it("classifies no-assigned-work runs with a structured runType", async () => {
+  it("drops idle no-assigned-work runs from heartbeat_runs after completion", async () => {
     const agent = await createAgent(db, {
       companyId,
       role: "Worker",
@@ -261,8 +261,10 @@ describe("observability routes", { timeout: 30_000 }, () => {
     const heartbeatsResponse = await request(app).get("/observability/heartbeats").set("x-company-id", companyId);
     expect(heartbeatsResponse.status).toBe(200);
     const runRow = heartbeatsResponse.body.data.find((row: { id: string }) => row.id === runId);
-    expect(runRow).toBeTruthy();
-    expect(runRow.runType).toBe("no_assigned_work");
+    expect(runRow).toBeUndefined();
+
+    const runsInDb = await listHeartbeatRuns(db, companyId);
+    expect(runsInDb.some((row) => row.id === runId)).toBe(false);
   });
 
   it("classifies adapter-prefixed no-assigned-work messages as no_assigned_work", async () => {

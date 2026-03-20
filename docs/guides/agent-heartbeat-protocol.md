@@ -61,6 +61,8 @@ When there are **no assigned work items** (and the run is not a comment-order wa
 - `skip_adapter` — skip invoking the LLM adapter; the run completes with a short summary.
 - `micro_prompt` — use a minimal prompt and still require the standard final JSON object.
 
+For **idle** heartbeats with **no assigned issues** (excluding comment-order wakes), completed runs that are classified as **no assigned work**—including the `skip_adapter` path—are **removed from `heartbeat_runs` after completion** (and their `heartbeat_run` audit rows), so schedulers do not fill the database with empty runs. Cost rows keep their numeric totals with `run_id` cleared.
+
 **Default:** `full` — same as today’s normal behavior (always invoke the adapter with the standard prompt shape). This is **idle policy**, not prompt mode. See the [configuration reference](../developer/configuration-reference.md) for `BOPODEV_HEARTBEAT_IDLE_POLICY`.
 
 ## Final output contract

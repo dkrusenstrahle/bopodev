@@ -7,7 +7,7 @@ export default async function RunsPage({
   searchParams: Promise<{ companyId?: string }>;
 }) {
   const { companyId } = await searchParams;
-  const workspaceData = await loadWorkspaceData(companyId);
+  const workspaceData = await loadWorkspaceData(companyId, { heartbeatRunsLimit: 500 });
 
   return (
     <RunsPageClient

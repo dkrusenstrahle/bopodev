@@ -1159,6 +1159,16 @@ export const AuditEventSchema = z.object({
   createdAt: z.string()
 });
 
+export const HeartbeatRunTypeSchema = z.enum([
+  "work",
+  "no_assigned_work",
+  "budget_skip",
+  "overlap_skip",
+  "other_skip",
+  "failed",
+  "running"
+]);
+
 export const HeartbeatRunSchema = z.object({
   id: EntityIdSchema,
   companyId: EntityIdSchema,
@@ -1167,7 +1177,8 @@ export const HeartbeatRunSchema = z.object({
   publicStatus: z.enum(["started", "completed", "failed"]).optional(),
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
-  message: z.string().optional()
+  message: z.string().optional(),
+  runType: HeartbeatRunTypeSchema.optional()
 });
 
 export const HeartbeatRunMessageSchema = z.object({

@@ -3,11 +3,13 @@ import { RunDetailPageClient } from "@/components/run-detail-page-client";
 import {
   loadHeartbeatRunDetail,
   loadHeartbeatRunMessages,
-  loadWorkspaceData
+  loadWorkspaceData,
+  type HeartbeatRunDetailData,
+  type HeartbeatRunMessageRow,
+  type WorkspaceData
 } from "@/lib/workspace-data";
 import { isNoAssignedWorkRun } from "@/lib/workspace-logic";
 import { ApiError } from "@/lib/api";
-import type { HeartbeatRunMessageRow } from "@/lib/workspace-data";
 
 export default async function RunDetailPage({
   params,
@@ -19,6 +21,7 @@ export default async function RunDetailPage({
   const { runId } = await params;
   const { companyId, agentId } = await searchParams;
   const workspaceData = await loadWorkspaceData(companyId, {
+    heartbeatRunsLimit: 500,
     include: {
       issues: false,
       goals: false,
@@ -43,10 +46,11 @@ export default async function RunDetailPage({
     const fallbackMessages =
       transcript.items.length === 0 ? extractFallbackMessagesFromTrace(runDetail, workspaceData.companyId) : [];
     const initialMessages = transcript.items.length > 0 ? transcript.items : fallbackMessages;
-    const recentRuns = workspaceData.heartbeatRuns
-      .filter((entry) => !isNoAssignedWorkRun(entry))
-      .filter((entry) => (agentId ? entry.agentId === agentId : true))
-      .slice(0, 25);
+    const recentRuns = buildRecentRunsForRunDetailSidebar({
+      heartbeatRuns: workspaceData.heartbeatRuns,
+      runDetail,
+      scopedAgentId: agentId ?? null
+    });
     return (
       <RunDetailPageClient
         companyId={workspaceData.companyId}
@@ -63,6 +67,40 @@ export default async function RunDetailPage({
     }
     throw error;
   }
+}
+
+type RecentRunSidebarRow = WorkspaceData["heartbeatRuns"][number];
+
+function runDetailRunToSidebarRow(run: HeartbeatRunDetailData["run"]): RecentRunSidebarRow {
+  const runType =
+    run.runType ??
+    (run.status === "started" ? "running" : run.status === "skipped" ? "other_skip" : "work");
+  return {
+    id: run.id,
+    agentId: run.agentId,
+    status: run.status,
+    publicStatus: run.publicStatus,
+    runType,
+    message: run.message ?? null,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt ?? null
+  };
+}
+
+function buildRecentRunsForRunDetailSidebar(input: {
+  heartbeatRuns: WorkspaceData["heartbeatRuns"];
+  runDetail: HeartbeatRunDetailData;
+  scopedAgentId: string | null;
+}): RecentRunSidebarRow[] {
+  const filtered = input.heartbeatRuns
+    .filter((entry) => !isNoAssignedWorkRun(entry))
+    .filter((entry) => (input.scopedAgentId ? entry.agentId === input.scopedAgentId : true));
+  const current = runDetailRunToSidebarRow(input.runDetail.run);
+  const byId = new Map<string, RecentRunSidebarRow>(filtered.map((entry) => [entry.id, entry]));
+  byId.set(current.id, current);
+  return [...byId.values()]
+    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+    .slice(0, 25);
 }
 
 function extractFallbackMessagesFromTrace(

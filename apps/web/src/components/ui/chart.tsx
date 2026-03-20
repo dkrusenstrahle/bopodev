@@ -60,7 +60,7 @@ const ChartContainer = React.forwardRef<
         data-slot="chart"
         data-chart={chartId}
         ref={ref}
-        className={cn("flex w-full justify-center text-base", className)}
+        className={cn("block w-full min-w-0 text-base", className)}
         style={{ ...chartStyle, ...style } as React.CSSProperties}
         {...props}
       >

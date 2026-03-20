@@ -897,7 +897,7 @@ body {
 }
 
 .ui-tabs-list {
-  @apply inline-flex h-12 items-center justify-start rounded-lg border bg-muted/30 px-2 py-1 text-muted-foreground;
+  @apply inline-flex h-12 items-center justify-start rounded-lg border bg-muted/30 px-2 py-1 w-auto mb-6 text-muted-foreground;
 }
 
 .ui-tabs-trigger {

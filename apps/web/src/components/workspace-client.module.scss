@@ -163,7 +163,75 @@
 
 
 .costLedgerChartContainer {
-  @apply h-52 w-full;
+  @apply h-52 w-full min-w-0 max-w-full;
+}
+
+.costProviderDailyChartContainer {
+  @apply h-64 w-full min-w-0 max-w-full;
+}
+
+.costProviderDailyGrid {
+  @apply grid w-full max-w-full grid-cols-1 gap-6;
+}
+
+.costTabsRoot {
+  @apply w-full min-w-0 max-w-none;
+}
+
+.costTabsOverviewContent {
+  @apply flex flex-col gap-6;
+}
+
+.costTabsByProviderContent {
+  @apply flex w-full max-w-full flex-col gap-6;
+}
+
+.costProviderDailyAllTimeHint {
+  @apply text-base text-muted-foreground;
+}
+
+.costProviderDailyCard {
+  @apply w-full min-w-0 max-w-none;
+}
+
+.costProviderDailyCardHeader {
+  @apply border-b pb-4;
+}
+
+.costProviderDailyCardTitle {
+  @apply text-base font-semibold leading-none;
+}
+
+.costProviderDailyCardAction {
+  @apply shrink-0;
+}
+
+.costProviderDailyMetricGroup {
+  @apply inline-flex shrink-0 rounded-md border border-border bg-muted/30 p-px;
+}
+
+.costProviderDailyMetricButton {
+  @apply min-w-max flex flex-col items-stretch gap-1 rounded-sm px-2 py-1 text-left text-sidebar-foreground transition-colors outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background;
+}
+
+.costProviderDailyMetricButtonActive {
+  @apply bg-card shadow-sm;
+}
+
+.costProviderDailyMetricButtonInactive {
+  @apply bg-transparent hover:bg-background/60;
+}
+
+.costProviderDailyMetricLabel {
+  @apply text-xs font-medium leading-none text-muted-foreground;
+}
+
+.costProviderDailyMetricValue {
+  @apply text-sm font-mono font-semibold tabular-nums leading-none tracking-tight;
+}
+
+.costProviderDailyCardContent {
+  @apply w-full min-w-0 max-w-none pt-4;
 }
 
 .runFiltersCardContent {

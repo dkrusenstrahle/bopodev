@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -28,7 +28,7 @@ import type { SectionLabel } from "@/lib/sections";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
@@ -46,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ModelPricingRow, TemplateRow } from "@/components/workspace/types";
 
 const MODELS_PROVIDER_FALLBACKS = ["openai_api", "anthropic_api", "opencode", "gemini_api"] as const;
@@ -541,6 +542,143 @@ function formatUsdCost(value: number) {
     return `$${value.toFixed(6)}`;
   }
   return `$${value.toFixed(2)}`;
+}
+
+const KNOWN_COST_PROVIDER_TITLES: Record<string, string> = {
+  claude_code: "Claude Code",
+  codex: "Codex",
+  cursor: "Cursor",
+  opencode: "OpenCode",
+  gemini_cli: "Gemini CLI",
+  gemini_api: "Gemini API",
+  openai_api: "OpenAI API",
+  anthropic_api: "Anthropic API",
+  http: "HTTP",
+  shell: "Shell"
+};
+
+function formatCostProviderTitle(providerType: string) {
+  const known = KNOWN_COST_PROVIDER_TITLES[providerType];
+  if (known) {
+    return known;
+  }
+  return providerType
+    .split(/[_\s.-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(" ");
+}
+
+type ProviderDailyCostRow = {
+  day: number;
+  label: string;
+  dateLabel: string;
+  usd: number;
+  tokens: number;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+function ProviderDailyCostChartCard({
+  providerType,
+  chartMonthLabel,
+  daily,
+  totalUsd,
+  totalTokens
+}: {
+  providerType: string;
+  chartMonthLabel: string;
+  daily: ProviderDailyCostRow[];
+  totalUsd: number;
+  totalTokens: number;
+}) {
+  const [metric, setMetric] = useState<"usd" | "tokens">("usd");
+  const gradientBaseId = useId().replace(/:/g, "");
+  const chartConfig = {
+    usd: { label: "Spend (USD)", color: "var(--chart-2)" },
+    tokens: { label: "Tokens", color: "var(--chart-4)" }
+  } satisfies ChartConfig;
+  const usdGradientId = `pd-usd-${gradientBaseId}`;
+  const tokensGradientId = `pd-tok-${gradientBaseId}`;
+  const hasAnyActivity = daily.some((row) => row.usd > 0 || row.tokens > 0);
+
+  return (
+    <Card className={styles.costProviderDailyCard}>
+      <CardHeader className={styles.costProviderDailyCardHeader}>
+        <CardTitle className={styles.costProviderDailyCardTitle}>{formatCostProviderTitle(providerType)}</CardTitle>
+        <CardDescription>Day-by-day usage for {chartMonthLabel}.</CardDescription>
+        <CardAction className={styles.costProviderDailyCardAction}>
+          <div role="group" aria-label="Chart unit" className={styles.costProviderDailyMetricGroup}>
+            <button
+              type="button"
+              className={cn(
+                styles.costProviderDailyMetricButton,
+                metric === "usd" ? styles.costProviderDailyMetricButtonActive : styles.costProviderDailyMetricButtonInactive
+              )}
+              aria-pressed={metric === "usd"}
+              onClick={() => setMetric("usd")}
+            >
+              <span className={styles.costProviderDailyMetricLabel}>USD</span>
+              <span className={styles.costProviderDailyMetricValue}>{formatUsdCost(totalUsd)}</span>
+            </button>
+            <button
+              type="button"
+              className={cn(
+                styles.costProviderDailyMetricButton,
+                metric === "tokens" ? styles.costProviderDailyMetricButtonActive : styles.costProviderDailyMetricButtonInactive
+              )}
+              aria-pressed={metric === "tokens"}
+              onClick={() => setMetric("tokens")}
+            >
+              <span className={styles.costProviderDailyMetricLabel}>Tokens</span>
+              <span className={styles.costProviderDailyMetricValue}>{totalTokens.toLocaleString()}</span>
+            </button>
+          </div>
+        </CardAction>
+      </CardHeader>
+      <CardContent className={styles.costProviderDailyCardContent}>
+        {hasAnyActivity ? (
+          <ChartContainer config={chartConfig} className={styles.costProviderDailyChartContainer}>
+            <BarChart accessibilityLayer data={daily} margin={{ top: 8, left: -12, right: -12, bottom: 4 }}>
+              <defs>
+                <linearGradient id={usdGradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="4%" stopColor="var(--color-usd)" stopOpacity={0.95} />
+                  <stop offset="96%" stopColor="var(--color-usd)" stopOpacity={0.55} />
+                </linearGradient>
+                <linearGradient id={tokensGradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="4%" stopColor="var(--color-tokens)" stopOpacity={0.95} />
+                  <stop offset="96%" stopColor="var(--color-tokens)" stopOpacity={0.55} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} strokeDasharray="4 4" strokeOpacity={0.3} />
+              <XAxis
+                dataKey="dateLabel"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={28}
+                interval="preserveStartEnd"
+              />
+              <YAxis hide />
+              <ChartTooltip
+                content={<ChartTooltipContent indicator="line" />}
+                cursor={{ fill: "var(--muted)", opacity: 0.2 }}
+              />
+              <Bar
+                dataKey={metric}
+                fill={metric === "usd" ? `url(#${usdGradientId})` : `url(#${tokensGradientId})`}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={12}
+                minPointSize={2}
+              />
+            </BarChart>
+          </ChartContainer>
+        ) : (
+          <div className={styles.emptyStateContainer}>No usage for this provider in this month.</div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function formatDate(value: string | null) {
@@ -1600,6 +1738,87 @@ export function WorkspaceClient({
   } satisfies ChartConfig;
   const hasCostTokenMixData = selectedMonthChartData.some((entry) => entry.inputTokens > 0 || entry.outputTokens > 0);
   const hasMonthlySpendData = monthlyCostChartData.some((entry) => entry.usd > 0);
+  const costDailyTargetMonthKey = useMemo(() => {
+    if (!includeCostAggregations) {
+      return null;
+    }
+    if (activeCostMonth === "all") {
+      return costMonthOptions[0] ?? null;
+    }
+    return costMonthOptions.includes(activeCostMonth) ? activeCostMonth : null;
+  }, [activeCostMonth, costMonthOptions, includeCostAggregations]);
+  const providerDailyChartMonthLabel = useMemo(() => {
+    if (!costDailyTargetMonthKey) {
+      return selectedMonthLabel;
+    }
+    return formatMonthLabel(costDailyTargetMonthKey);
+  }, [costDailyTargetMonthKey, selectedMonthLabel]);
+  const providerDailyCostBreakdown = useMemo(() => {
+    if (!includeCostAggregations || !costDailyTargetMonthKey) {
+      return [];
+    }
+    const match = costDailyTargetMonthKey.match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      return [];
+    }
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const totals = new Map<string, { usd: number; tokens: number }>();
+    for (const entry of costEntries) {
+      if (monthKeyFromDate(entry.createdAt) !== costDailyTargetMonthKey) {
+        continue;
+      }
+      const t = totals.get(entry.providerType) ?? { usd: 0, tokens: 0 };
+      t.usd += entry.usdCost;
+      t.tokens += entry.tokenInput + entry.tokenOutput;
+      totals.set(entry.providerType, t);
+    }
+    const providers = Array.from(totals.entries()).sort((a, b) => b[1].usd - a[1].usd || a[0].localeCompare(b[0]));
+    return providers.map(([providerType]) => {
+      const byDay = new Map<number, { usd: number; inputTokens: number; outputTokens: number }>();
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        byDay.set(day, { usd: 0, inputTokens: 0, outputTokens: 0 });
+      }
+      for (const entry of costEntries) {
+        if (monthKeyFromDate(entry.createdAt) !== costDailyTargetMonthKey) {
+          continue;
+        }
+        if (entry.providerType !== providerType) {
+          continue;
+        }
+        const day = new Date(entry.createdAt).getDate();
+        const current = byDay.get(day);
+        if (!current) {
+          continue;
+        }
+        current.usd += entry.usdCost;
+        current.inputTokens += entry.tokenInput;
+        current.outputTokens += entry.tokenOutput;
+      }
+      const agg = totals.get(providerType)!;
+      const daily: ProviderDailyCostRow[] = [];
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const v = byDay.get(day)!;
+        const d = new Date(year, month - 1, day);
+        daily.push({
+          day,
+          label: String(day).padStart(2, "0"),
+          dateLabel: d.toLocaleString(undefined, { month: "short", day: "numeric" }),
+          usd: v.usd,
+          inputTokens: v.inputTokens,
+          outputTokens: v.outputTokens,
+          tokens: v.inputTokens + v.outputTokens
+        });
+      }
+      return {
+        providerType,
+        daily,
+        totalUsd: agg.usd,
+        totalTokens: agg.tokens
+      };
+    });
+  }, [costDailyTargetMonthKey, costEntries, includeCostAggregations]);
   const runDetailsByRunId = useMemo(() => {
     if (!isRunsNav) {
       return new Map<string, RunDetailsPayload>();
@@ -4898,6 +5117,12 @@ export function WorkspaceClient({
                 </Select>
               }
             />
+            <Tabs defaultValue="overview" className={styles.costTabsRoot}>
+              <TabsList>
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="by-provider">By provider</TabsTrigger>
+              </TabsList>
+              <TabsContent value="overview" className={styles.costTabsOverviewContent}>
             <div className="ui-stats">
               <MetricCard
                 label="Today · Input Tokens"
@@ -5141,6 +5366,36 @@ export function WorkspaceClient({
                 </div>
               }
             />
+              </TabsContent>
+              <TabsContent value="by-provider" className={styles.costTabsByProviderContent}>
+                {activeCostMonth === "all" ? (
+                  <p className={styles.costProviderDailyAllTimeHint}>
+                    Daily charts use {providerDailyChartMonthLabel} — the same calendar month as the Overview &quot;Daily spend
+                    trend&quot; when &quot;All time&quot; is selected.
+                  </p>
+                ) : null}
+                {!costDailyTargetMonthKey ? (
+                  <div className={styles.emptyStateContainer}>No months with cost data yet.</div>
+                ) : providerDailyCostBreakdown.length === 0 ? (
+                  <div className={styles.emptyStateContainer}>
+                    No spend was recorded for {providerDailyChartMonthLabel}, or all amounts are zero.
+                  </div>
+                ) : (
+                  <div className={styles.costProviderDailyGrid}>
+                    {providerDailyCostBreakdown.map((row) => (
+                      <ProviderDailyCostChartCard
+                        key={row.providerType}
+                        providerType={row.providerType}
+                        chartMonthLabel={providerDailyChartMonthLabel}
+                        daily={row.daily}
+                        totalUsd={row.totalUsd}
+                        totalTokens={row.totalTokens}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </>
         );
       case "Settings":

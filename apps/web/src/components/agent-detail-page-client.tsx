@@ -928,13 +928,6 @@ export function AgentDetailPageClient({
           />
         </div>
         <div className={styles.agentHeaderContainer4}>
-          <Button
-            size="sm"
-            onClick={() => void runHeartbeat()}
-            disabled={invokeDisabledReason !== null || isActionPending(invokeActionKey)}
-          >
-            {isActionPending(invokeActionKey) ? "Running..." : "Invoke"}
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" aria-label="Open more actions">
@@ -997,6 +990,13 @@ export function AgentDetailPageClient({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            size="sm"
+            onClick={() => void runHeartbeat()}
+            disabled={invokeDisabledReason !== null || isActionPending(invokeActionKey)}
+          >
+            {isActionPending(invokeActionKey) ? "Running..." : "Invoke"}
+          </Button>
         </div>
       </div>
       {invokeDisabledReason ? (

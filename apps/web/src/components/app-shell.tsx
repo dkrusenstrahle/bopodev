@@ -29,7 +29,6 @@ import type { SectionLabel, SectionSlug } from "@/lib/sections";
 import {
   GovernanceNotificationCenter
 } from "@/components/notifications/governance-notification-center";
-import { ThemePaletteSelect } from "@/components/theme-palette-select";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -184,9 +183,6 @@ export function AppShell({
         <ScrollArea className="ui-shell-secondary-scroll min-h-0 flex-1">
           <div className="ui-shell-sidebar-scroll-content">{renderSettingsLinks(false)}</div>
         </ScrollArea>
-        <div className="ui-shell-stack-sm pt-4">
-          <ThemePaletteSelect />
-        </div>
       </div>
     ) : undefined);
 
@@ -432,7 +428,6 @@ export function AppShell({
                     </div>
                   </ScrollArea>
                   <div className="ui-shell-mobile-nav-footer ui-mobile-safe-bottom">
-                    {isSettingsRoute ? <ThemePaletteSelect /> : null}
                     <ThemeToggle />
                   </div>
                 </SheetContent>

@@ -259,7 +259,7 @@ export function RunDetailPageClient({
               title={`Run ${run.id}`}
               description="Realtime status and summary for this run."
               actions={
-                <Button asChild variant="outline" size="sm">
+                <Button asChild variant="default" size="sm">
                   <Link href={backHref}>{backLabel}</Link>
                 </Button>
               }

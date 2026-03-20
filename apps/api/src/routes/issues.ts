@@ -4,7 +4,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import multer from "multer";
 import { z } from "zod";
-import { IssueSchema } from "bopodev-contracts";
+import { IssueDetailSchema, IssueSchema } from "bopodev-contracts";
 import {
   addIssueAttachment,
   addIssueComment,
@@ -15,6 +15,7 @@ import {
   deleteIssueAttachment,
   deleteIssueComment,
   deleteIssue,
+  getIssue,
   heartbeatRuns,
   getIssueAttachment,
   issues,
@@ -188,6 +189,20 @@ export function createIssuesRouter(ctx: AppContext) {
       rows.map((row) => toIssueResponse(row as unknown as Record<string, unknown>)),
       "issues.list"
     );
+  });
+
+  router.get("/:issueId", async (req, res) => {
+    const issueId = req.params.issueId;
+    const issueRow = await getIssue(ctx.db, req.companyId!, issueId);
+    if (!issueRow) {
+      return sendError(res, "Issue not found.", 404);
+    }
+    const base = toIssueResponse(issueRow as unknown as Record<string, unknown>);
+    const attachmentRows = await listIssueAttachments(ctx.db, req.companyId!, issueId);
+    const attachments = attachmentRows.map((row) =>
+      toIssueAttachmentResponse(row as unknown as Record<string, unknown>, issueId)
+    );
+    return sendOkValidated(res, IssueDetailSchema, { ...base, attachments }, "issues.detail");
   });
 
   router.post("/", async (req, res) => {

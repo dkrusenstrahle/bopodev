@@ -27,6 +27,20 @@ Reduce mean time to diagnose failures across API, runtime, and UI surfaces.
 4. Inspect latest `runs`, `trace-logs`, and governance inbox.
 5. Verify environment config did not regress.
 
+## API fails on startup: `RuntimeError: Aborted()` (PGlite / Drizzle)
+
+**Symptom:** Node crashes while running `CREATE TABLE` during `bootstrapDatabase`, with `cause: RuntimeError: Aborted()` from `@electric-sql/pglite` (WASM).
+
+**Likely cause:** Corrupted or locked PGlite data on disk, another process still holding the DB, incompatible Node/WASM edge case, or a bad `BOPO_DB_PATH`. **This is not caused by Codex CLI flags or heartbeat prompt mode** (those run only after the API has a working database).
+
+**Recovery (local dev):**
+
+1. Stop every `pnpm dev` / API / test process that might use the same instance.
+2. Note your data path: default is `~/.bopodev/instances/default/db/bopodev.db` unless `BOPO_DB_PATH` / `BOPO_INSTANCE_*` overrides it.
+3. **Back up** that path (file or directory, depending on PGlite version), then **delete** it so bootstrap can recreate an empty database.
+4. Restart the API. You will need to re-seed or onboard if you had no external backup.
+5. If it still aborts, try **Node 20 LTS** (some WASM builds are sensitive to very new Node versions) and run `pnpm install` cleanly.
+
 ## Symptom -> Likely Cause
 
 - **Heartbeat fails before execution**

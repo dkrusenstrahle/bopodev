@@ -37,6 +37,7 @@ import {
   getRegistryModelValuesForRuntimeProvider,
   type ModelRegistryRow
 } from "@/lib/model-registry-options";
+import { showThinkingEffortControlForProvider } from "@/lib/provider-runtime-ui";
 
 export function AgentRuntimeDefaultsCard({
   companyId,
@@ -112,6 +113,14 @@ export function AgentRuntimeDefaultsCard({
     setSaved(false);
   }, [defaults.providerType, defaults.runtimeModel, modelRegistryRows]);
 
+  useEffect(() => {
+    if (!showThinkingEffortControlForProvider(defaults.providerType)) {
+      setDefaults((current) =>
+        current.runtimeThinkingEffort === "auto" ? current : { ...current, runtimeThinkingEffort: "auto" }
+      );
+    }
+  }, [defaults.providerType]);
+
   function save() {
     writeAgentRuntimeDefaults(defaults);
     setSaved(true);
@@ -166,23 +175,25 @@ export function AgentRuntimeDefaultsCard({
                 </SelectContent>
               </Select>
             </Field>
-            <Field>
-              <FieldLabel>Thinking effort</FieldLabel>
-              <Select
-                value={defaults.runtimeThinkingEffort}
-                onValueChange={(value) => update("runtimeThinkingEffort", value as AgentRuntimeDefaults["runtimeThinkingEffort"])}
-              >
-                <SelectTrigger className={styles.runtimeDefaultsSelectTrigger}>
-                  <SelectValue placeholder="Select thinking effort" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">Auto</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
+            {showThinkingEffortControlForProvider(defaults.providerType) ? (
+              <Field>
+                <FieldLabel>Thinking effort</FieldLabel>
+                <Select
+                  value={defaults.runtimeThinkingEffort}
+                  onValueChange={(value) => update("runtimeThinkingEffort", value as AgentRuntimeDefaults["runtimeThinkingEffort"])}
+                >
+                  <SelectTrigger className={styles.runtimeDefaultsSelectTrigger}>
+                    <SelectValue placeholder="Select thinking effort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            ) : null}
 
             <Field>
               <FieldLabel htmlFor="defaults-budget">Monthly budget (USD)</FieldLabel>

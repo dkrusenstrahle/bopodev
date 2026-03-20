@@ -5655,12 +5655,6 @@ export function WorkspaceClient({
             />
               </TabsContent>
               <TabsContent value="by-provider" className={styles.costTabsByProviderContent}>
-                {activeCostMonth === "all" ? (
-                  <p className={styles.costProviderDailyAllTimeHint}>
-                    Daily charts use {providerDailyChartMonthLabel} — the same calendar month as the Overview &quot;Daily spend
-                    trend&quot; when &quot;All time&quot; is selected.
-                  </p>
-                ) : null}
                 {!costDailyTargetMonthKey ? (
                   <div className={styles.emptyStateContainer}>No months with cost data yet.</div>
                 ) : providerDailyCostBreakdown.length === 0 ? (

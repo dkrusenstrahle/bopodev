@@ -16,6 +16,7 @@ import {
   getRegistryModelValuesForRuntimeProvider,
   type ModelRegistryRow
 } from "@/lib/model-registry-options";
+import { showThinkingEffortControlForProvider } from "@/lib/provider-runtime-ui";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -520,6 +521,12 @@ export function CreateAgentModal({
   }, [providerType, allowWebSearch]);
 
   useEffect(() => {
+    if (!showThinkingEffortControlForProvider(providerType)) {
+      setRuntimeThinkingEffort("auto");
+    }
+  }, [providerType]);
+
+  useEffect(() => {
     const allowedValues = getRegistryModelValuesForRuntimeProvider(modelRegistryRows, providerType);
     if (runtimeModel && !allowedValues.includes(runtimeModel)) {
       const defaultId = getDefaultModelForProvider(providerType);
@@ -964,20 +971,22 @@ export function CreateAgentModal({
                     placeholder="codex"
                   />
                 </Field>
-                <Field>
-                  <FieldLabel>Thinking effort</FieldLabel>
-                  <Select value={runtimeThinkingEffort} onValueChange={(value) => setRuntimeThinkingEffort(value as "auto" | "low" | "medium" | "high")}>
-                    <SelectTrigger className={styles.createAgentModalSelectTrigger}>
-                      <SelectValue placeholder="Select thinking effort" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
+                {showThinkingEffortControlForProvider(providerType) ? (
+                  <Field>
+                    <FieldLabel>Thinking effort</FieldLabel>
+                    <Select value={runtimeThinkingEffort} onValueChange={(value) => setRuntimeThinkingEffort(value as "auto" | "low" | "medium" | "high")}>
+                      <SelectTrigger className={styles.createAgentModalSelectTrigger}>
+                        <SelectValue placeholder="Select thinking effort" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                ) : null}
                 <Field>
                   <FieldLabel htmlFor="agent-runtime-args">Extra args</FieldLabel>
                   <Input

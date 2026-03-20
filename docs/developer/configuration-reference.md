@@ -43,6 +43,7 @@ Give contributors and operators one reference for key environment variables and 
 | --- | --- | --- |
 | `NEXT_PUBLIC_DEFAULT_RUNTIME_CWD` | empty | UI fallback working directory for new agents. |
 | `BOPO_CODEX_COMMAND` | `codex` | Codex command override. |
+| `BOPO_CODEX_PASS_REASONING_EFFORT` | unset (off) | When `1`/`true`/`yes`, heartbeat passes `--reasoning-effort` to `codex exec` if the agent’s stored thinking effort is not `auto`. Leave unset on CLI versions that error with `unexpected argument '--reasoning-effort'`. The web UI hides **Thinking effort** for Codex while this is off, since the value would not be forwarded. |
 | `BOPO_OPENCODE_COMMAND` | `opencode` | OpenCode command override. |
 | `BOPO_SKIP_CODEX_PREFLIGHT` | `0` | Skip startup codex command health checks when `1`. |
 | `BOPO_SKIP_OPENCODE_PREFLIGHT` | `0` | Skip startup OpenCode command health checks when `1`. |
@@ -60,6 +61,9 @@ Give contributors and operators one reference for key environment variables and 
 | `BOPO_HEARTBEAT_SWEEP_MS` | `60000` | Scheduler interval for heartbeat sweeps. |
 | `BOPO_HEARTBEAT_STALE_RUN_MS` | `600000` | Recovery threshold for stale `started` runs. |
 | `BOPO_HEARTBEAT_EXECUTION_TIMEOUT_MS` | computed by service | Execution timeout fallback when runtime config omits explicit timeout. |
+| `BOPO_HEARTBEAT_PROMPT_MODE` | `full` | Heartbeat prompt size: `full` (default; inline issue bodies) or `compact` (omit bodies; hydrate via `GET /issues/:id`). |
+| `BOPO_HEARTBEAT_PROMPT_MEMORY_MAX_CHARS` | unset (`8000` per section when mode is `compact`) | Max characters per memory block (tacit notes, durable facts, daily notes) before truncation with an explicit marker. |
+| `BOPO_HEARTBEAT_IDLE_POLICY` | `full` | When no work items are assigned (non–comment-order runs): `full` = normal adapter prompt; `micro_prompt` = minimal prompt; `skip_adapter` = do not invoke the LLM adapter. |
 | `BOPO_ENABLE_GIT_WORKTREE_ISOLATION` | `0` | Enables `isolated + git_worktree` runtime resolution in heartbeat service. |
 | `BOPO_GIT_WORKTREE_TTL_MINUTES` | `240` | TTL for stale isolated worktree cleanup under strategy root dir. |
 | `BOPO_SCHEDULER_ROLE` | `auto` | Scheduler ownership: `auto`, `leader`, `follower`, `off`. |
@@ -91,6 +95,8 @@ Injected per run by heartbeat services:
 - `BOPODEV_REQUEST_HEADERS_JSON`
 - `BOPODEV_REQUEST_APPROVAL_DEFAULT`
 - `BOPODEV_CAN_HIRE_AGENTS`
+- `BOPODEV_HEARTBEAT_PROMPT_MODE` (echo of `BOPO_HEARTBEAT_PROMPT_MODE` for branching in scripts)
+- `BOPODEV_HEARTBEAT_IDLE_POLICY` (echo of `BOPO_HEARTBEAT_IDLE_POLICY`)
 
 These variables are required for control-plane aware skill execution and approval-safe delegation.
 

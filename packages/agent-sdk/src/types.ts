@@ -21,6 +21,8 @@ export interface AgentWorkItem {
     fileSizeBytes: number;
     relativePath: string;
     absolutePath: string;
+    /** API-relative path, e.g. `/issues/{issueId}/attachments/{id}/download` */
+    downloadPath?: string;
   }>;
 }
 
@@ -41,11 +43,20 @@ export interface AgentMemoryContext {
   dailyNotes: string[];
 }
 
+export type HeartbeatPromptMode = "full" | "compact";
+
 export interface HeartbeatContext {
   companyId: string;
   agentId: string;
   providerType: AgentProviderType;
   heartbeatRunId: string;
+  /** Controls how much issue/memory text is inlined in the heartbeat prompt. Default when omitted: full. */
+  promptMode?: HeartbeatPromptMode;
+  /**
+   * When true, emit a minimal idle prompt (no assigned work). Set by the API when
+   * `BOPO_HEARTBEAT_IDLE_POLICY=micro_prompt` and there are no work items.
+   */
+  idleMicroPrompt?: boolean;
   company: {
     name: string;
     mission?: string | null;

@@ -541,6 +541,15 @@ export async function listIssues(db: BopoDb, companyId: string, projectId?: stri
   return db.select().from(issues).where(where).orderBy(desc(issues.updatedAt));
 }
 
+export async function getIssue(db: BopoDb, companyId: string, issueId: string) {
+  const [row] = await db
+    .select()
+    .from(issues)
+    .where(and(eq(issues.companyId, companyId), eq(issues.id, issueId)))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function createIssue(
   db: BopoDb,
   input: {

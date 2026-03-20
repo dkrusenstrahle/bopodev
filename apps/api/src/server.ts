@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { config as loadDotenv } from "dotenv";
-import { bootstrapDatabase, listCompanies } from "bopodev-db";
+import { bootstrapDatabase, listCompanies, resolveDefaultDbPath } from "bopodev-db";
 import { checkRuntimeCommandHealth } from "bopodev-agent-sdk";
 import type { RuntimeCommandHealth } from "bopodev-agent-sdk";
 import { createApp } from "./app";
@@ -33,7 +33,25 @@ async function main() {
   validateDeploymentConfiguration(deploymentMode, allowedOrigins, allowedHostnames, publicBaseUrl);
   const dbPath = normalizeOptionalDbPath(process.env.BOPO_DB_PATH);
   const port = Number(process.env.PORT ?? 4020);
-  const { db } = await bootstrapDatabase(dbPath);
+  const effectiveDbPath = dbPath ?? resolveDefaultDbPath();
+  let db: Awaited<ReturnType<typeof bootstrapDatabase>>["db"];
+  try {
+    ({ db } = await bootstrapDatabase(dbPath));
+  } catch (error) {
+    if (isProbablyPgliteWasmAbort(error)) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[startup] PGlite (embedded Postgres) failed during database bootstrap. This is unrelated to Codex or heartbeat prompt settings."
+      );
+      // eslint-disable-next-line no-console
+      console.error(`[startup] Data path in use: ${effectiveDbPath}`);
+      // eslint-disable-next-line no-console
+      console.error(
+        "[startup] Recovery: stop all API/node processes using this DB, back up the path above, delete the file/dir, then restart (schema will be recreated). Or set BOPO_DB_PATH to a fresh path. See docs/operations/troubleshooting.md (PGlite)."
+      );
+    }
+    throw error;
+  }
   const existingCompanies = await listCompanies(db);
   await ensureBuiltinPluginsRegistered(
     db,
@@ -261,4 +279,16 @@ function loadApiEnv() {
 function normalizeOptionalDbPath(value: string | undefined) {
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function isProbablyPgliteWasmAbort(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error ? error.cause : undefined;
+  const causeMessage = cause instanceof Error ? cause.message : String(cause ?? "");
+  return (
+    message.includes("Aborted") ||
+    causeMessage.includes("Aborted") ||
+    message.includes("pglite") ||
+    causeMessage.includes("RuntimeError")
+  );
 }

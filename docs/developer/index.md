@@ -22,6 +22,7 @@ Use this section to understand internals, APIs, and extension points.
 
 ## Related
 
+- Agent heartbeat protocol (full vs compact prompts, cost notes, `GET /issues/:id` hydration): [`../guides/agent-heartbeat-protocol.md`](../guides/agent-heartbeat-protocol.md)
 - Setup guide: [`../getting-started-and-dev.md`](../getting-started-and-dev.md)
 - Adapter overview: [`../adapters/overview.md`](../adapters/overview.md)
 - Adapter authoring: [`../adapter-authoring.md`](../adapter-authoring.md)

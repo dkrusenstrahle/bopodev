@@ -15,7 +15,7 @@ Status values:
 | --- | --- | --- | --- | --- |
 | Company, project, and issue planning | `dashboard`, `projects`, `issues` | `README.md`, `docs/product/overview.md`, `docs/product/daily-workflows.md` | covered | Keep route map aligned with app sections. |
 | Goal alignment | `goals` | `docs/product/daily-workflows.md`, `docs/developer/domain-model.md` | covered | Product + data model coverage exists. |
-| Agent lifecycle and runs | `agents`, `runs`, `settings` | `docs/product/agents-and-runs.md`, `docs/developer/configuration-reference.md` | covered | Runtime/provider details documented. |
+| Agent lifecycle and runs | `agents`, `runs`, `settings` | `docs/product/agents-and-runs.md`, `docs/guides/agent-heartbeat-protocol.md`, `docs/developer/configuration-reference.md` | covered | Runtime/provider details; lean prompt + hydration guide. |
 | Governance and inbox operations | `governance`, `inbox` | `docs/product/governance-and-approvals.md`, `docs/developer/api-reference.md` | covered | Includes approval action catalog and outcomes. |
 | Office-space and realtime behavior | `office-space`, `inbox` | `docs/product/office-space-and-realtime.md` | needs-refresh | Realtime channel list changed recently; keep synced with server bootstrap channels. |
 | Observability, logs, costs, and artifacts | `runs`, `trace-logs`, `costs` | `docs/product/agents-and-runs.md`, `docs/developer/api-reference.md`, `docs/operations/troubleshooting.md` | needs-refresh | Ensure artifact download and memory endpoints stay current. |

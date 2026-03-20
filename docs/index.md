@@ -24,6 +24,10 @@ Treat [`docs-coverage-matrix.md`](./docs-coverage-matrix.md) as the canonical so
 - [`product/governance-and-approvals.md`](./product/governance-and-approvals.md)
 - [`product/office-space-and-realtime.md`](./product/office-space-and-realtime.md)
 
+## Guides
+
+- [`guides/agent-heartbeat-protocol.md`](./guides/agent-heartbeat-protocol.md): full vs compact heartbeat prompts, cost expectations, and `GET /issues/:id` hydration.
+
 ## Developer Docs
 
 - [`developer/index.md`](./developer/index.md)

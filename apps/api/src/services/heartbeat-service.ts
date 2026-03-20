@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { resolveAdapter } from "bopodev-agent-sdk";
-import type { AgentState, HeartbeatContext } from "bopodev-agent-sdk";
+import type { AdapterExecutionResult, AgentState, HeartbeatContext } from "bopodev-agent-sdk";
 import {
   type AgentFinalRunOutput,
   ControlPlaneHeadersJsonSchema,
@@ -892,6 +892,7 @@ export async function runHeartbeatForAgent(
       failClosed: false
     });
     const isCommentOrderWake = options?.wakeContext?.reason === "issue_comment_recipient";
+    const heartbeatIdlePolicy = resolveHeartbeatIdlePolicy();
     const workItems = isCommentOrderWake ? [] : await claimIssuesForAgent(db, companyId, agentId, runId);
     const wakeWorkItems = await loadWakeContextWorkItems(db, companyId, options?.wakeContext?.issueIds);
     const contextWorkItems = resolveExecutionWorkItems(workItems, wakeWorkItems, options?.wakeContext);
@@ -1005,6 +1006,10 @@ export async function runHeartbeatForAgent(
       ...context,
       memoryContext
     };
+    const isIdleNoWork = contextWorkItems.length === 0 && !isCommentOrderWake;
+    if (heartbeatIdlePolicy === "micro_prompt" && isIdleNoWork) {
+      context = { ...context, idleMicroPrompt: true };
+    }
     if (workspaceResolution.warnings.length > 0) {
       await appendAuditEvent(db, {
         companyId,
@@ -1170,19 +1175,34 @@ export async function runHeartbeatForAgent(
       };
     }
 
-    const execution = await executeAdapterWithWatchdog({
-      execute: (abortSignal) =>
-        adapter.execute({
-          ...context,
-          runtime: {
-            ...(context.runtime ?? {}),
-            abortSignal
+    const execution: AdapterExecutionResult =
+      heartbeatIdlePolicy === "skip_adapter" && isIdleNoWork
+        ? {
+            status: "ok",
+            summary:
+              "Idle heartbeat: no assigned work items; adapter not invoked (BOPO_HEARTBEAT_IDLE_POLICY=skip_adapter).",
+            tokenInput: 0,
+            tokenOutput: 0,
+            usdCost: 0,
+            usage: {
+              inputTokens: 0,
+              cachedInputTokens: 0,
+              outputTokens: 0
+            }
           }
-        }),
-      providerType: agent.providerType as HeartbeatProviderType,
-      runtime: workspaceResolution.runtime,
-      externalAbortSignal: activeRunAbort.signal
-    });
+        : await executeAdapterWithWatchdog({
+            execute: (abortSignal) =>
+              adapter.execute({
+                ...context,
+                runtime: {
+                  ...(context.runtime ?? {}),
+                  abortSignal
+                }
+              }),
+            providerType: agent.providerType as HeartbeatProviderType,
+            runtime: workspaceResolution.runtime,
+            externalAbortSignal: activeRunAbort.signal
+          });
     const usageLimitHint = execution.dispositionHint?.kind === "provider_usage_limited" ? execution.dispositionHint : null;
     if (usageLimitHint) {
       providerUsageLimitDisposition = {
@@ -2357,6 +2377,7 @@ async function buildHeartbeatContext(
       fileSizeBytes: number;
       relativePath: string;
       absolutePath: string;
+      downloadPath: string;
     }>
   >();
   for (const row of attachmentRows) {
@@ -2372,7 +2393,8 @@ async function buildHeartbeatContext(
       mimeType: row.mimeType,
       fileSizeBytes: row.fileSizeBytes,
       relativePath: row.relativePath,
-      absolutePath
+      absolutePath,
+      downloadPath: `/issues/${row.issueId}/attachments/${row.id}/download`
     });
     attachmentsByIssue.set(row.issueId, existing);
   }
@@ -2400,12 +2422,14 @@ async function buildHeartbeatContext(
     .filter((goal) => goal.status === "active" && goal.level === "agent")
     .map((goal) => goal.title);
   const isCommentOrderWake = input.wakeContext?.reason === "issue_comment_recipient";
+  const promptMode = resolveHeartbeatPromptMode();
 
   return {
     companyId,
     agentId: input.agentId,
     providerType: input.providerType,
     heartbeatRunId: input.heartbeatRunId,
+    promptMode,
     company: {
       name: company?.name ?? "Unknown company",
       mission: company?.mission ?? null
@@ -4291,6 +4315,24 @@ function clearResumeState(
   };
 }
 
+function resolveHeartbeatPromptMode(): "full" | "compact" {
+  const raw = process.env.BOPO_HEARTBEAT_PROMPT_MODE?.trim().toLowerCase();
+  return raw === "compact" ? "compact" : "full";
+}
+
+type HeartbeatIdlePolicy = "full" | "skip_adapter" | "micro_prompt";
+
+function resolveHeartbeatIdlePolicy(): HeartbeatIdlePolicy {
+  const raw = process.env.BOPO_HEARTBEAT_IDLE_POLICY?.trim().toLowerCase();
+  if (raw === "skip_adapter") {
+    return "skip_adapter";
+  }
+  if (raw === "micro_prompt") {
+    return "micro_prompt";
+  }
+  return "full";
+}
+
 function resolveControlPlaneEnv(runtimeEnv: Record<string, string>, suffix: string) {
   const next = runtimeEnv[`BOPODEV_${suffix}`];
   return hasText(next) ? (next as string) : "";
@@ -4323,6 +4365,8 @@ function buildHeartbeatRuntimeEnv(input: {
     BOPODEV_AGENT_ID: input.agentId,
     BOPODEV_COMPANY_ID: input.companyId,
     BOPODEV_RUN_ID: input.heartbeatRunId,
+    BOPODEV_HEARTBEAT_PROMPT_MODE: resolveHeartbeatPromptMode(),
+    BOPODEV_HEARTBEAT_IDLE_POLICY: resolveHeartbeatIdlePolicy(),
     BOPODEV_FORCE_MANAGED_CODEX_HOME: "false",
     BOPODEV_API_BASE_URL: apiBaseUrl,
     BOPODEV_API_URL: apiBaseUrl,

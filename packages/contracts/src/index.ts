@@ -137,6 +137,15 @@ export const IssueAttachmentSchema = z.object({
 });
 export type IssueAttachment = z.infer<typeof IssueAttachmentSchema>;
 
+/** Single-issue GET: core issue fields plus attachment metadata and API download paths. */
+export const IssueAttachmentWithDownloadSchema = IssueAttachmentSchema.extend({
+  downloadPath: z.string().min(1)
+});
+export const IssueDetailSchema = IssueSchema.extend({
+  attachments: z.array(IssueAttachmentWithDownloadSchema)
+});
+export type IssueDetail = z.infer<typeof IssueDetailSchema>;
+
 export const IssueCommentRecipientSchema = z.object({
   recipientType: z.enum(["agent", "board", "member"]),
   recipientId: z.string().nullable().optional(),

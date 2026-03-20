@@ -23,6 +23,7 @@ import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { parseRuntimeFromAgentColumns } from "@/lib/agent-detail-logic";
 import { getModelOptionsForProvider, heartbeatCronToIntervalSec } from "@/lib/agent-runtime-options";
 import { getDefaultModelForProvider, type RuntimeProviderType } from "@/lib/model-registry-options";
+import { showThinkingEffortControlForProvider } from "@/lib/provider-runtime-ui";
 import { formatSmartDateTime } from "@/lib/smart-date";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
 import { isSkippedRun } from "@/lib/workspace-logic";
@@ -863,11 +864,17 @@ export function AgentDetailPageClient({
     }
     setSelectedProviderType(nextProvider);
     setSelectedModelId(nextProviderModelId);
+    if (nextProvider === "codex") {
+      setSelectedThinkingEffort("auto");
+    }
     try {
       await updateSidebarSettings(
         {
           providerType: nextProvider,
-          runtimeConfig: { runtimeModel: nextProviderModelId }
+          runtimeConfig: {
+            runtimeModel: nextProviderModelId,
+            ...(nextProvider === "codex" ? { runtimeThinkingEffort: "auto" as const } : {})
+          }
         },
         `agent:${agent.id}:provider`
       );
@@ -1074,24 +1081,26 @@ export function AgentDetailPageClient({
             </Select>
           </Field>
 
-          <Field className={styles.agentSidebarField}>
-            <FieldLabel>Thinking effort</FieldLabel>
-            <Select
-              value={selectedThinkingEffort}
-              onValueChange={(value) => void handleThinkingEffortChange(value as "auto" | "low" | "medium" | "high")}
-              disabled={isActionPending(`agent:${agent.id}:runtime-thinking-effort`) || agent.status === "terminated"}
-            >
-              <SelectTrigger className={styles.agentSidebarSelectTrigger}>
-                <SelectValue placeholder="Select thinking effort" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
+          {showThinkingEffortControlForProvider(selectedProviderType) ? (
+            <Field className={styles.agentSidebarField}>
+              <FieldLabel>Thinking effort</FieldLabel>
+              <Select
+                value={selectedThinkingEffort}
+                onValueChange={(value) => void handleThinkingEffortChange(value as "auto" | "low" | "medium" | "high")}
+                disabled={isActionPending(`agent:${agent.id}:runtime-thinking-effort`) || agent.status === "terminated"}
+              >
+                <SelectTrigger className={styles.agentSidebarSelectTrigger}>
+                  <SelectValue placeholder="Select thinking effort" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
 
           <Field className={styles.agentSidebarField}>
             <FieldLabel>Reports to</FieldLabel>

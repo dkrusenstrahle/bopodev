@@ -8,7 +8,8 @@ import type {
   AgentAdapter,
   AgentProviderType,
   AgentRuntimeConfig,
-  HeartbeatContext
+  HeartbeatContext,
+  HeartbeatPromptMode
 } from "./types";
 import { ExecutionOutcomeSchema, type ExecutionOutcome } from "bopodev-contracts";
 import {
@@ -2616,8 +2617,66 @@ export function toEnvironmentStatus(checks: AdapterEnvironmentCheck[]): "pass" |
   return "pass";
 }
 
-export function createPrompt(context: HeartbeatContext) {
+function resolveHeartbeatPromptModeForPrompt(context: HeartbeatContext): HeartbeatPromptMode {
+  return context.promptMode === "compact" ? "compact" : "full";
+}
+
+/** Max chars per memory section (tacit notes, durable facts block, daily notes block). Env overrides; compact defaults to 8000. */
+function resolveMemorySectionMaxChars(mode: HeartbeatPromptMode): number | null {
+  const raw = process.env.BOPO_HEARTBEAT_PROMPT_MEMORY_MAX_CHARS?.trim();
+  if (raw) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) {
+      return n;
+    }
+  }
+  if (mode === "compact") {
+    return 8000;
+  }
+  return null;
+}
+
+function clipPromptText(text: string, max: number | null): string {
+  if (!max || text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, max)}\n…(truncated for prompt size)`;
+}
+
+const HEARTBEAT_JSON_SCHEMA_FOOTER = `At the end of your response, output exactly one JSON object on a single line and nothing else. Use this exact schema:
+{"employee_comment":"markdown update to the manager","results":["short concrete outcome"],"errors":[],"artifacts":[{"kind":"file","path":"relative/path"}]}`;
+
+function buildIdleMicroPrompt(context: HeartbeatContext): string {
   const bootstrapPrompt = context.runtime?.bootstrapPrompt?.trim();
+  return `${bootstrapPrompt ? `${bootstrapPrompt}\n\n` : ""}Idle heartbeat (micro prompt): agent ${context.agentId} (${context.agent.name}) has no assigned issues this run. Summarize readiness in \`employee_comment\`; leave \`results\` empty unless you completed verifiable work. Use \`BOPODEV_*\` for control-plane API calls when needed.
+
+${HEARTBEAT_JSON_SCHEMA_FOOTER}
+`;
+}
+
+function formatAttachmentLine(
+  attachment: NonNullable<HeartbeatContext["workItems"][number]["attachments"]>[number],
+  mode: HeartbeatPromptMode,
+  apiBase: string
+): string {
+  const base = apiBase.replace(/\/$/, "");
+  const apiUrl = attachment.downloadPath ? `${base}${attachment.downloadPath}` : null;
+  if (mode === "compact" && apiUrl) {
+    return `    - ${attachment.fileName} | api: ${apiUrl} | path: ${attachment.absolutePath} | relative: ${attachment.relativePath}`;
+  }
+  const apiSuffix = apiUrl ? ` | api: ${apiUrl}` : "";
+  return `    - ${attachment.fileName} | path: ${attachment.absolutePath} | relative: ${attachment.relativePath}${apiSuffix}`;
+}
+
+export function createPrompt(context: HeartbeatContext) {
+  const isCommentOrderRunEarly = context.wakeContext?.reason === "issue_comment_recipient";
+  if (context.idleMicroPrompt && context.workItems.length === 0 && !isCommentOrderRunEarly) {
+    return buildIdleMicroPrompt(context);
+  }
+  const bootstrapPrompt = context.runtime?.bootstrapPrompt?.trim();
+  const promptMode = resolveHeartbeatPromptModeForPrompt(context);
+  const isCompact = promptMode === "compact";
+  const memoryCap = resolveMemorySectionMaxChars(promptMode);
   const companyGoals = context.goalContext?.companyGoals.length
     ? context.goalContext.companyGoals.map((goal) => `- ${goal}`).join("\n")
     : "- No active company goals";
@@ -2628,6 +2687,8 @@ export function createPrompt(context: HeartbeatContext) {
     ? context.goalContext.agentGoals.map((goal) => `- ${goal}`).join("\n")
     : "- No active agent goals";
   const isCommentOrderRun = context.wakeContext?.reason === "issue_comment_recipient";
+  const controlPlaneApiBaseUrl =
+    context.runtime?.env?.BOPODEV_API_BASE_URL?.trim() || context.runtime?.env?.BOPODEV_API_URL?.trim() || "";
   const workItems = context.workItems.length
     ? context.workItems
         .map((item) =>
@@ -2638,14 +2699,18 @@ export function createPrompt(context: HeartbeatContext) {
             item.childIssueIds?.length ? `  Sub-issues: ${item.childIssueIds.join(", ")}` : null,
             item.status ? `  Status: ${item.status}` : null,
             item.priority ? `  Priority: ${item.priority}` : null,
-            item.body ? `  Body: ${item.body}` : null,
+            isCompact
+              ? `  Body: (omitted — fetch with GET ${controlPlaneApiBaseUrl || "$BOPODEV_API_BASE_URL"}/issues/${item.issueId})`
+              : item.body
+                ? `  Body: ${item.body}`
+                : null,
             item.labels?.length ? `  Labels: ${item.labels.join(", ")}` : null,
             item.tags?.length ? `  Tags: ${item.tags.join(", ")}` : null,
             item.attachments?.length
               ? [
                   "  Attachments:",
                   ...item.attachments.map((attachment) =>
-                    `    - ${attachment.fileName} | path: ${attachment.absolutePath} | relative: ${attachment.relativePath}`
+                    formatAttachmentLine(attachment, promptMode, controlPlaneApiBaseUrl || "http://127.0.0.1:4020")
                   )
                 ].join("\n")
               : null
@@ -2675,22 +2740,36 @@ export function createPrompt(context: HeartbeatContext) {
         ].join("\n")
       : "";
   const memoryContext = context.memoryContext;
-  const memoryTacitNotes = memoryContext?.tacitNotes?.trim()
+  const memoryTacitNotesRaw = memoryContext?.tacitNotes?.trim()
     ? memoryContext.tacitNotes.trim()
     : "No tacit notes were recorded yet.";
-  const memoryDurableFacts =
+  const memoryTacitNotes = clipPromptText(memoryTacitNotesRaw, memoryCap);
+  const memoryDurableFactsRaw =
     memoryContext?.durableFacts && memoryContext.durableFacts.length > 0
       ? memoryContext.durableFacts.map((fact) => `- ${fact}`).join("\n")
       : "- No durable facts available.";
-  const memoryDailyNotes =
+  const memoryDurableFacts = clipPromptText(memoryDurableFactsRaw, memoryCap);
+  const memoryDailyNotesRaw =
     memoryContext?.dailyNotes && memoryContext.dailyNotes.length > 0
       ? memoryContext.dailyNotes.map((note) => `- ${note}`).join("\n")
       : "- No recent daily notes.";
-  const controlPlaneApiBaseUrl =
-    context.runtime?.env?.BOPODEV_API_BASE_URL?.trim() || context.runtime?.env?.BOPODEV_API_URL?.trim() || "";
+  const memoryDailyNotes = clipPromptText(memoryDailyNotesRaw, memoryCap);
   const hasControlPlaneHeaders = Boolean(context.runtime?.env?.BOPODEV_REQUEST_HEADERS_JSON?.trim());
   const safeControlPlaneCurl =
     'curl -sS -H "x-company-id: $BOPODEV_COMPANY_ID" -H "x-actor-type: $BOPODEV_ACTOR_TYPE" -H "x-actor-id: $BOPODEV_ACTOR_ID" -H "x-actor-companies: $BOPODEV_ACTOR_COMPANIES" -H "x-actor-permissions: $BOPODEV_ACTOR_PERMISSIONS" "$BOPODEV_API_BASE_URL/agents"';
+  const compactHydration =
+    isCompact &&
+    (context.workItems.length > 0 ||
+      (context.wakeContext?.issueIds && context.wakeContext.issueIds.length > 0))
+      ? [
+          "Context hydration (compact prompt mode):",
+          "- Load full issue description and attachment list (with `downloadPath` for each file) via GET `$BOPODEV_API_BASE_URL`/issues/{issueId} before substantive work.",
+          "- Use the same actor headers as in the control-plane section below.",
+          `- Example: curl -sS -H "x-company-id: $BOPODEV_COMPANY_ID" -H "x-actor-type: $BOPODEV_ACTOR_TYPE" -H "x-actor-id: $BOPODEV_ACTOR_ID" -H "x-actor-companies: $BOPODEV_ACTOR_COMPANIES" -H "x-actor-permissions: $BOPODEV_ACTOR_PERMISSIONS" "${controlPlaneApiBaseUrl || "$BOPODEV_API_BASE_URL"}/issues/<issueId>"`,
+          ""
+        ].join("\n")
+      : "";
+
   const controlPlaneDirectives = [
     "Control-plane API directives:",
     controlPlaneApiBaseUrl
@@ -2742,7 +2821,7 @@ export function createPrompt(context: HeartbeatContext) {
 
   return `${bootstrapPrompt ? `${bootstrapPrompt}\n\n` : ""}You are ${context.agent.name} (${context.agent.role}), agent ${context.agentId}.
 Heartbeat run ${context.heartbeatRunId}.
-
+${isCompact ? "Prompt profile: compact (issue bodies are not inlined—use GET /issues/:id to hydrate).\n" : ""}
 Company:
 - Name: ${context.company.name}
 - Mission: ${context.company.mission ?? "No mission set"}
@@ -2755,7 +2834,7 @@ ${projectGoals}
 Agent goals:
 ${agentGoals}
 
-${isCommentOrderRun ? "Linked issue context (read-only):" : "Assigned issues:"}
+${compactHydration}${isCommentOrderRun ? "Linked issue context (read-only):" : "Assigned issues:"}
 ${workItems}
 
 ${wakeContextLines}
@@ -2775,8 +2854,7 @@ ${executionDirectives}
 
 ${controlPlaneDirectives}
 
-At the end of your response, output exactly one JSON object on a single line and nothing else. Use this exact schema:
-{"employee_comment":"markdown update to the manager","results":["short concrete outcome"],"errors":[],"artifacts":[{"kind":"file","path":"relative/path"}]}
+${HEARTBEAT_JSON_SCHEMA_FOOTER}
 `;
 }
 

@@ -41,6 +41,9 @@ web trigger -> API heartbeat -> adapter runtime -> Codex CLI -> observability UI
   - Runtime exceeded `timeoutMs`.
   - Increase timeout in agent runtime state or investigate runtime hangs.
 
+- `unexpected argument '--reasoning-effort'` (Codex CLI stderr)
+  - Your `codex` build does not accept that flag. Bopo does **not** pass it unless **`BOPO_CODEX_PASS_REASONING_EFFORT=1`** on the API (default off). Upgrade Codex if you need the flag, or leave the env unset.
+
 - `stateParseError` present
   - Agent `stateBlob` is malformed JSON.
   - Reset state in agent config and rerun heartbeat.

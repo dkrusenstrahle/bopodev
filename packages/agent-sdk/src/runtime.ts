@@ -155,6 +155,16 @@ function providerDefaultArgs(provider: "claude_code" | "codex", config?: AgentRu
   return ["exec", "--full-auto", "--skip-git-repo-check"];
 }
 
+function shouldPassCodexReasoningEffortFlag(config?: AgentRuntimeConfig): boolean {
+  const raw = (
+    config?.env?.BOPO_CODEX_PASS_REASONING_EFFORT ?? process.env.BOPO_CODEX_PASS_REASONING_EFFORT ??
+    ""
+  )
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
 function providerConfigArgs(provider: "claude_code" | "codex", config?: AgentRuntimeConfig) {
   const args: string[] = [];
   if (provider === "codex") {
@@ -165,7 +175,12 @@ function providerConfigArgs(provider: "claude_code" | "codex", config?: AgentRun
       // Codex JSON events carry usage metrics we need for reliable cost accounting.
       args.push("--json");
     }
-    if (config?.thinkingEffort && config.thinkingEffort !== "auto") {
+    // Many `codex` builds reject `--reasoning-effort`; only pass when explicitly enabled.
+    if (
+      shouldPassCodexReasoningEffortFlag(config) &&
+      config?.thinkingEffort &&
+      config.thinkingEffort !== "auto"
+    ) {
       args.push("--reasoning-effort", config.thinkingEffort);
     }
     if (config?.runPolicy?.allowWebSearch) {

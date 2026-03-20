@@ -2,6 +2,13 @@
 
 This page covers agent lifecycle management and heartbeat execution behavior.
 
+For **heartbeat prompt modes** (`full` vs `compact`), **cost expectations**, and **API hydration** (`GET /issues/:id`), see [`../guides/agent-heartbeat-protocol.md`](../guides/agent-heartbeat-protocol.md).
+
+### Web UI: “Thinking effort” and Codex
+
+- **Claude Code** agents show a **Thinking effort** control; Bopo forwards it to the CLI as `--effort` when not `auto`.
+- **OpenAI Codex** agents **do not** show that control by default: many `codex` builds reject `--reasoning-effort`, so Bopo only passes it when the API sets **`BOPO_CODEX_PASS_REASONING_EFFORT=1`** (see [configuration reference](../developer/configuration-reference.md)). Stored values are normalized to `auto` when switching a Codex agent in the UI so the database matches runtime behavior.
+
 ## Purpose
 
 Explain how to configure agents safely and interpret run outcomes.

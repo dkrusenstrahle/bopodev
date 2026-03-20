@@ -69,6 +69,7 @@ All attention routes are company-scoped and publish realtime updates.
 ## Issues
 
 - `GET /issues`
+- `GET /issues/:issueId` — full issue row (same shape as list items) plus `attachments[]` with metadata and `downloadPath` for each file. Used by agents for **compact** heartbeat hydration; see [`../guides/agent-heartbeat-protocol.md`](../guides/agent-heartbeat-protocol.md).
 - `POST /issues`
 - `PUT /issues/:issueId`
 - `DELETE /issues/:issueId`

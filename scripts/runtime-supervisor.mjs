@@ -221,17 +221,13 @@ function printRuntimeBanner(input) {
       `  ${BOLD}Web${RESET}  -> ${input.webUrl}\n` +
       `  ${BOLD}API${RESET}  -> ${input.apiUrl}\n`
   );
-  process.stdout.write(
-    `${DIM}[${input.mode}] Ports are fixed for this run. If one is busy, stop the existing process or run ${RESET}pnpm unstick${DIM}.${RESET}\n`
-  );
-  process.stdout.write(
-    `${DIM}[${input.mode}] Waiting for API and web readiness before reporting success.${RESET}\n`
-  );
+  process.stdout.write(`${DIM}[${input.mode}] Using the configured local ports.${RESET}\n`);
+  process.stdout.write(`${DIM}[${input.mode}] Waiting for services to become ready.${RESET}\n`);
   if (input.openBrowser) {
-    process.stdout.write(`${DIM}[${input.mode}] Browser will open only after both services are ready.${RESET}\n`);
+    process.stdout.write(`${DIM}[${input.mode}] Browser will open when the UI is ready.${RESET}\n`);
   }
   if (input.quiet) {
-    process.stdout.write(`${DIM}[${input.mode}] Quiet mode enabled; child logs are reduced where supported.${RESET}\n`);
+    process.stdout.write(`${DIM}[${input.mode}] Reduced log output enabled.${RESET}\n`);
   }
   process.stdout.write("\n");
 }

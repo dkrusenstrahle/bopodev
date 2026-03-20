@@ -427,14 +427,14 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
       printCheck(check.ok ? "ok" : "warn", check.label, check.details);
     }
   } else {
-    printCheck("warn", "Doctor", "Deferred to keep onboarding fast. Run `pnpm doctor` after startup.");
+    printCheck("ok", "Doctor", "Available on demand with `pnpm doctor`.");
   }
 
   const dbPathSummary = resolveDbPathSummary(configuredDbPath);
   printSummaryCard([
     `Mode    ${padSummaryValue("local")}`,
     `Deploy  ${padSummaryValue("local_mac")}`,
-    `Doctor  ${padSummaryValue(options.start ? "Deferred" : `${passed} passed, ${warnings} warning${warnings === 1 ? "" : "s"}`)}`,
+    `Doctor  ${padSummaryValue(options.start ? "On demand" : `${passed} passed, ${warnings} warning${warnings === 1 ? "" : "s"}`)}`,
     `Company ${padSummaryValue(`${seedResult.companyName} (${seedResult.companyId})`)}`,
     `Agent   ${padSummaryValue(formatAgentProvider(seedResult.ceoProviderType))}`,
     `Model   ${padSummaryValue(seedResult.ceoRuntimeModel ?? selectedAgentModel ?? "provider default")}`,

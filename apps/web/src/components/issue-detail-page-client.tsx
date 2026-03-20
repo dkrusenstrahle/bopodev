@@ -846,14 +846,6 @@ export function IssueDetailPageClient({
             />
           </div>
           <div className={styles.issueHeaderActionsContainer}>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => void runAssigneeHeartbeat()}
-              disabled={!issue.assigneeAgentId || isHeartbeatStarting}
-            >
-              {isHeartbeatStarting ? "Running..." : "Run heartbeat"}
-            </Button>
             <CreateIssueModal
               companyId={companyId}
               projects={projects}
@@ -863,6 +855,14 @@ export function IssueDetailPageClient({
               triggerVariant="outline"
               triggerSize="sm"
             />
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => void runAssigneeHeartbeat()}
+              disabled={!issue.assigneeAgentId || isHeartbeatStarting}
+            >
+              {isHeartbeatStarting ? "Running..." : "Run heartbeat"}
+            </Button>
           </div>
         </div>
       </div>

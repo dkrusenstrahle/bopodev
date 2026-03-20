@@ -412,18 +412,7 @@ export async function bootstrapDatabase(dbPath?: string) {
     ADD COLUMN IF NOT EXISTS usd_cost_status TEXT;
   `);
   await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS model_pricing (
-      company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-      provider_type TEXT NOT NULL,
-      model_id TEXT NOT NULL,
-      display_name TEXT,
-      input_usd_per_1m NUMERIC(12, 6) NOT NULL DEFAULT 0,
-      output_usd_per_1m NUMERIC(12, 6) NOT NULL DEFAULT 0,
-      currency TEXT NOT NULL DEFAULT 'USD',
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_by TEXT,
-      PRIMARY KEY (company_id, provider_type, model_id)
-    );
+    DROP TABLE IF EXISTS model_pricing;
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS audit_events (

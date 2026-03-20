@@ -17,7 +17,6 @@ import {
   issueAttachments,
   issueComments,
   issues,
-  modelPricing,
   pluginConfigs,
   pluginRuns,
   plugins,
@@ -2378,70 +2377,6 @@ export async function createTemplateInstall(
     })
     .returning();
   return row ?? null;
-}
-
-export async function listModelPricing(db: BopoDb, companyId: string) {
-  return db
-    .select()
-    .from(modelPricing)
-    .where(eq(modelPricing.companyId, companyId))
-    .orderBy(asc(modelPricing.providerType), asc(modelPricing.modelId));
-}
-
-export async function getModelPricing(
-  db: BopoDb,
-  input: { companyId: string; providerType: string; modelId: string }
-) {
-  const rows = await db
-    .select()
-    .from(modelPricing)
-    .where(
-      and(
-        eq(modelPricing.companyId, input.companyId),
-        eq(modelPricing.providerType, input.providerType),
-        eq(modelPricing.modelId, input.modelId)
-      )
-    )
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-export async function upsertModelPricing(
-  db: BopoDb,
-  input: {
-    companyId: string;
-    providerType: string;
-    modelId: string;
-    displayName?: string | null;
-    inputUsdPer1M?: string | null;
-    outputUsdPer1M?: string | null;
-    currency?: string | null;
-    updatedBy?: string | null;
-  }
-) {
-  await db
-    .insert(modelPricing)
-    .values({
-      companyId: input.companyId,
-      providerType: input.providerType,
-      modelId: input.modelId,
-      displayName: input.displayName ?? null,
-      inputUsdPer1M: input.inputUsdPer1M ?? "0.000000",
-      outputUsdPer1M: input.outputUsdPer1M ?? "0.000000",
-      currency: input.currency ?? "USD",
-      updatedBy: input.updatedBy ?? null
-    })
-    .onConflictDoUpdate({
-      target: [modelPricing.companyId, modelPricing.providerType, modelPricing.modelId],
-      set: compactUpdate({
-        displayName: input.displayName ?? null,
-        inputUsdPer1M: input.inputUsdPer1M ?? "0.000000",
-        outputUsdPer1M: input.outputUsdPer1M ?? "0.000000",
-        currency: input.currency ?? "USD",
-        updatedBy: input.updatedBy ?? null,
-        updatedAt: touchUpdatedAtSql
-      })
-    });
 }
 
 function compactUpdate<T extends Record<string, unknown>>(input: T) {

@@ -11,7 +11,6 @@ import { buildDefaultCeoBootstrapPrompt } from "../lib/ceo-bootstrap-prompt";
 import { resolveOpencodeRuntimeModel } from "../lib/opencode-model";
 import { resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { canAccessCompany, requireBoardRole, requirePermission } from "../middleware/request-actor";
-import { ensureCompanyModelPricingDefaults } from "../services/model-pricing";
 import { ensureCompanyBuiltinPluginDefaults } from "../services/plugin-runtime";
 import { ensureCompanyBuiltinTemplateDefaults } from "../services/template-catalog";
 
@@ -109,7 +108,6 @@ export function createCompaniesRouter(ctx: AppContext) {
     });
     await ensureCompanyBuiltinPluginDefaults(ctx.db, company.id);
     await ensureCompanyBuiltinTemplateDefaults(ctx.db, company.id);
-    await ensureCompanyModelPricingDefaults(ctx.db, company.id);
     return sendOk(res, company);
   });
 

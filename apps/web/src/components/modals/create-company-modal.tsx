@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, apiGet, apiPost } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { readAgentRuntimeDefaults } from "@/lib/agent-defaults";
 import {
   buildRegistryModelOptions,
@@ -46,7 +46,7 @@ export function CreateCompanyModal({
   const defaults = useMemo(() => readAgentRuntimeDefaults(), []);
   const allowedProviders: RuntimeProviderType[] = ["claude_code", "codex", "opencode", "gemini_cli"];
   const initialProviderType = allowedProviders.includes(defaults.providerType) ? defaults.providerType : "claude_code";
-  const [modelRegistryRows, setModelRegistryRows] = useState<ModelRegistryRow[]>([]);
+  const modelRegistryRows: ModelRegistryRow[] = [];
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [mission, setMission] = useState("");
@@ -64,12 +64,6 @@ export function CreateCompanyModal({
       }),
     [modelRegistryRows, providerType, runtimeModel]
   );
-
-  useEffect(() => {
-    void apiGet<Array<ModelRegistryRow>>("/observability/models/pricing", companyId)
-      .then((result) => setModelRegistryRows(result.data))
-      .catch(() => setModelRegistryRows([]));
-  }, [companyId]);
 
   useEffect(() => {
     const allowedValues = getRegistryModelValuesForRuntimeProvider(modelRegistryRows, providerType);

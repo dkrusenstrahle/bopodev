@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
 import {
   agentDefaultsStorageKey,
   defaultAgentRuntimeDefaults,
@@ -59,23 +58,13 @@ export function AgentRuntimeDefaultsCard({
 }) {
   const [defaults, setDefaults] = useState<AgentRuntimeDefaults>(defaultAgentRuntimeDefaults);
   const [saved, setSaved] = useState(false);
-  const [modelRegistryRows, setModelRegistryRows] = useState<ModelRegistryRow[]>([]);
+  const modelRegistryRows: ModelRegistryRow[] = [];
   const modelOptions = buildRegistryModelOptions({
     rows: modelRegistryRows,
     providerType: defaults.providerType,
     currentModel: defaults.runtimeModel,
     includeDefault: false
   });
-
-  useEffect(() => {
-    if (!companyId) {
-      setModelRegistryRows([]);
-      return;
-    }
-    void apiGet<Array<ModelRegistryRow>>("/observability/models/pricing", companyId)
-      .then((result) => setModelRegistryRows(result.data))
-      .catch(() => setModelRegistryRows([]));
-  }, [companyId]);
 
   useEffect(() => {
     const stored = readAgentRuntimeDefaults();

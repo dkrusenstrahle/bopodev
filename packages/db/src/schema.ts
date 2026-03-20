@@ -367,24 +367,6 @@ export const templateInstalls = pgTable("template_installs", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
 });
 
-export const modelPricing = pgTable(
-  "model_pricing",
-  {
-    companyId: text("company_id")
-      .notNull()
-      .references(() => companies.id, { onDelete: "cascade" }),
-    providerType: text("provider_type").notNull(),
-    modelId: text("model_id").notNull(),
-    displayName: text("display_name"),
-    inputUsdPer1M: numeric("input_usd_per_1m", { precision: 12, scale: 6 }).notNull().default("0"),
-    outputUsdPer1M: numeric("output_usd_per_1m", { precision: 12, scale: 6 }).notNull().default("0"),
-    currency: text("currency").notNull().default("USD"),
-    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-    updatedBy: text("updated_by")
-  },
-  (table) => [primaryKey({ columns: [table.companyId, table.providerType, table.modelId] })]
-);
-
 export const pluginConfigs = pgTable(
   "plugin_configs",
   {
@@ -458,7 +440,6 @@ export const schema = {
   templates,
   templateVersions,
   templateInstalls,
-  modelPricing,
   agentIssueLabels,
   projectWorkspaces
 };

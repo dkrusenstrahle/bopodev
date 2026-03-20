@@ -6,5 +6,5 @@ export default async function ModelsPage({
   searchParams: Promise<{ companyId?: string }>;
 }) {
   const { companyId } = await searchParams;
-  redirect(companyId ? `/settings/models?companyId=${encodeURIComponent(companyId)}` : "/settings/models");
+  redirect(companyId ? `/settings?companyId=${encodeURIComponent(companyId)}` : "/settings");
 }

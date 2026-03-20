@@ -30,7 +30,6 @@ import {
 } from "../lib/instance-paths";
 import { buildDefaultCeoBootstrapPrompt } from "../lib/ceo-bootstrap-prompt";
 import { resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
-import { ensureCompanyModelPricingDefaults } from "../services/model-pricing";
 import { applyTemplateManifest } from "../services/template-apply-service";
 import { ensureCompanyBuiltinTemplateDefaults } from "../services/template-catalog";
 
@@ -211,8 +210,6 @@ export async function ensureOnboardingSeed(input: {
       templateApplied = true;
       appliedTemplateId = template.id;
     }
-    await ensureCompanyModelPricingDefaults(db, companyId);
-
     return {
       companyId,
       companyName: resolvedCompanyName,

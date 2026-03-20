@@ -85,7 +85,7 @@ const navGroups: Array<{
       { slug: "org-chart", label: "Organization", icon: GitBranch },
       { slug: "office-space", label: "Office", icon: Map },
       { slug: "costs", label: "Costs", icon: BarChart3 },
-      { slug: "settings", label: "Settings", icon: Settings, href: "/settings/models" }
+      { slug: "settings", label: "Settings", icon: Settings, href: "/settings" }
     ]
   }
 ];
@@ -96,7 +96,6 @@ const settingsNavItems: Array<{
   icon: React.ComponentType<{ className?: string }>;
   isActive: (pathname: string) => boolean;
 }> = [
-  { href: "/settings/models", label: "Models", icon: BarChart3, isActive: (pathname) => pathname.startsWith("/settings/models") },
   { href: "/settings/templates", label: "Templates", icon: LayoutTemplate, isActive: (pathname) => pathname.startsWith("/settings/templates") },
   { href: "/settings/plugins", label: "Plugins", icon: Puzzle, isActive: (pathname) => pathname.startsWith("/settings/plugins") },
   {

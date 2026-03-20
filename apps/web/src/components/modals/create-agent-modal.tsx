@@ -209,7 +209,7 @@ export function CreateAgentModal({
       >
     >
   >({});
-  const [modelRegistryRows, setModelRegistryRows] = useState<ModelRegistryRow[]>([]);
+  const modelRegistryRows: ModelRegistryRow[] = [];
   const providerMetadata = adapterMetadataByProvider[providerType];
   const visibleProviders: ProviderOption[] = (
     Object.values(adapterMetadataByProvider).filter(Boolean).length > 0
@@ -498,19 +498,6 @@ export function CreateAgentModal({
       })
       .catch(() => {
         // Fall back to local defaults if metadata endpoint fails.
-      });
-  }, [open, companyId]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    void apiGet<Array<ModelRegistryRow>>("/observability/models/pricing", companyId)
-      .then((result) => {
-        setModelRegistryRows(result.data);
-      })
-      .catch(() => {
-        setModelRegistryRows([]);
       });
   }, [open, companyId]);
 

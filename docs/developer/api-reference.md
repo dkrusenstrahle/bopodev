@@ -146,8 +146,6 @@ Queue route supports filters: `status`, `agentId`, `jobType`, `limit`.
 
 - `GET /observability/logs`
 - `GET /observability/costs`
-- `GET /observability/models/pricing`
-- `PUT /observability/models/pricing`
 - `GET /observability/heartbeats`
 - `GET /observability/heartbeats/:runId`
 - `GET /observability/heartbeats/:runId/messages`
@@ -156,10 +154,6 @@ Queue route supports filters: `status`, `agentId`, `jobType`, `limit`.
 - `GET /observability/memory` (supports `agentId` and `limit`)
 - `GET /observability/memory/:agentId/file?path=...`
 - `GET /observability/memory/:agentId/context-preview` (supports `projectIds`, `query`)
-
-Mutation permission:
-
-- `PUT /observability/models/pricing` requires `observability:write`.
 
 For memory semantics, see [`../product/agent-memory-workflow.md`](../product/agent-memory-workflow.md).
 For artifact storage/path guardrails, see [`../operations/workspace-path-surface.md`](../operations/workspace-path-surface.md).

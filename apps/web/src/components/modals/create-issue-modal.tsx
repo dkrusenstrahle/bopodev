@@ -320,7 +320,7 @@ export function CreateIssueModal({
           {error ? <p className={styles.createIssueModalText}>{error}</p> : null}
           <DialogFooter showCloseButton={!isEditing}>
             {isEditing ? (
-              <Button type="button" variant="destructive" onClick={() => void onDeleteIssue()} disabled={isSubmitting || isDeleting}>
+              <Button type="button" variant="ghost" onClick={() => void onDeleteIssue()} disabled={isSubmitting || isDeleting}>
                 {isDeleting ? "Deleting..." : "Delete"}
               </Button>
             ) : null}

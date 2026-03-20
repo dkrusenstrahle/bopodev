@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import styles from "./theme-toggle.module.scss";
 
 export function ThemeToggle() {
@@ -14,22 +15,32 @@ export function ThemeToggle() {
     setMounted(true);
   }, []);
 
-  const selectedTheme = mounted && theme === "light" ? "light" : "dark";
-  const SelectedIcon = selectedTheme === "light" ? SunIcon : MoonIcon;
+  const active = mounted && theme === "light" ? "light" : "dark";
 
   return (
-    <Select value={selectedTheme} onValueChange={(value) => setTheme(value)}>
-      <SelectTrigger className={styles.themeToggleTrigger} size="sm" aria-label="Select theme mode">
-        <span className={styles.themeToggleLabel1}>
-          <SelectedIcon className={styles.themeToggleIcon} />
-          <SelectValue placeholder="Theme" />
-        </span>
-        <span className={styles.themeToggleLabel2}>Mode</span>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="dark">Dark mode</SelectItem>
-        <SelectItem value="light">Light mode</SelectItem>
-      </SelectContent>
-    </Select>
+    <div className={styles.themeToggle} role="group" aria-label="Color mode">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className={cn(styles.themeToggleBtn, active === "light" && styles.themeToggleBtnActive)}
+        aria-label="Light mode"
+        aria-pressed={active === "light"}
+        onClick={() => setTheme("light")}
+      >
+        <SunIcon className={styles.themeToggleIcon} aria-hidden />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className={cn(styles.themeToggleBtn, active === "dark" && styles.themeToggleBtnActive)}
+        aria-label="Dark mode"
+        aria-pressed={active === "dark"}
+        onClick={() => setTheme("dark")}
+      >
+        <MoonIcon className={styles.themeToggleIcon} aria-hidden />
+      </Button>
+    </div>
   );
 }

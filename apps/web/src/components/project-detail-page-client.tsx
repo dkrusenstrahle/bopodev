@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError, apiPut } from "@/lib/api";
@@ -108,6 +109,26 @@ function formatDate(value: string | null) {
 
 function shortId(value: string) {
   return value.length > 12 ? `${value.slice(0, 8)}...` : value;
+}
+
+function parseLocalYmd(value: string): Date | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return undefined;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return undefined;
+  return date;
+}
+
+function formatLocalYmd(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function ProjectDetailPageClient({
@@ -376,19 +397,17 @@ export function ProjectDetailPageClient({
             </Select>
           </Field>
           <Field>
-            <FieldLabel>Planned start date</FieldLabel>
-            <Input
+            <FieldLabel htmlFor="project-planned-start-at-sidebar">Planned start date</FieldLabel>
+            <DatePicker
               id="project-planned-start-at-sidebar"
-              type="date"
-              value={plannedStartAtDraft}
-              onChange={(event) => {
-                const nextValue = event.target.value;
+              date={parseLocalYmd(plannedStartAtDraft)}
+              onDateChange={(nextDate) => {
+                const nextValue = nextDate ? formatLocalYmd(nextDate) : "";
                 setPlannedStartAtDraft(nextValue);
                 void updateProjectPlannedStartAt(nextValue);
               }}
               disabled={isSavingPlannedStartAt}
               className={styles.projectDetailSelectTrigger}
-              autoComplete="off"
             />
           </Field>
         </CardContent>

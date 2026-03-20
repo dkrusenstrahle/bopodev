@@ -16,6 +16,7 @@ import {
   DialogTrigger
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -46,6 +47,26 @@ const projectStatusOptions: Array<{ value: ProjectStatus; label: string }> = [
   { value: "completed", label: "Completed" },
   { value: "archived", label: "Archived" }
 ];
+
+function parseLocalYmd(value: string): Date | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return undefined;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return undefined;
+  return date;
+}
+
+function formatLocalYmd(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function inferWorkspaceMode(localPath: string | null | undefined, githubRepo: string | null | undefined): WorkspaceMode {
   const hasLocalPath = Boolean(localPath?.trim());
@@ -422,7 +443,11 @@ export function CreateProjectModal({
               </Field>
               <Field>
                 <FieldLabel htmlFor="project-planned-start-at">Planned start date</FieldLabel>
-                <Input id="project-planned-start-at" type="date" value={plannedStartAt} onChange={(e) => setPlannedStartAt(e.target.value)} autoComplete="off" />
+                <DatePicker
+                  id="project-planned-start-at"
+                  date={parseLocalYmd(plannedStartAt)}
+                  onDateChange={(nextDate) => setPlannedStartAt(nextDate ? formatLocalYmd(nextDate) : "")}
+                />
               </Field>
             </FieldGroup>
             <FieldGroup>
@@ -475,7 +500,7 @@ export function CreateProjectModal({
           {error ? <p className={styles.createProjectModalText}>{error}</p> : null}
           <DialogFooter showCloseButton={!isEditing}>
             {isEditing ? (
-              <Button type="button" variant="destructive" onClick={() => void onDeleteProject()} disabled={isSubmitting || isDeleting}>
+              <Button type="button" variant="ghost" onClick={() => void onDeleteProject()} disabled={isSubmitting || isDeleting}>
                 {isDeleting ? "Deleting..." : "Delete"}
               </Button>
             ) : null}

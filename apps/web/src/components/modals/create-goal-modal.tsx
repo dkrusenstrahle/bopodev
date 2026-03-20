@@ -206,7 +206,7 @@ export function CreateGoalModal({
           {error ? <p className={styles.createGoalModalText}>{error}</p> : null}
           <DialogFooter showCloseButton={!isEditing}>
             {isEditing ? (
-              <Button type="button" variant="destructive" onClick={() => void onDeleteGoal()} disabled={isSubmitting || isDeleting}>
+              <Button type="button" variant="ghost" onClick={() => void onDeleteGoal()} disabled={isSubmitting || isDeleting}>
                 {isDeleting ? "Deleting..." : "Delete"}
               </Button>
             ) : null}

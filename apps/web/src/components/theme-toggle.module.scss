@@ -1,17 +1,17 @@
 @reference "../app/globals.css";
 
-.themeToggleTrigger {
-  @apply w-full justify-between gap-2;
+.themeToggle {
+  @apply inline-flex shrink-0 items-center gap-0 rounded-md border border-sidebar-border bg-sidebar-accent/25 p-px;
 }
 
-.themeToggleLabel1 {
-  @apply flex items-center gap-2;
+.themeToggleBtn {
+  @apply size-7 rounded-[0.2rem] text-sidebar-foreground/65 hover:bg-sidebar-accent/45 hover:text-sidebar-foreground;
+}
+
+.themeToggleBtnActive {
+  @apply bg-sidebar-accent text-sidebar-foreground shadow-none hover:bg-sidebar-accent hover:text-sidebar-foreground;
 }
 
 .themeToggleIcon {
-  @apply size-4;
-}
-
-.themeToggleLabel2 {
-  @apply text-base text-muted-foreground;
+  @apply size-3.5;
 }

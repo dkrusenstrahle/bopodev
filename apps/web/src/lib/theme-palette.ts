@@ -1,11 +1,10 @@
 export const THEME_PALETTE_STORAGE_KEY = "bopodev-theme-palette";
 
-export type ThemePaletteId = "default" | "graphite" | "vercel" | "square" | "orchid" | "brownie";
+export type ThemePaletteId = "default" | "graphite" | "square" | "orchid" | "brownie";
 
 export const THEME_PALETTES: ReadonlyArray<{ id: ThemePaletteId; label: string }> = [
   { id: "default", label: "Default" },
   { id: "graphite", label: "Graphite" },
-  { id: "vercel", label: "Vercel" },
   { id: "square", label: "Square" },
   { id: "orchid", label: "Orchid" },
   { id: "brownie", label: "Brownie" },
@@ -14,7 +13,7 @@ export const THEME_PALETTES: ReadonlyArray<{ id: ThemePaletteId; label: string }
 export function getStoredPalette(): ThemePaletteId {
   if (typeof window === "undefined") return "default";
   const raw = localStorage.getItem(THEME_PALETTE_STORAGE_KEY);
-  if (raw === "graphite" || raw === "vercel" || raw === "square" || raw === "orchid" || raw === "brownie" || raw === "default") return raw;
+  if (raw === "graphite" || raw === "square" || raw === "orchid" || raw === "brownie" || raw === "default") return raw;
   return "default";
 }
 

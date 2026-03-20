@@ -1090,7 +1090,7 @@ export function CreateAgentModal({
           {error ? <p className={styles.createAgentModalText}>{error}</p> : null}
           <DialogFooter showCloseButton={!isEditing}>
             {isEditing ? (
-              <Button type="button" variant="destructive" onClick={() => void onDeleteAgent()} disabled={isSubmitting || isDeleting}>
+              <Button type="button" variant="ghost" onClick={() => void onDeleteAgent()} disabled={isSubmitting || isDeleting}>
                 {isDeleting ? "Deleting..." : "Delete"}
               </Button>
             ) : null}

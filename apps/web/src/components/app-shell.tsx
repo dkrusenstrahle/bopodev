@@ -187,7 +187,6 @@ export function AppShell({
         </ScrollArea>
         <div className="ui-shell-stack-sm pt-4">
           <ThemePaletteSelect />
-          <ThemeToggle />
         </div>
       </div>
     ) : undefined);
@@ -356,7 +355,10 @@ export function AppShell({
                 {renderNavLinks(false)}
               </div>
             </ScrollArea>
-            <div className="ui-shell-version">{`v${appVersion}`}</div>
+            <div className="ui-shell-sidebar-footer">
+              <ThemeToggle />
+              <div className="ui-shell-version">{`v${appVersion}`}</div>
+            </div>
           </div>
         </aside>
       ) : null}
@@ -430,12 +432,10 @@ export function AppShell({
                       {renderSettingsLinks(true)}
                     </div>
                   </ScrollArea>
-                  {isSettingsRoute ? (
-                    <div className="ui-shell-mobile-nav-footer ui-mobile-safe-bottom">
-                      <ThemePaletteSelect />
-                      <ThemeToggle />
-                    </div>
-                  ) : null}
+                  <div className="ui-shell-mobile-nav-footer ui-mobile-safe-bottom">
+                    {isSettingsRoute ? <ThemePaletteSelect /> : null}
+                    <ThemeToggle />
+                  </div>
                 </SheetContent>
               </Sheet>
             ) : null}

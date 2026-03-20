@@ -953,8 +953,12 @@ body {
   @apply pb-6;
 }
 
+.ui-shell-sidebar-footer {
+  @apply mt-auto flex items-center justify-between gap-3 pt-3;
+}
+
 .ui-shell-version {
-  @apply mt-auto pt-3 text-right text-xs text-sidebar-foreground/45;
+  @apply text-right text-xs text-sidebar-foreground/45;
 }
 
 .ui-shell-brand-stack {
@@ -1126,7 +1130,7 @@ body {
 }
 
 .ui-shell-mobile-nav-footer {
-  @apply mt-4 space-y-2;
+  @apply mt-auto flex flex-col gap-2 space-y-0;
 }
 
 .ui-shell-content-with-pane {

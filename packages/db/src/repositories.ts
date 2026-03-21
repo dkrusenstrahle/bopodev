@@ -1639,6 +1639,7 @@ export async function enqueueHeartbeatJob(
 }
 
 export async function claimNextHeartbeatJob(db: BopoDb, companyId: string) {
+  // Postgres-specific: CTE + NOT EXISTS + FOR UPDATE SKIP LOCKED + UPDATE FROM — kept as raw SQL for correct job claiming under concurrency.
   const result = await db.execute(sql`
     WITH candidate AS (
       SELECT q.id
@@ -1893,6 +1894,7 @@ export async function listHeartbeatRunMessagesForRuns(
   }
   const perRunLimit = Math.min(Math.max(input.perRunLimit ?? 60, 1), 500);
   const runIdValues = sql.join(runIds.map((runId) => sql`(${runId})`), sql`, `);
+  // Window functions (ROW_NUMBER) and VALUES-driven CTE — impractical to express purely with Drizzle’s query builder.
   const rankedRows = await db.execute(sql`
     WITH requested(run_id) AS (
       VALUES ${runIdValues}

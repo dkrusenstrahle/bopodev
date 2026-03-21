@@ -1,4 +1,4 @@
-import { sql } from "bopodev-db";
+import { agents, eq } from "bopodev-db";
 import { checkRuntimeCommandHealth } from "bopodev-agent-sdk";
 import type { RuntimeCommandHealth } from "bopodev-agent-sdk";
 import type { BootstrappedDb } from "./database";
@@ -6,22 +6,20 @@ import type { BootstrappedDb } from "./database";
 type BopoDb = BootstrappedDb["db"];
 
 export async function hasCodexAgentsConfigured(db: BopoDb) {
-  const result = await db.execute(sql`
-    SELECT id
-    FROM agents
-    WHERE provider_type = 'codex'
-    LIMIT 1
-  `);
+  const result = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(eq(agents.providerType, "codex"))
+    .limit(1);
   return result.length > 0;
 }
 
 export async function hasOpenCodeAgentsConfigured(db: BopoDb) {
-  const result = await db.execute(sql`
-    SELECT id
-    FROM agents
-    WHERE provider_type = 'opencode'
-    LIMIT 1
-  `);
+  const result = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(eq(agents.providerType, "opencode"))
+    .limit(1);
   return result.length > 0;
 }
 

@@ -1,6 +1,6 @@
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
-import { RepositoryValidationError, sql } from "bopodev-db";
+import { pingDatabase, RepositoryValidationError } from "bopodev-db";
 import type { AppContext } from "./context";
 import { createAgentsRouter } from "./routes/agents";
 import { createAuthRouter } from "./routes/auth";
@@ -38,7 +38,7 @@ export function createApp(ctx: AppContext) {
     let dbReady = false;
     let dbError: string | undefined;
     try {
-      await ctx.db.execute(sql`SELECT 1`);
+      await pingDatabase(ctx.db);
       dbReady = true;
     } catch (error) {
       dbError = String(error);

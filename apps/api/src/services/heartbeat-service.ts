@@ -34,6 +34,7 @@ import {
   issueComments,
   issueAttachments,
   issues,
+  max,
   projects,
   sql
 } from "bopodev-db";
@@ -134,6 +135,7 @@ export async function claimIssuesForAgent(
   heartbeatRunId: string,
   maxItems = 5
 ) {
+  // Postgres-specific: CTE + FOR UPDATE SKIP LOCKED + UPDATE FROM — not modeled by Drizzle’s fluent API without embedding the same SQL.
   const result = await db.execute(sql`
     WITH candidate AS (
       SELECT id
@@ -2020,13 +2022,18 @@ async function insertStartedRunAtomic(
   db: BopoDb,
   input: { id: string; companyId: string; agentId: string; message: string }
 ) {
-  const result = await db.execute(sql`
-    INSERT INTO heartbeat_runs (id, company_id, agent_id, status, message)
-    VALUES (${input.id}, ${input.companyId}, ${input.agentId}, 'started', ${input.message})
-    ON CONFLICT DO NOTHING
-    RETURNING id
-  `);
-  return result.length > 0;
+  const inserted = await db
+    .insert(heartbeatRuns)
+    .values({
+      id: input.id,
+      companyId: input.companyId,
+      agentId: input.agentId,
+      status: "started",
+      message: input.message
+    })
+    .onConflictDoNothing()
+    .returning({ id: heartbeatRuns.id });
+  return inserted.length > 0;
 }
 
 async function recoverStaleHeartbeatRuns(
@@ -2163,23 +2170,21 @@ export async function runHeartbeatSweep(
 }
 
 async function listLatestRunByAgent(db: BopoDb, companyId: string) {
-  const result = await db.execute(sql`
-    SELECT agent_id, MAX(started_at) AS latest_started_at
-    FROM heartbeat_runs
-    WHERE company_id = ${companyId}
-    GROUP BY agent_id
-  `);
+  const rows = await db
+    .select({
+      agentId: heartbeatRuns.agentId,
+      latestStartedAt: max(heartbeatRuns.startedAt)
+    })
+    .from(heartbeatRuns)
+    .where(eq(heartbeatRuns.companyId, companyId))
+    .groupBy(heartbeatRuns.agentId);
   const latestRunByAgent = new Map<string, Date>();
-  for (const row of result as Array<Record<string, unknown>>) {
-    const agentId = typeof row.agent_id === "string" ? row.agent_id : null;
-    if (!agentId) {
-      continue;
-    }
-    const startedAt = coerceDate(row.latest_started_at);
+  for (const row of rows) {
+    const startedAt = coerceDate(row.latestStartedAt);
     if (!startedAt) {
       continue;
     }
-    latestRunByAgent.set(agentId, startedAt);
+    latestRunByAgent.set(row.agentId, startedAt);
   }
   return latestRunByAgent;
 }

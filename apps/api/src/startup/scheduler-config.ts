@@ -1,4 +1,4 @@
-import { sql } from "bopodev-db";
+import { asc, companies, eq } from "bopodev-db";
 import type { BootstrappedDb } from "./database";
 
 export async function resolveSchedulerCompanyId(
@@ -6,12 +6,11 @@ export async function resolveSchedulerCompanyId(
   configuredCompanyId: string | null
 ) {
   if (configuredCompanyId) {
-    const configured = await db.execute(sql`
-      SELECT id
-      FROM companies
-      WHERE id = ${configuredCompanyId}
-      LIMIT 1
-    `);
+    const configured = await db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(eq(companies.id, configuredCompanyId))
+      .limit(1);
     if (configured.length > 0) {
       return configuredCompanyId;
     }
@@ -19,12 +18,11 @@ export async function resolveSchedulerCompanyId(
     console.warn(`[startup] BOPO_DEFAULT_COMPANY_ID='${configuredCompanyId}' was not found; using first available company.`);
   }
 
-  const fallback = await db.execute(sql`
-    SELECT id
-    FROM companies
-    ORDER BY created_at ASC
-    LIMIT 1
-  `);
+  const fallback = await db
+    .select({ id: companies.id })
+    .from(companies)
+    .orderBy(asc(companies.createdAt))
+    .limit(1);
   const id = fallback[0]?.id;
   return typeof id === "string" && id.length > 0 ? id : null;
 }

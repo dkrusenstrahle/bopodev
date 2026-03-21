@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "detect-port": "^2.1.0",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.44.5",
     "drizzle-zod": "^0.8.2",

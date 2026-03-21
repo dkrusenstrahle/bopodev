@@ -88,6 +88,7 @@ For full VPS guidance, see [`operations/deployment.md`](./operations/deployment.
 - Agent runtime working directories are resolved from each project's primary workspace `cwd` when available.
 - `NEXT_PUBLIC_DEFAULT_RUNTIME_CWD` is an optional fallback.
 - Embedded Postgres defaults to `~/.bopodev/instances/default/db/postgres`; set `BOPO_DB_PATH` only to override.
+- Without `DATABASE_URL`, the API cooperates with an already-running embedded cluster on the same data path (reuses the process instead of failing on a lock). If the default port `55432` is busy, the next free port is chosen and a line is logged—set `BOPO_DB_PORT` to pin a port.
 - Projects can hold multiple workspaces; exactly one workspace should be marked primary for deterministic runtime path selection.
 - If no primary workspace `cwd` exists, runtime falls back to the agent runtime cwd or an agent fallback workspace path.
 - If a primary workspace defines `repoUrl`, heartbeat bootstraps the local repo path (clone/fetch/checkout) before adapter execution.

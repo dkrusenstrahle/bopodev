@@ -31,7 +31,7 @@ Reduce mean time to diagnose failures across API, runtime, and UI surfaces.
 
 **Symptom:** startup fails before the API is ready, often with a message about the embedded Postgres data path, local DB port ownership, or schema verification.
 
-**Likely cause:** another local Bopo runtime still owns the embedded Postgres directory or port, a stale local `BOPO_DB_PATH` points to an old location, or migrations were not applied for the current release.
+**Likely cause:** another local Bopo runtime still owns the embedded Postgres directory or port, a stale local `BOPO_DB_PATH` points to an old location, or migrations were not applied for the current release. The API tries to **reuse** an embedded cluster that is already running on the same data directory instead of blocking on a lock; if the default embedded port is busy, it may pick the next free port (see startup logs).
 
 **Recovery (local dev):**
 
@@ -40,7 +40,7 @@ Reduce mean time to diagnose failures across API, runtime, and UI surfaces.
 3. Note your data path: default is `~/.bopodev/instances/default/db/postgres` unless `BOPO_DB_PATH` / `BOPO_INSTANCE_*` overrides it.
 4. **Back up** that directory before deleting or replacing it.
 5. If the store is corrupted and you do not need the local data, remove the Postgres data directory and rerun `pnpm onboard`.
-6. If startup still fails, check whether port `55432` is already occupied by another process or intentionally override it with `BOPO_DB_PORT`.
+6. If startup still fails, check whether port `55432` (or the port printed in logs if a fallback was used) is occupied, or set `BOPO_DB_PORT` to a fixed value. Stale `*.embed.lock` files under the data path parent can still block a **new** cluster start—remove only if no process is using that data directory.
 
 ## Symptom -> Likely Cause
 

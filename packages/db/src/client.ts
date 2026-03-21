@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +10,7 @@ const acquireProperLockfile = require("proper-lockfile") as (
   path: string,
   options?: Record<string, unknown>
 ) => Promise<() => Promise<void>>;
+import detectPort from "detect-port";
 import EmbeddedPostgresModule from "embedded-postgres";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -209,53 +209,67 @@ export async function ensureDatabaseTarget(dbPath: string = defaultDbPath): Prom
 
 async function ensureEmbeddedPostgresTarget(dataPath: string): Promise<DatabaseTarget> {
   await mkdir(dataPath, { recursive: true });
-  const lock = await acquireLocalDbLock(dataPath, EMBEDDED_DB_START_TIMEOUT_MS);
   const statePath = resolveLocalDbStatePath(dataPath);
-  await writeLocalDbState(statePath, {
-    version: LOCAL_DB_STATE_VERSION,
-    source: "embedded-postgres",
-    phase: "initializing",
-    pid: process.pid,
-    port: DEFAULT_DB_PORT,
-    dataPath,
-    updatedAt: new Date().toISOString(),
-    expectedMigrationCount: EXPECTED_MIGRATION_VERSION.count,
-    lastError: null
-  });
+  const configuredPort = DEFAULT_DB_PORT;
+  const resolvedDataPath = resolve(dataPath);
 
-  const postmasterPidFile = resolve(dataPath, "postmaster.pid");
+  const reused = await tryReuseEmbeddedPostgres(resolvedDataPath, statePath, configuredPort);
+  if (reused) {
+    return reused;
+  }
+
+  const lock = await acquireLocalDbLock(dataPath, EMBEDDED_DB_START_TIMEOUT_MS);
+  let lockReleased = false;
   try {
-    const runningPid = readRunningPostmasterPid(postmasterPidFile);
-    if (runningPid) {
-      await waitForPostmasterExit(postmasterPidFile, EMBEDDED_DB_START_TIMEOUT_MS);
-      const activePid = readRunningPostmasterPid(postmasterPidFile);
-      if (activePid) {
-        throw new Error(
-          `Embedded Postgres data path '${dataPath}' is still in use by pid ${activePid}. Stop the other process or wait for it to exit.`
-        );
+    const reusedAfterLock = await tryReuseEmbeddedPostgres(resolvedDataPath, statePath, configuredPort);
+    if (reusedAfterLock) {
+      await releaseLocalDbLock(lock);
+      lockReleased = true;
+      return reusedAfterLock;
+    }
+
+    const postmasterPidFile = resolve(resolvedDataPath, "postmaster.pid");
+    if (existsSync(postmasterPidFile)) {
+      const pm = readPostmasterPidFile(postmasterPidFile);
+      if (!pm || !isPidAlive(pm.pid)) {
+        // eslint-disable-next-line no-console
+        console.warn("[bopodev-db] Removing stale embedded Postgres postmaster.pid");
+        rmSync(postmasterPidFile, { force: true });
       }
     }
-    if (existsSync(postmasterPidFile)) {
-      rmSync(postmasterPidFile, { force: true });
-    }
-    if (await isPortInUse(DEFAULT_DB_PORT)) {
-      throw new Error(
-        `Embedded Postgres port ${DEFAULT_DB_PORT} is already in use. Stop the process using that port or set BOPO_DB_PORT before retrying.`
+
+    const selectedPort = await detectPort(configuredPort);
+    if (selectedPort !== configuredPort) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[bopodev-db] Embedded Postgres port ${configuredPort} is in use; using ${selectedPort}. Set BOPO_DB_PORT to pin a port.`
       );
     }
 
+    await writeLocalDbState(statePath, {
+      version: LOCAL_DB_STATE_VERSION,
+      source: "embedded-postgres",
+      phase: "initializing",
+      pid: process.pid,
+      port: selectedPort,
+      dataPath: resolvedDataPath,
+      updatedAt: new Date().toISOString(),
+      expectedMigrationCount: EXPECTED_MIGRATION_VERSION.count,
+      lastError: null
+    });
+
     const instance = new EmbeddedPostgres({
-      databaseDir: dataPath,
+      databaseDir: resolvedDataPath,
       user: DEFAULT_DB_USER,
       password: DEFAULT_DB_PASSWORD,
-      port: DEFAULT_DB_PORT,
+      port: selectedPort,
       persistent: true,
       initdbFlags: ["--encoding=UTF8", "--locale=C"],
       onLog: () => {},
       onError: () => {}
     });
 
-    if (!existsSync(resolve(dataPath, "PG_VERSION"))) {
+    if (!existsSync(resolve(resolvedDataPath, "PG_VERSION"))) {
       await instance.initialise();
     }
 
@@ -267,7 +281,7 @@ async function ensureEmbeddedPostgresTarget(dataPath: string): Promise<DatabaseT
     await instance.start();
 
     try {
-      await ensurePostgresDatabase(connectionStringFor(DEFAULT_DB_PORT, "postgres"), DEFAULT_DB_NAME);
+      await ensurePostgresDatabase(connectionStringFor(selectedPort, "postgres"), DEFAULT_DB_NAME);
     } catch (error) {
       await instance.stop().catch(() => {});
       throw error;
@@ -279,10 +293,13 @@ async function ensureEmbeddedPostgresTarget(dataPath: string): Promise<DatabaseT
       lastError: null
     });
 
+    await releaseLocalDbLock(lock);
+    lockReleased = true;
+
     let stopped = false;
     return {
-      connectionString: connectionStringFor(DEFAULT_DB_PORT, DEFAULT_DB_NAME),
-      dataPath,
+      connectionString: connectionStringFor(selectedPort, DEFAULT_DB_NAME),
+      dataPath: resolvedDataPath,
       source: "embedded-postgres",
       stop: async () => {
         if (stopped) {
@@ -301,8 +318,8 @@ async function ensureEmbeddedPostgresTarget(dataPath: string): Promise<DatabaseT
             expectedMigrationCount: EXPECTED_MIGRATION_VERSION.count,
             lastError: null
           }).catch(() => {});
-        } finally {
-          await releaseLocalDbLock(lock);
+        } catch {
+          // Best-effort shutdown; process may already be stopping.
         }
       }
     };
@@ -312,8 +329,129 @@ async function ensureEmbeddedPostgresTarget(dataPath: string): Promise<DatabaseT
       expectedMigrationCount: EXPECTED_MIGRATION_VERSION.count,
       lastError: error instanceof Error ? error.message : String(error)
     }).catch(() => {});
-    await releaseLocalDbLock(lock).catch(() => {});
+    if (!lockReleased) {
+      await releaseLocalDbLock(lock).catch(() => {});
+    }
     throw error;
+  }
+}
+
+async function tryReuseEmbeddedPostgres(
+  resolvedDataPath: string,
+  statePath: string,
+  configuredPort: number
+): Promise<DatabaseTarget | null> {
+  const postmasterPidFile = resolve(resolvedDataPath, "postmaster.pid");
+  const pm = readPostmasterPidFile(postmasterPidFile);
+  if (pm && isPidAlive(pm.pid)) {
+    const port = pm.port ?? configuredPort;
+    const adminUrl = connectionStringFor(port, "postgres");
+    let dir: string | null;
+    try {
+      dir = await getPostgresDataDirectory(adminUrl);
+    } catch (error) {
+      throw new Error(
+        `Embedded Postgres data path '${resolvedDataPath}' has postmaster pid ${pm.pid}, but connecting on port ${port} failed: ` +
+          (error instanceof Error ? error.message : String(error))
+      );
+    }
+    if (!dir || resolve(dir) !== resolvedDataPath) {
+      throw new Error(
+        `Embedded Postgres data path '${resolvedDataPath}' has a live postmaster (pid ${pm.pid}), but the server reachable on port ${port} does not use this data directory.`
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.warn(`[bopodev-db] Embedded Postgres already running; reusing (pid=${pm.pid}, port=${port}).`);
+    await writeLocalDbState(statePath, {
+      version: LOCAL_DB_STATE_VERSION,
+      source: "embedded-postgres",
+      phase: "running",
+      pid: process.pid,
+      port,
+      dataPath: resolvedDataPath,
+      updatedAt: new Date().toISOString(),
+      expectedMigrationCount: EXPECTED_MIGRATION_VERSION.count,
+      lastError: null
+    });
+    await ensurePostgresDatabase(adminUrl, DEFAULT_DB_NAME);
+    return {
+      connectionString: connectionStringFor(port, DEFAULT_DB_NAME),
+      dataPath: resolvedDataPath,
+      source: "embedded-postgres",
+      stop: async () => {}
+    };
+  }
+
+  try {
+    const adminUrl = connectionStringFor(configuredPort, "postgres");
+    const dir = await getPostgresDataDirectory(adminUrl);
+    if (dir && resolve(dir) === resolvedDataPath) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[bopodev-db] Embedded Postgres reachable without a postmaster.pid; reusing server on port ${configuredPort}.`
+      );
+      await writeLocalDbState(statePath, {
+        version: LOCAL_DB_STATE_VERSION,
+        source: "embedded-postgres",
+        phase: "running",
+        pid: process.pid,
+        port: configuredPort,
+        dataPath: resolvedDataPath,
+        updatedAt: new Date().toISOString(),
+        expectedMigrationCount: EXPECTED_MIGRATION_VERSION.count,
+        lastError: null
+      });
+      await ensurePostgresDatabase(adminUrl, DEFAULT_DB_NAME);
+      return {
+        connectionString: connectionStringFor(configuredPort, DEFAULT_DB_NAME),
+        dataPath: resolvedDataPath,
+        source: "embedded-postgres",
+        stop: async () => {}
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function getPostgresDataDirectory(connectionString: string): Promise<string | null> {
+  const sqlClient = postgres(connectionString, {
+    max: 1,
+    onnotice: () => {}
+  });
+  try {
+    const rows = await sqlClient<{ data_directory: string | null }[]>`
+      SELECT current_setting('data_directory', true) AS data_directory
+    `;
+    const actual = rows[0]?.data_directory;
+    return typeof actual === "string" && actual.length > 0 ? actual : null;
+  } finally {
+    await sqlClient.end();
+  }
+}
+
+function readPostmasterPidFile(postmasterPidFile: string): { pid: number; port: number | null } | null {
+  if (!existsSync(postmasterPidFile)) {
+    return null;
+  }
+  try {
+    const raw = readFileSync(postmasterPidFile, "utf8");
+    const lines = raw.split(/\r?\n/);
+    const pid = Number(lines[0]?.trim());
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return null;
+    }
+    let port: number | null = null;
+    if (lines.length >= 4) {
+      const parsedPort = Number(lines[3]?.trim());
+      if (Number.isInteger(parsedPort) && parsedPort > 0) {
+        port = parsedPort;
+      }
+    }
+    return { pid, port };
+  } catch {
+    return null;
   }
 }
 
@@ -336,43 +474,6 @@ async function ensurePostgresDatabase(adminConnectionString: string, databaseNam
   } finally {
     await sqlClient.end();
   }
-}
-
-function readRunningPostmasterPid(postmasterPidFile: string): number | null {
-  if (!existsSync(postmasterPidFile)) {
-    return null;
-  }
-  try {
-    const pid = Number(readFileSync(postmasterPidFile, "utf8").split("\n")[0]?.trim());
-    if (!Number.isInteger(pid) || pid <= 0) {
-      return null;
-    }
-    process.kill(pid, 0);
-    return pid;
-  } catch {
-    return null;
-  }
-}
-
-async function waitForPostmasterExit(postmasterPidFile: string, timeoutMs: number) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (!readRunningPostmasterPid(postmasterPidFile)) {
-      return;
-    }
-    await sleep(200);
-  }
-}
-
-function isPortInUse(port: number) {
-  return new Promise<boolean>((resolvePromise) => {
-    const server = createServer();
-    server.unref();
-    server.once("error", () => resolvePromise(true));
-    server.listen(port, "127.0.0.1", () => {
-      server.close(() => resolvePromise(false));
-    });
-  });
 }
 
 function connectionStringFor(port: number, databaseName: string) {

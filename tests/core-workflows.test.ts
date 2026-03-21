@@ -1720,7 +1720,7 @@ describe("BopoDev core workflows", () => {
           cwd: tempDir,
           args: [
             "-e",
-            `console.log(JSON.stringify({employee_comment:'Created operating-file baseline.',results:['Created AGENTS.md.'],errors:[],artifacts:[{kind:'file',path:'agents/policy-worker/operating/AGENTS.md'},{kind:'file',path:'workspace/${companyId}/agents/policy-worker/operating/HEARTBEAT.md'}],tokenInput:3,tokenOutput:2,usdCost:0.0001}));`
+            `console.log(JSON.stringify({employee_comment:'Created operating-file baseline.',results:['Created AGENTS.md.'],errors:[],artifacts:[{kind:'file',path:'agents/policy-worker/operating/AGENTS.md'},{kind:'file',path:'workspace/${companyId}/agents/policy-worker/operating/HEARTBEAT.md'},{kind:'file',path:'projects/agents/policy-worker/operating/SOUL.md'}],tokenInput:3,tokenOutput:2,usdCost:0.0001}));`
           ]
         }
       }
@@ -1739,6 +1739,7 @@ describe("BopoDev core workflows", () => {
     const latestRun = heartbeatRows.find((row) => row.id === runId);
     expect(latestRun?.status).toBe("completed");
     expect(latestRun?.message ?? "").toContain(`workspace/${companyId}/agents/policy-worker/operating/AGENTS.md`);
+    expect(latestRun?.message ?? "").toContain(`workspace/${companyId}/agents/policy-worker/operating/SOUL.md`);
     expect(latestRun?.message ?? "").not.toContain(`/issues/${issue.id}/agents/`);
 
     const issueComments = await listIssueComments(db, companyId, issue.id);
@@ -1750,6 +1751,9 @@ describe("BopoDev core workflows", () => {
     );
     expect(runSummaryComment?.body ?? "").toContain(
       `[workspace/${companyId}/agents/policy-worker/operating/HEARTBEAT.md](http://127.0.0.1:4020/observability/heartbeats/${encodeURIComponent(runId!)}/artifacts/1/download?companyId=${encodeURIComponent(companyId)})`
+    );
+    expect(runSummaryComment?.body ?? "").toContain(
+      `[workspace/${companyId}/agents/policy-worker/operating/SOUL.md](http://127.0.0.1:4020/observability/heartbeats/${encodeURIComponent(runId!)}/artifacts/2/download?companyId=${encodeURIComponent(companyId)})`
     );
     expect(runSummaryComment?.body ?? "").not.toContain(`/issues/${issue.id}/agents/`);
     expect(runSummaryComment?.body ?? "").not.toContain(`/issues/${issue.id}/workspace/${companyId}/agents/`);

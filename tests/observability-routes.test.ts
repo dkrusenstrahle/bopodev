@@ -396,6 +396,61 @@ describe("observability routes", { timeout: 30_000 }, () => {
     expect(Buffer.from(downloadResponse.body).toString("utf8")).toContain("workspace scoped artifact");
   });
 
+  it("downloads artifacts when report path uses projects/agents operating scope", async () => {
+    const project = await createProject(db, {
+      companyId,
+      name: "Projects Agents Scoped Artifact Download"
+    });
+    const agentFolder = "projects-agents-worker";
+    const agent = await createAgent(db, {
+      companyId,
+      role: "Worker",
+      name: "Projects Agents Artifact Worker",
+      providerType: "shell",
+      heartbeatCron: "* * * * *",
+      monthlyBudgetUsd: "25.0000",
+      canHireAgents: false,
+      runtimeCommand: "echo",
+      runtimeArgsJson: JSON.stringify([
+        JSON.stringify({
+          employee_comment: "done",
+          results: ["created projects/agents operating report"],
+          errors: [],
+          artifacts: [{ kind: "file", path: `projects/agents/${agentFolder}/operating/AGENTS.md` }],
+          tokenInput: 1,
+          tokenOutput: 1,
+          usdCost: 0.0001
+        })
+      ])
+    });
+    await createIssue(db, {
+      companyId,
+      projectId: project.id,
+      title: "Produce projects/agents-scoped artifact",
+      assigneeAgentId: agent.id
+    });
+
+    const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
+    expect(runId).toBeTruthy();
+    const operatingDir = join(
+      process.env.BOPO_INSTANCE_ROOT!,
+      "workspaces",
+      companyId,
+      "agents",
+      agentFolder,
+      "operating"
+    );
+    await mkdir(operatingDir, { recursive: true });
+    await writeFile(join(operatingDir, "AGENTS.md"), "projects agents scoped artifact\n");
+
+    const downloadResponse = await request(app)
+      .get(`/observability/heartbeats/${encodeURIComponent(runId!)}/artifacts/0/download`)
+      .query({ companyId })
+      .set("x-company-id", companyId);
+    expect(downloadResponse.status).toBe(200);
+    expect(Buffer.from(downloadResponse.body).toString("utf8")).toContain("projects agents scoped artifact");
+  });
+
   it("downloads artifacts when workspace/ company segment typos the real company id", async () => {
     const project = await createProject(db, {
       companyId,

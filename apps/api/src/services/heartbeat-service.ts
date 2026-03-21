@@ -3188,6 +3188,11 @@ function normalizeAgentOperatingArtifactRelativePath(pathValue: string | null, c
     const [, agentId, suffix = ""] = directMatch;
     return `workspace/${companyId}/agents/${agentId}/operating${suffix}`;
   }
+  const projectAgentsMatch = normalized.match(/^projects\/agents\/([^/]+)\/operating(\/.*)?$/);
+  if (projectAgentsMatch) {
+    const [, agentId, suffix = ""] = projectAgentsMatch;
+    return `workspace/${companyId}/agents/${agentId}/operating${suffix}`;
+  }
   const issueScopedMatch = normalized.match(
     /^(?:[^/]+\/)?projects\/[^/]+\/issues\/[^/]+\/agents\/([^/]+)\/operating(\/.*)?$/
   );

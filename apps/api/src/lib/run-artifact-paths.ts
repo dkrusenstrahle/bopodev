@@ -70,6 +70,14 @@ function normalizeWorkspaceRelativeArtifactPath(value: string) {
   }
   const workspaceScopedMatch = normalized.match(/(?:^|\/)workspace\/([^/]+)\/(.+)$/);
   if (!workspaceScopedMatch) {
+    const projectAgentsMatch = normalized.match(/(?:^|\/)projects\/agents\/([^/]+)\/operating\/(.+)$/);
+    if (projectAgentsMatch) {
+      const [, agentId, suffix] = projectAgentsMatch;
+      if (!agentId || !suffix) {
+        return "";
+      }
+      return `agents/${agentId}/operating/${suffix}`;
+    }
     return normalized;
   }
   const scopedRelativePath = workspaceScopedMatch[2];

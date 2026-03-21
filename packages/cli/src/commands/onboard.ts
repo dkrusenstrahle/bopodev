@@ -246,12 +246,20 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
     printCheck("ok", "Dependencies", "Already installed");
   }
 
-  const envPath = join(workspaceRoot, ".env");
-  const preEnvValues = (await fileExists(envPath)) ? await readEnvValues(envPath) : {};
-
   let checks: DoctorCheck[] = [];
   let passed = 0;
   let warnings = 0;
+  if (!options.start) {
+    const doctorSpin = spinner();
+    doctorSpin.start("Running doctor checks");
+    checks = await deps.runDoctor(workspaceRoot);
+    doctorSpin.stop("Doctor checks complete");
+    passed = checks.filter((check) => check.ok).length;
+    warnings = checks.length - passed;
+  }
+
+  const envPath = join(workspaceRoot, ".env");
+  const preEnvValues = (await fileExists(envPath)) ? await readEnvValues(envPath) : {};
 
   let companyName = preEnvValues[DEFAULT_COMPANY_NAME_ENV]?.trim() ?? "";
   if (companyName.length > 0) {
@@ -412,12 +420,6 @@ export async function runOnboardFlow(options: OnboardOptions, deps: OnboardDeps 
   }
 
   if (!options.start) {
-    const doctorSpin = spinner();
-    doctorSpin.start("Running doctor checks");
-    checks = await deps.runDoctor(workspaceRoot);
-    doctorSpin.stop("Doctor checks complete");
-    passed = checks.filter((check) => check.ok).length;
-    warnings = checks.length - passed;
     printCheck("ok", "Doctor", "checks complete");
     printCheck("ok", "Doctor summary", `${passed} passed, ${warnings} warning${warnings === 1 ? "" : "s"}`);
     if (warnings === 0) {

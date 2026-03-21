@@ -20,15 +20,25 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
     details: `Detected ${process.versions.node}; requires >= 20`
   });
 
-  const pnpmAvailable = await commandExists("pnpm");
+  const codexCommand = process.env.BOPO_CODEX_COMMAND?.trim() || "codex";
+  const openCodeCommand = process.env.BOPO_OPENCODE_COMMAND?.trim() || "opencode";
+  const claudeCommand = process.env.BOPO_CLAUDE_COMMAND?.trim() || "claude";
+  const geminiCommand = process.env.BOPO_GEMINI_COMMAND?.trim() || "gemini";
+  const [pnpmAvailable, gitRuntime, codex, openCode, claude, gemini] = await Promise.all([
+    commandExists("pnpm"),
+    checkRuntimeCommandHealth("git", options?.workspaceRoot),
+    checkRuntimeCommandHealth(codexCommand, options?.workspaceRoot),
+    checkRuntimeCommandHealth(openCodeCommand, options?.workspaceRoot),
+    checkRuntimeCommandHealth(claudeCommand, options?.workspaceRoot),
+    checkRuntimeCommandHealth(geminiCommand, options?.workspaceRoot)
+  ]);
+
   checks.push({
     label: "pnpm",
     ok: pnpmAvailable,
     details: pnpmAvailable ? "pnpm is available" : "pnpm is not installed or not in PATH"
   });
 
-  const codexCommand = process.env.BOPO_CODEX_COMMAND?.trim() || "codex";
-  const gitRuntime = await checkRuntimeCommandHealth("git", options?.workspaceRoot);
   checks.push({
     label: "Git runtime",
     ok: gitRuntime.available && gitRuntime.exitCode === 0,
@@ -38,7 +48,6 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
         : gitRuntime.error ?? "Command 'git' is not available"
   });
 
-  const codex = await checkRuntimeCommandHealth(codexCommand, options?.workspaceRoot);
   checks.push({
     label: "Codex runtime",
     ok: codex.available && codex.exitCode === 0,
@@ -48,8 +57,6 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
         : codex.error ?? `Command '${codexCommand}' exited with ${String(codex.exitCode)}`
   });
 
-  const openCodeCommand = process.env.BOPO_OPENCODE_COMMAND?.trim() || "opencode";
-  const openCode = await checkRuntimeCommandHealth(openCodeCommand, options?.workspaceRoot);
   checks.push({
     label: "OpenCode runtime",
     ok: openCode.available && openCode.exitCode === 0,
@@ -59,8 +66,6 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
         : openCode.error ?? `Command '${openCodeCommand}' exited with ${String(openCode.exitCode)}`
   });
 
-  const claudeCommand = process.env.BOPO_CLAUDE_COMMAND?.trim() || "claude";
-  const claude = await checkRuntimeCommandHealth(claudeCommand, options?.workspaceRoot);
   checks.push({
     label: "Claude Code runtime",
     ok: claude.available && claude.exitCode === 0,
@@ -70,8 +75,6 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
         : claude.error ?? `Command '${claudeCommand}' exited with ${String(claude.exitCode)}`
   });
 
-  const geminiCommand = process.env.BOPO_GEMINI_COMMAND?.trim() || "gemini";
-  const gemini = await checkRuntimeCommandHealth(geminiCommand, options?.workspaceRoot);
   checks.push({
     label: "Gemini runtime",
     ok: gemini.available && gemini.exitCode === 0,
@@ -85,19 +88,24 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
     const instanceRoot = resolveInstanceRoot();
     const storageRoot = join(instanceRoot, "data", "storage");
     const workspaceRoot = join(instanceRoot, "workspaces");
+    const [instanceRootWritable, workspaceRootWritable, storageRootWritable] = await Promise.all([
+      ensureWritableDirectory(instanceRoot),
+      ensureWritableDirectory(workspaceRoot),
+      ensureWritableDirectory(storageRoot)
+    ]);
     checks.push({
       label: "Instance root writable",
-      ok: await ensureWritableDirectory(instanceRoot),
+      ok: instanceRootWritable,
       details: instanceRoot
     });
     checks.push({
       label: "Workspace root writable",
-      ok: await ensureWritableDirectory(workspaceRoot),
+      ok: workspaceRootWritable,
       details: workspaceRoot
     });
     checks.push({
       label: "Storage root writable",
-      ok: await ensureWritableDirectory(storageRoot),
+      ok: storageRootWritable,
       details: storageRoot
     });
   } catch (error) {
@@ -109,9 +117,11 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
   }
 
   if (options?.workspaceRoot) {
-    const driftCheck = await runWorkspacePathDriftCheck(options.workspaceRoot);
+    const [driftCheck, backfillCheck] = await Promise.all([
+      runWorkspacePathDriftCheck(options.workspaceRoot),
+      runWorkspaceBackfillDryRunCheck(options.workspaceRoot)
+    ]);
     checks.push(driftCheck);
-    const backfillCheck = await runWorkspaceBackfillDryRunCheck(options.workspaceRoot);
     checks.push(backfillCheck);
   }
 

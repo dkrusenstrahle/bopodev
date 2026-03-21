@@ -21,21 +21,44 @@ export async function runCommandCapture(
   options?: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }
 ): Promise<CommandResult> {
   return new Promise((resolvePromise) => {
+    const supportsProcessGroups = process.platform !== "win32";
     const child = spawn(command, args, {
       cwd: options?.cwd ?? process.cwd(),
       env: options?.env ?? process.env,
       stdio: ["ignore", "pipe", "pipe"],
-      shell: false
+      shell: false,
+      detached: supportsProcessGroups
     });
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timedOut = false;
     const timeoutMs = Math.max(0, Math.floor(options?.timeoutMs ?? 10_000));
+    let killHandle: NodeJS.Timeout | null = null;
+    const terminate = (signal: NodeJS.Signals) => {
+      if (child.killed || child.exitCode !== null) {
+        return;
+      }
+      try {
+        if (supportsProcessGroups && child.pid) {
+          process.kill(-child.pid, signal);
+        } else {
+          child.kill(signal);
+        }
+      } catch {
+        // Best effort termination only.
+      }
+    };
     const timeoutHandle =
       timeoutMs > 0
         ? setTimeout(() => {
+            timedOut = true;
             stderr = `${stderr}\nCommand '${command}' timed out after ${timeoutMs}ms.`.trim();
-            child.kill("SIGTERM");
+            terminate("SIGTERM");
+            killHandle = setTimeout(() => {
+              terminate("SIGKILL");
+            }, 5_000);
           }, timeoutMs)
         : null;
 
@@ -47,8 +70,15 @@ export async function runCommandCapture(
     });
 
     child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
+      }
+      if (killHandle) {
+        clearTimeout(killHandle);
       }
       resolvePromise({
         ok: false,
@@ -59,11 +89,18 @@ export async function runCommandCapture(
     });
 
     child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
+      if (killHandle) {
+        clearTimeout(killHandle);
+      }
       resolvePromise({
-        ok: code === 0,
+        ok: code === 0 && !timedOut,
         code,
         stdout,
         stderr

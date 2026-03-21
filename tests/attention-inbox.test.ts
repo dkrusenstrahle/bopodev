@@ -40,7 +40,7 @@ describe("board attention inbox", { timeout: 30_000 }, () => {
   });
 
   afterEach(async () => {
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   });
 

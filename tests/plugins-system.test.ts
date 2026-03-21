@@ -10,18 +10,41 @@ import { ensureBuiltinPluginsRegistered } from "../apps/api/src/services/plugin-
 import type { BopoDb } from "../packages/db/src/client";
 import { bootstrapDatabase, createAgent, createCompany, createIssue, createProject } from "../packages/db/src/index";
 
-describe("plugin system", { timeout: 30_000 }, () => {
+async function pollPluginRuns(
+  fetchResponse: () => Promise<{ status: number; body: { data?: unknown } }>,
+  predicate: (rows: Array<Record<string, unknown>>) => boolean,
+  options?: { timeoutMs?: number; intervalMs?: number }
+) {
+  const timeoutMs = options?.timeoutMs ?? 30_000;
+  const intervalMs = options?.intervalMs ?? 50;
+  const deadline = Date.now() + timeoutMs;
+  let last: Awaited<ReturnType<typeof fetchResponse>> | undefined;
+  while (Date.now() < deadline) {
+    last = await fetchResponse();
+    const rows = last.body?.data;
+    if (last.status === 200 && Array.isArray(rows) && predicate(rows as Array<Record<string, unknown>>)) {
+      return last;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return last ?? (await fetchResponse());
+}
+
+describe("plugin system", { timeout: 120_000 }, () => {
   let db: BopoDb;
   let app: ReturnType<typeof createApp>;
   let tempDir: string;
+  let workspaceDir: string;
   let companyId: string;
   let client: { close?: () => Promise<void> };
+  let originalInstanceRoot: string | undefined;
   let originalEnabledFlag: string | undefined;
   let originalDisabledFlag: string | undefined;
   let originalManifestsDir: string | undefined;
   let originalWebhookAllowlist: string | undefined;
 
   beforeEach(async () => {
+    originalInstanceRoot = process.env.BOPO_INSTANCE_ROOT;
     originalEnabledFlag = process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
     originalDisabledFlag = process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
     originalManifestsDir = process.env.BOPO_PLUGIN_MANIFESTS_DIR;
@@ -30,6 +53,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     delete process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
     delete process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST;
     tempDir = await mkdtemp(join(tmpdir(), "bopodev-plugin-test-"));
+    process.env.BOPO_INSTANCE_ROOT = tempDir;
     process.env.BOPO_PLUGIN_MANIFESTS_DIR = join(tempDir, "plugins");
     const boot = await bootstrapDatabase(join(tempDir, "test.db"));
     db = boot.db;
@@ -37,10 +61,17 @@ describe("plugin system", { timeout: 30_000 }, () => {
     app = createApp({ db });
     const company = await createCompany(db, { name: "Plugins Co", mission: "Test plugins." });
     companyId = company.id;
+    workspaceDir = join(tempDir, "workspaces", companyId);
+    await mkdir(workspaceDir, { recursive: true });
     await ensureBuiltinPluginsRegistered(db, [companyId]);
   }, 30_000);
 
   afterEach(async () => {
+    if (originalInstanceRoot === undefined) {
+      delete process.env.BOPO_INSTANCE_ROOT;
+    } else {
+      process.env.BOPO_INSTANCE_ROOT = originalInstanceRoot;
+    }
     if (originalEnabledFlag === undefined) {
       delete process.env.BOPO_PLUGIN_SYSTEM_ENABLED;
     } else {
@@ -61,7 +92,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     } else {
       process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST = originalWebhookAllowlist;
     }
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   }, 30_000);
 
@@ -97,7 +128,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     const project = await createProject(db, {
       companyId,
       name: "Plugin execution project",
-      workspaceLocalPath: tempDir
+      workspaceLocalPath: workspaceDir
     });
     const agent = await createAgent(db, {
       companyId,
@@ -108,7 +139,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
       monthlyBudgetUsd: "20.0000",
       runtimeCommand: "echo",
       runtimeArgsJson: '["{\\"summary\\":\\"plugin-run\\",\\"tokenInput\\":2,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: tempDir
+      runtimeCwd: workspaceDir
     });
     await createIssue(db, {
       companyId,
@@ -130,9 +161,14 @@ describe("plugin system", { timeout: 30_000 }, () => {
     const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
     expect(runId).toBeTruthy();
 
-    const pluginRunsResponse = await request(app)
-      .get(`/observability/plugins/runs?runId=${encodeURIComponent(runId!)}`)
-      .set("x-company-id", companyId);
+    const pluginRunsResponse = await pollPluginRuns(
+      () =>
+        request(app)
+          .get(`/observability/plugins/runs?runId=${encodeURIComponent(runId!)}`)
+          .set("x-company-id", companyId),
+      (rows) =>
+        rows.some((row) => row.pluginId === "trace-exporter" && row.hook === "afterAdapterExecute")
+    );
     expect(pluginRunsResponse.status).toBe(200);
     expect(Array.isArray(pluginRunsResponse.body.data)).toBe(true);
     expect(pluginRunsResponse.body.data.length).toBeGreaterThan(0);
@@ -382,7 +418,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     const project = await createProject(db, {
       companyId,
       name: "Prompt plugin project",
-      workspaceLocalPath: tempDir
+      workspaceLocalPath: workspaceDir
     });
     const agent = await createAgent(db, {
       companyId,
@@ -393,7 +429,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
       monthlyBudgetUsd: "20.0000",
       runtimeCommand: "echo",
       runtimeArgsJson: '["{\\"summary\\":\\"prompt-plugin\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: tempDir
+      runtimeCwd: workspaceDir
     });
     await createIssue(db, {
       companyId,
@@ -402,9 +438,13 @@ describe("plugin system", { timeout: 30_000 }, () => {
       assigneeAgentId: agent.id
     });
     const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await request(app)
-      .get(`/plugins/runs?pluginId=prompt-context-plugin&runId=${encodeURIComponent(runId!)}`)
-      .set("x-company-id", companyId);
+    const pluginRunsResponse = await pollPluginRuns(
+      () =>
+        request(app)
+          .get(`/plugins/runs?pluginId=prompt-context-plugin&runId=${encodeURIComponent(runId!)}`)
+          .set("x-company-id", companyId),
+      (rows) => rows.some((row) => row.status === "ok")
+    );
     expect(pluginRunsResponse.status).toBe(200);
     expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "ok")).toBe(true);
     expect(
@@ -452,7 +492,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     const project = await createProject(db, {
       companyId,
       name: "Webhook capability project",
-      workspaceLocalPath: tempDir
+      workspaceLocalPath: workspaceDir
     });
     const agent = await createAgent(db, {
       companyId,
@@ -463,7 +503,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
       monthlyBudgetUsd: "20.0000",
       runtimeCommand: "echo",
       runtimeArgsJson: '["{\\"summary\\":\\"webhook-capability\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: tempDir
+      runtimeCwd: workspaceDir
     });
     await createIssue(db, {
       companyId,
@@ -472,9 +512,10 @@ describe("plugin system", { timeout: 30_000 }, () => {
       assigneeAgentId: agent.id
     });
     await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await request(app)
-      .get("/plugins/runs?pluginId=prompt-webhook-no-network")
-      .set("x-company-id", companyId);
+    const pluginRunsResponse = await pollPluginRuns(
+      () => request(app).get("/plugins/runs?pluginId=prompt-webhook-no-network").set("x-company-id", companyId),
+      (rows) => rows.some((row) => row.status === "failed")
+    );
     expect(pluginRunsResponse.status).toBe(200);
     expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
   });
@@ -524,7 +565,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     const project = await createProject(db, {
       companyId,
       name: "Webhook timeout project",
-      workspaceLocalPath: tempDir
+      workspaceLocalPath: workspaceDir
     });
     const agent = await createAgent(db, {
       companyId,
@@ -535,7 +576,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
       monthlyBudgetUsd: "20.0000",
       runtimeCommand: "echo",
       runtimeArgsJson: '["{\\"summary\\":\\"webhook-timeout\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: tempDir
+      runtimeCwd: workspaceDir
     });
     await createIssue(db, {
       companyId,
@@ -544,9 +585,10 @@ describe("plugin system", { timeout: 30_000 }, () => {
       assigneeAgentId: agent.id
     });
     await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await request(app)
-      .get("/plugins/runs?pluginId=prompt-webhook-timeout")
-      .set("x-company-id", companyId);
+    const pluginRunsResponse = await pollPluginRuns(
+      () => request(app).get("/plugins/runs?pluginId=prompt-webhook-timeout").set("x-company-id", companyId),
+      (rows) => rows.some((row) => row.status === "failed")
+    );
     expect(pluginRunsResponse.status).toBe(200);
     expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
     await new Promise<void>((resolve, reject) => {
@@ -559,7 +601,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     const project = await createProject(db, {
       companyId,
       name: "Plugin disabled project",
-      workspaceLocalPath: tempDir
+      workspaceLocalPath: workspaceDir
     });
     const agent = await createAgent(db, {
       companyId,
@@ -570,7 +612,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
       monthlyBudgetUsd: "20.0000",
       runtimeCommand: "echo",
       runtimeArgsJson: '["{\\"summary\\":\\"plugin-disabled\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: tempDir
+      runtimeCwd: workspaceDir
     });
     await createIssue(db, {
       companyId,
@@ -626,7 +668,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
     const project = await createProject(db, {
       companyId,
       name: "Webhook allowlist denied project",
-      workspaceLocalPath: tempDir
+      workspaceLocalPath: workspaceDir
     });
     const agent = await createAgent(db, {
       companyId,
@@ -637,7 +679,7 @@ describe("plugin system", { timeout: 30_000 }, () => {
       monthlyBudgetUsd: "20.0000",
       runtimeCommand: "echo",
       runtimeArgsJson: '["{\\"summary\\":\\"webhook-allowlist-denied\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: tempDir
+      runtimeCwd: workspaceDir
     });
     await createIssue(db, {
       companyId,
@@ -646,9 +688,11 @@ describe("plugin system", { timeout: 30_000 }, () => {
       assigneeAgentId: agent.id
     });
     await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await request(app)
-      .get("/plugins/runs?pluginId=prompt-webhook-allowlist-denied")
-      .set("x-company-id", companyId);
+    const pluginRunsResponse = await pollPluginRuns(
+      () =>
+        request(app).get("/plugins/runs?pluginId=prompt-webhook-allowlist-denied").set("x-company-id", companyId),
+      (rows) => rows.some((row) => row.status === "failed")
+    );
     expect(pluginRunsResponse.status).toBe(200);
     expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
     expect(

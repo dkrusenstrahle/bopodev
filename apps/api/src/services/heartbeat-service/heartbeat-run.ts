@@ -34,286 +34,49 @@ import {
   issueComments,
   issueAttachments,
   issues,
-  max,
   projects,
   sql
 } from "bopodev-db";
 import { appendAuditEvent, appendCost } from "bopodev-db";
-import { parseRuntimeConfigFromAgentRow } from "../lib/agent-config";
-import { bootstrapRepositoryWorkspace, ensureIsolatedGitWorktree, GitRuntimeError } from "../lib/git-runtime";
+import { parseRuntimeConfigFromAgentRow } from "../../lib/agent-config";
+import { bootstrapRepositoryWorkspace, ensureIsolatedGitWorktree, GitRuntimeError } from "../../lib/git-runtime";
 import {
   isInsidePath,
   normalizeCompanyWorkspacePath,
   resolveCompanyWorkspaceRootPath,
   resolveProjectWorkspacePath
-} from "../lib/instance-paths";
-import { resolveRunArtifactAbsolutePath } from "../lib/run-artifact-paths";
+} from "../../lib/instance-paths";
+import { resolveRunArtifactAbsolutePath } from "../../lib/run-artifact-paths";
 import {
   assertRuntimeCwdForCompany,
   getProjectWorkspaceContextMap,
   hasText,
   resolveAgentFallbackWorkspace
-} from "../lib/workspace-policy";
-import type { RealtimeHub } from "../realtime/hub";
-import { createHeartbeatRunsRealtimeEvent, loadHeartbeatRunsRealtimeSnapshot } from "../realtime/heartbeat-runs";
-import { publishAttentionSnapshot } from "../realtime/attention";
-import { publishOfficeOccupantForAgent } from "../realtime/office-space";
-import { appendProjectBudgetUsage, checkAgentBudget, checkProjectBudget } from "./budget-service";
-import { appendDurableFact, loadAgentMemoryContext, persistHeartbeatMemory } from "./memory-file-service";
-import { calculateModelPricedUsdCost } from "./model-pricing";
-import { runPluginHook } from "./plugin-runtime";
-
-type HeartbeatRunTrigger = "manual" | "scheduler";
-type HeartbeatRunMode = "default" | "resume" | "redo";
-type HeartbeatProviderType =
-  | "claude_code"
-  | "codex"
-  | "cursor"
-  | "opencode"
-  | "gemini_cli"
-  | "openai_api"
-  | "anthropic_api"
-  | "http"
-  | "shell";
-
-type ActiveHeartbeatRun = {
-  companyId: string;
-  agentId: string;
-  abortController: AbortController;
-  cancelReason?: string | null;
-  cancelRequestedAt?: string | null;
-  cancelRequestedBy?: string | null;
-};
-
-const activeHeartbeatRuns = new Map<string, ActiveHeartbeatRun>();
-type HeartbeatWakeContext = {
-  reason?: string | null;
-  commentId?: string | null;
-  commentBody?: string | null;
-  issueIds?: string[];
-};
+} from "../../lib/workspace-policy";
+import type { RealtimeHub } from "../../realtime/hub";
+import { createHeartbeatRunsRealtimeEvent, loadHeartbeatRunsRealtimeSnapshot } from "../../realtime/heartbeat-runs";
+import { publishAttentionSnapshot } from "../../realtime/attention";
+import { publishOfficeOccupantForAgent } from "../../realtime/office-space";
+import { appendProjectBudgetUsage, checkAgentBudget, checkProjectBudget } from "../budget-service";
+import { appendDurableFact, loadAgentMemoryContext, persistHeartbeatMemory } from "../memory-file-service";
+import { calculateModelPricedUsdCost } from "../model-pricing";
+import { runPluginHook } from "../plugin-runtime";
+import { registerActiveHeartbeatRun, unregisterActiveHeartbeatRun } from "./active-runs";
+import { claimIssuesForAgent, releaseClaimedIssues } from "./claims";
+import { publishHeartbeatRunStatus } from "./heartbeat-realtime";
+import type {
+  ActiveHeartbeatRun,
+  HeartbeatIdlePolicy,
+  HeartbeatProviderType,
+  HeartbeatRunMode,
+  HeartbeatRunTrigger,
+  HeartbeatWakeContext,
+  RunDigest,
+  RunDigestSignal,
+  RunTerminalPresentation
+} from "./types";
 
 const AGENT_COMMENT_EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/gu;
-
-type RunDigestSignal = {
-  sequence: number;
-  kind: "system" | "assistant" | "thinking" | "tool_call" | "tool_result" | "result" | "stderr";
-  label: string | null;
-  text: string | null;
-  payload: string | null;
-  signalLevel: "high" | "medium" | "low" | "noise";
-  groupKey: string | null;
-  source: "stdout" | "stderr" | "trace_fallback";
-};
-
-type RunDigest = {
-  status: "completed" | "failed" | "skipped";
-  headline: string;
-  summary: string;
-  successes: string[];
-  failures: string[];
-  blockers: string[];
-  nextAction: string;
-  evidence: {
-    transcriptSignalCount: number;
-    outcomeActionCount: number;
-    outcomeBlockerCount: number;
-    failureType: string | null;
-  };
-};
-
-type RunTerminalPresentation = {
-  internalStatus: "completed" | "failed" | "skipped";
-  publicStatus: "completed" | "failed";
-  completionReason: RunCompletionReason;
-};
-
-export async function claimIssuesForAgent(
-  db: BopoDb,
-  companyId: string,
-  agentId: string,
-  heartbeatRunId: string,
-  maxItems = 5
-) {
-  // Postgres-specific: CTE + FOR UPDATE SKIP LOCKED + UPDATE FROM — not modeled by Drizzle’s fluent API without embedding the same SQL.
-  const result = await db.execute(sql`
-    WITH candidate AS (
-      SELECT id
-      FROM issues
-      WHERE company_id = ${companyId}
-        AND assignee_agent_id = ${agentId}
-        AND status IN ('todo', 'in_progress')
-        AND is_claimed = false
-      ORDER BY
-        CASE priority
-          WHEN 'urgent' THEN 0
-          WHEN 'high' THEN 1
-          WHEN 'medium' THEN 2
-          WHEN 'low' THEN 3
-          ELSE 4
-        END ASC,
-        updated_at ASC
-      LIMIT ${maxItems}
-      FOR UPDATE SKIP LOCKED
-    )
-    UPDATE issues i
-    SET is_claimed = true,
-        claimed_by_heartbeat_run_id = ${heartbeatRunId},
-        updated_at = CURRENT_TIMESTAMP
-    FROM candidate c
-    WHERE i.id = c.id
-    RETURNING i.id, i.project_id, i.parent_issue_id, i.title, i.body, i.status, i.priority, i.labels_json, i.tags_json;
-  `);
-
-  return result as unknown as Array<{
-    id: string;
-    project_id: string;
-    parent_issue_id: string | null;
-    title: string;
-    body: string | null;
-    status: string;
-    priority: string;
-    labels_json: string;
-    tags_json: string;
-  }>;
-}
-
-export async function releaseClaimedIssues(db: BopoDb, companyId: string, issueIds: string[]) {
-  if (issueIds.length === 0) {
-    return;
-  }
-  await db
-    .update(issues)
-    .set({ isClaimed: false, claimedByHeartbeatRunId: null, updatedAt: new Date() })
-    .where(and(eq(issues.companyId, companyId), inArray(issues.id, issueIds)));
-}
-
-export async function stopHeartbeatRun(
-  db: BopoDb,
-  companyId: string,
-  runId: string,
-  options?: { requestId?: string; actorId?: string; trigger?: HeartbeatRunTrigger; realtimeHub?: RealtimeHub }
-) {
-  const runTrigger = options?.trigger ?? "manual";
-  const [run] = await db
-    .select({
-      id: heartbeatRuns.id,
-      status: heartbeatRuns.status,
-      agentId: heartbeatRuns.agentId
-    })
-    .from(heartbeatRuns)
-    .where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.id, runId)))
-    .limit(1);
-  if (!run) {
-    return { ok: false as const, reason: "not_found" as const };
-  }
-  if (run.status !== "started") {
-    return { ok: false as const, reason: "invalid_status" as const, status: run.status };
-  }
-  const active = activeHeartbeatRuns.get(runId);
-  const cancelReason = "cancelled by stop request";
-  const cancelRequestedAt = new Date().toISOString();
-  if (active) {
-    active.cancelReason = cancelReason;
-    active.cancelRequestedAt = cancelRequestedAt;
-    active.cancelRequestedBy = options?.actorId ?? null;
-    active.abortController.abort(cancelReason);
-  } else {
-    const finishedAt = new Date();
-    await db
-      .update(heartbeatRuns)
-      .set({
-        status: "failed",
-        finishedAt,
-        message: "Heartbeat cancelled by stop request."
-      })
-      .where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.id, runId)));
-    publishHeartbeatRunStatus(options?.realtimeHub, {
-      companyId,
-      runId,
-      status: "failed",
-      message: "Heartbeat cancelled by stop request.",
-      finishedAt
-    });
-  }
-  await appendAuditEvent(db, {
-    companyId,
-    actorType: "system",
-    eventType: "heartbeat.cancel_requested",
-    entityType: "heartbeat_run",
-    entityId: runId,
-    correlationId: options?.requestId ?? runId,
-    payload: {
-      agentId: run.agentId,
-      trigger: runTrigger,
-      requestId: options?.requestId ?? null,
-      actorId: options?.actorId ?? null,
-      inMemoryAbortRegistered: Boolean(active)
-    }
-  });
-  if (!active) {
-    await appendAuditEvent(db, {
-      companyId,
-      actorType: "system",
-      eventType: "heartbeat.cancelled",
-      entityType: "heartbeat_run",
-      entityId: runId,
-      correlationId: options?.requestId ?? runId,
-      payload: {
-        agentId: run.agentId,
-        reason: cancelReason,
-        trigger: runTrigger,
-        requestId: options?.requestId ?? null,
-        actorId: options?.actorId ?? null
-      }
-    });
-  }
-  return { ok: true as const, runId, agentId: run.agentId, status: run.status };
-}
-
-export async function findPendingProjectBudgetOverrideBlocksForAgent(
-  db: BopoDb,
-  companyId: string,
-  agentId: string
-) {
-  const assignedRows = await db
-    .select({ projectId: issues.projectId })
-    .from(issues)
-    .where(
-      and(
-        eq(issues.companyId, companyId),
-        eq(issues.assigneeAgentId, agentId),
-        inArray(issues.status, ["todo", "in_progress"])
-      )
-    );
-  const assignedProjectIds = new Set(assignedRows.map((row) => row.projectId));
-  if (assignedProjectIds.size === 0) {
-    return [] as string[];
-  }
-  const pendingOverrides = await db
-    .select({ payloadJson: approvalRequests.payloadJson })
-    .from(approvalRequests)
-    .where(
-      and(
-        eq(approvalRequests.companyId, companyId),
-        eq(approvalRequests.action, "override_budget"),
-        eq(approvalRequests.status, "pending")
-      )
-    );
-  const blockedProjectIds = new Set<string>();
-  for (const approval of pendingOverrides) {
-    try {
-      const payload = JSON.parse(approval.payloadJson) as Record<string, unknown>;
-      const projectId = typeof payload.projectId === "string" ? payload.projectId.trim() : "";
-      if (projectId && assignedProjectIds.has(projectId)) {
-        blockedProjectIds.add(projectId);
-      }
-    } catch {
-      // Ignore malformed payloads to keep enforcement resilient.
-    }
-  }
-  return Array.from(blockedProjectIds);
-}
 
 export async function runHeartbeatForAgent(
   db: BopoDb,
@@ -1996,7 +1759,7 @@ export async function runHeartbeatForAgent(
     }
     await publishOfficeOccupantForAgent(db, options?.realtimeHub, companyId, agentId);
     try {
-      const queueModule = await import("./heartbeat-queue-service");
+      const queueModule = await import("../heartbeat-queue-service");
       queueModule.triggerHeartbeatQueueWorker(db, companyId, {
         requestId: options?.requestId,
         realtimeHub: options?.realtimeHub
@@ -2091,113 +1854,6 @@ async function recoverStaleHeartbeatRuns(
       }
     });
   }
-}
-
-export async function runHeartbeatSweep(
-  db: BopoDb,
-  companyId: string,
-  options?: { requestId?: string; realtimeHub?: RealtimeHub }
-) {
-  const companyAgents = await db.select().from(agents).where(eq(agents.companyId, companyId));
-  const latestRunByAgent = await listLatestRunByAgent(db, companyId);
-
-  const now = new Date();
-  const enqueuedJobIds: string[] = [];
-  const dueAgents: Array<{ id: string }> = [];
-  let skippedNotDue = 0;
-  let skippedStatus = 0;
-  let skippedBudgetBlocked = 0;
-  let failedStarts = 0;
-  const sweepStartedAt = Date.now();
-  for (const agent of companyAgents) {
-    if (agent.status !== "idle" && agent.status !== "running") {
-      skippedStatus += 1;
-      continue;
-    }
-    if (!isHeartbeatDue(agent.heartbeatCron, latestRunByAgent.get(agent.id) ?? null, now)) {
-      skippedNotDue += 1;
-      continue;
-    }
-    const blockedProjectIds = await findPendingProjectBudgetOverrideBlocksForAgent(db, companyId, agent.id);
-    if (blockedProjectIds.length > 0) {
-      skippedBudgetBlocked += 1;
-      continue;
-    }
-    dueAgents.push({ id: agent.id });
-  }
-  const sweepConcurrency = resolveHeartbeatSweepConcurrency(dueAgents.length);
-  const queueModule = await import("./heartbeat-queue-service");
-  await runWithConcurrency(dueAgents, sweepConcurrency, async (agent) => {
-    try {
-      const job = await queueModule.enqueueHeartbeatQueueJob(db, {
-        companyId,
-        agentId: agent.id,
-        jobType: "scheduler",
-        priority: 80,
-        idempotencyKey: options?.requestId ? `scheduler:${agent.id}:${options.requestId}` : null,
-        payload: {}
-      });
-      enqueuedJobIds.push(job.id);
-      queueModule.triggerHeartbeatQueueWorker(db, companyId, {
-        requestId: options?.requestId,
-        realtimeHub: options?.realtimeHub
-      });
-    } catch {
-      failedStarts += 1;
-    }
-  });
-  await appendAuditEvent(db, {
-    companyId,
-    actorType: "system",
-    eventType: "heartbeat.sweep.completed",
-    entityType: "company",
-    entityId: companyId,
-    correlationId: options?.requestId ?? null,
-    payload: {
-      runIds: enqueuedJobIds,
-      startedCount: enqueuedJobIds.length,
-      dueCount: dueAgents.length,
-      failedStarts,
-      skippedStatus,
-      skippedNotDue,
-      skippedBudgetBlocked,
-      concurrency: sweepConcurrency,
-      elapsedMs: Date.now() - sweepStartedAt,
-      requestId: options?.requestId ?? null
-    }
-  });
-  return enqueuedJobIds;
-}
-
-async function listLatestRunByAgent(db: BopoDb, companyId: string) {
-  const rows = await db
-    .select({
-      agentId: heartbeatRuns.agentId,
-      latestStartedAt: max(heartbeatRuns.startedAt)
-    })
-    .from(heartbeatRuns)
-    .where(eq(heartbeatRuns.companyId, companyId))
-    .groupBy(heartbeatRuns.agentId);
-  const latestRunByAgent = new Map<string, Date>();
-  for (const row of rows) {
-    const startedAt = coerceDate(row.latestStartedAt);
-    if (!startedAt) {
-      continue;
-    }
-    latestRunByAgent.set(row.agentId, startedAt);
-  }
-  return latestRunByAgent;
-}
-
-function coerceDate(value: unknown) {
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-  if (typeof value === "string" || typeof value === "number") {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  return null;
 }
 
 async function loadWakeContextWorkItems(db: BopoDb, companyId: string, wakeIssueIds?: string[]) {
@@ -3891,32 +3547,6 @@ function isUsefulTranscriptSignal(level: "high" | "medium" | "low" | "noise") {
   return level === "high" || level === "medium";
 }
 
-function publishHeartbeatRunStatus(
-  realtimeHub: RealtimeHub | undefined,
-  input: {
-    companyId: string;
-    runId: string;
-    status: "started" | "completed" | "failed" | "skipped";
-    message?: string | null;
-    startedAt?: Date;
-    finishedAt?: Date;
-  }
-) {
-  if (!realtimeHub) {
-    return;
-  }
-  realtimeHub.publish(
-    createHeartbeatRunsRealtimeEvent(input.companyId, {
-      type: "run.status.updated",
-      runId: input.runId,
-      status: input.status,
-      message: input.message ?? null,
-      startedAt: input.startedAt?.toISOString(),
-      finishedAt: input.finishedAt?.toISOString() ?? null
-    })
-  );
-}
-
 async function resolveRuntimeWorkspaceForWorkItems(
   db: BopoDb,
   companyId: string,
@@ -4079,39 +3709,6 @@ function resolveStaleRunThresholdMs() {
     return 10 * 60 * 1000;
   }
   return parsed;
-}
-
-function resolveHeartbeatSweepConcurrency(dueAgentsCount: number) {
-  const configured = Number(process.env.BOPO_HEARTBEAT_SWEEP_CONCURRENCY ?? "4");
-  const fallback = 4;
-  const normalized = Number.isFinite(configured) ? Math.floor(configured) : fallback;
-  if (normalized < 1) {
-    return 1;
-  }
-  // Prevent scheduler bursts from starving the API event loop.
-  const bounded = Math.min(normalized, 16);
-  return Math.min(bounded, Math.max(1, dueAgentsCount));
-}
-
-async function runWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<void>
-) {
-  if (items.length === 0) {
-    return;
-  }
-  const workerCount = Math.max(1, Math.min(Math.floor(concurrency), items.length));
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (cursor < items.length) {
-        const index = cursor;
-        cursor += 1;
-        await worker(items[index] as T, index);
-      }
-    })
-  );
 }
 
 function resolveEffectiveStaleRunThresholdMs(input: {
@@ -4333,14 +3930,6 @@ function mergeRuntimeForExecution(
   };
 }
 
-function registerActiveHeartbeatRun(runId: string, run: ActiveHeartbeatRun) {
-  activeHeartbeatRuns.set(runId, run);
-}
-
-function unregisterActiveHeartbeatRun(runId: string) {
-  activeHeartbeatRuns.delete(runId);
-}
-
 function clearResumeState(
   state: AgentState & {
     runtime?: {
@@ -4391,8 +3980,6 @@ function resolveHeartbeatPromptMode(): "full" | "compact" {
   const raw = process.env.BOPO_HEARTBEAT_PROMPT_MODE?.trim().toLowerCase();
   return raw === "compact" ? "compact" : "full";
 }
-
-type HeartbeatIdlePolicy = "full" | "skip_adapter" | "micro_prompt";
 
 function resolveHeartbeatIdlePolicy(): HeartbeatIdlePolicy {
   const raw = process.env.BOPO_HEARTBEAT_IDLE_POLICY?.trim().toLowerCase();
@@ -4779,63 +4366,4 @@ async function appendFinishedRunCostEntry(input: {
     usdCost: effectiveUsdCost,
     usdCostStatus
   };
-}
-
-function isHeartbeatDue(cronExpression: string, lastRunAt: Date | null, now: Date) {
-  const normalizedNow = truncateToMinute(now);
-  if (!matchesCronExpression(cronExpression, normalizedNow)) {
-    return false;
-  }
-  if (!lastRunAt) {
-    return true;
-  }
-  return truncateToMinute(lastRunAt).getTime() !== normalizedNow.getTime();
-}
-
-function truncateToMinute(date: Date) {
-  const clone = new Date(date);
-  clone.setSeconds(0, 0);
-  return clone;
-}
-
-function matchesCronExpression(expression: string, date: Date) {
-  const parts = expression.trim().split(/\s+/);
-  if (parts.length !== 5) {
-    return false;
-  }
-
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts as [string, string, string, string, string];
-  return (
-    matchesCronField(minute, date.getMinutes(), 0, 59) &&
-    matchesCronField(hour, date.getHours(), 0, 23) &&
-    matchesCronField(dayOfMonth, date.getDate(), 1, 31) &&
-    matchesCronField(month, date.getMonth() + 1, 1, 12) &&
-    matchesCronField(dayOfWeek, date.getDay(), 0, 6)
-  );
-}
-
-function matchesCronField(field: string, value: number, min: number, max: number) {
-  return field.split(",").some((part) => matchesCronPart(part.trim(), value, min, max));
-}
-
-function matchesCronPart(part: string, value: number, min: number, max: number): boolean {
-  if (part === "*") {
-    return true;
-  }
-
-  const stepMatch = part.match(/^\*\/(\d+)$/);
-  if (stepMatch) {
-    const step = Number(stepMatch[1]);
-    return Number.isInteger(step) && step > 0 ? (value - min) % step === 0 : false;
-  }
-
-  const rangeMatch = part.match(/^(\d+)-(\d+)$/);
-  if (rangeMatch) {
-    const start = Number(rangeMatch[1]);
-    const end = Number(rangeMatch[2]);
-    return start <= value && value <= end;
-  }
-
-  const exact = Number(part);
-  return Number.isInteger(exact) && exact >= min && exact <= max && exact === value;
 }

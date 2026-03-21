@@ -47,7 +47,7 @@ Shared schemas live in `packages/contracts/src/index.ts`.
 
 ## Lifecycle Hook Points
 
-Heartbeats invoke plugin hooks from `apps/api/src/services/heartbeat-service.ts`:
+Heartbeats invoke plugin hooks from `apps/api/src/services/heartbeat-service/heartbeat-run.ts`:
 
 - `beforeClaim`
 - `afterClaim`

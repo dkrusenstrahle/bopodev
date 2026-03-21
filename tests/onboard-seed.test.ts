@@ -88,7 +88,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
       expect(startupBody).not.toContain("current issue workspace");
       expect(startupBody).not.toContain("instruction file path");
     } finally {
-      await (client as { close?: () => Promise<void> }).close?.();
+      await (client as { close?: () => Promise<void> })?.close?.();
     }
   });
 
@@ -136,10 +136,10 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
         expect(issues.some((issue) => issue.title === "Set up operating cadence")).toBe(true);
         expect(issues.some((issue) => issue.title === "Set up CEO operating files and hire founding engineer")).toBe(false);
       } finally {
-        await verify.client.close?.();
+        await verify.client?.close?.();
       }
     } finally {
-      await boot.client.close?.();
+      await boot.client?.close?.();
     }
   });
 
@@ -169,7 +169,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
       expect(projects.some((project) => project.name === "Leadership Setup")).toBe(false);
       expect(issues.some((issue) => issue.title === "Set up CEO operating files and hire founding engineer")).toBe(false);
     } finally {
-      await verify.client.close?.();
+      await verify.client?.close?.();
     }
   });
 
@@ -209,7 +209,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
         manifestJson: "{\"projects\":"
       });
     } finally {
-      await boot.client.close?.();
+      await boot.client?.close?.();
     }
     await expect(
       ensureOnboardingSeed({
@@ -242,7 +242,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
         }
       }
     });
-    await client.close?.();
+    await client?.close?.();
 
     const result = await ensureOnboardingSeed({
       dbPath,
@@ -268,7 +268,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
       expect(issues).toHaveLength(1);
       expect(issues[0]?.title).toBe("Set up CEO operating files and hire founding engineer");
     } finally {
-      await verify.client.close?.();
+      await verify.client?.close?.();
     }
   });
 
@@ -288,7 +288,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
       canHireAgents: true,
       initialState: {}
     });
-    await client.close?.();
+    await client?.close?.();
 
     const result = await ensureOnboardingSeed({
       dbPath,
@@ -322,7 +322,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
         expect(runtimeEnvJson).toContain("OPENAI_API_KEY");
         expect(runtimeEnvJson).toContain("sk-seeded-test");
       } finally {
-        await (client as { close?: () => Promise<void> }).close?.();
+        await (client as { close?: () => Promise<void> })?.close?.();
       }
     } finally {
       if (previous === undefined) {
@@ -353,7 +353,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
         expect(runtimeEnvJson).toContain("ANTHROPIC_API_KEY");
         expect(runtimeEnvJson).toContain("sk-ant-seeded-test");
       } finally {
-        await (client as { close?: () => Promise<void> }).close?.();
+        await (client as { close?: () => Promise<void> })?.close?.();
       }
     } finally {
       if (previous === undefined) {
@@ -385,7 +385,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
       expect(agents[0]?.providerType).toBe("opencode");
       expect(agents[0]?.runtimeModel === null || agents[0]?.runtimeModel.includes("/")).toBe(true);
     } finally {
-      await verify.client.close?.();
+      await verify.client?.close?.();
     }
   });
 
@@ -409,7 +409,7 @@ describe("onboarding seed bootstrap", { timeout: 20_000 }, () => {
         expect(agents[0]?.providerType).toBe("opencode");
         expect(agents[0]?.runtimeModel).toBe("opencode/big-pickle");
       } finally {
-        await verify.client.close?.();
+        await verify.client?.close?.();
       }
     } finally {
       if (previous === undefined) {

@@ -43,7 +43,7 @@ describe("heartbeat workspace resolution", { timeout: 90_000 }, () => {
     process.env.BOPO_ENABLE_GIT_WORKTREE_ISOLATION = previousIsolationFlag;
     process.env.BOPO_INSTANCE_ROOT = previousInstanceRoot;
     process.env.NODE_ENV = previousNodeEnv;
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   });
 

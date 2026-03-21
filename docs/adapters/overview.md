@@ -29,7 +29,7 @@ packages/adapters/<name>/
 Registry and orchestration live in:
 
 - `packages/agent-sdk/src/registry.ts` (module resolution + compatibility wrappers)
-- `apps/api/src/services/heartbeat-service.ts` (heartbeat orchestration)
+- `apps/api/src/services/heartbeat-service/` (heartbeat orchestration; main logic in `heartbeat-run.ts`)
 - `apps/api/src/routes/agents.ts` (metadata/models/preflight endpoints)
 
 Each adapter package owns its own runtime-specific behavior. The registry and heartbeat service should know how to resolve and call an adapter, but they should not be the place where provider-specific parsing, probing, or launch behavior is implemented.

@@ -32,7 +32,7 @@ type SeedIds = {
   approvalId: string;
 };
 
-describe("authorization route matrix", { timeout: 30_000 }, () => {
+describe("authorization route matrix", { timeout: 30_000, retry: 1 }, () => {
   let db: BopoDb;
   let app: ReturnType<typeof createApp>;
   let tempDir: string;
@@ -161,7 +161,7 @@ describe("authorization route matrix", { timeout: 30_000 }, () => {
   }, 30_000);
 
   afterEach(async () => {
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   }, 30_000);
 

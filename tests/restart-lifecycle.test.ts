@@ -20,7 +20,7 @@ describe("restart lifecycle", () => {
     try {
       await createCompany(firstBoot.db, { name: "Restart Co" });
     } finally {
-      await firstBoot.client.close?.();
+      await firstBoot.client?.close?.();
     }
 
     const secondBoot = await bootstrapDatabase(dbPath);
@@ -29,7 +29,7 @@ describe("restart lifecycle", () => {
       expect(companies).toHaveLength(1);
       expect(companies[0]?.name).toBe("Restart Co");
     } finally {
-      await secondBoot.client.close?.();
+      await secondBoot.client?.close?.();
     }
   });
 });

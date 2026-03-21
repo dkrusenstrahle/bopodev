@@ -147,5 +147,5 @@ See operator details in:
 - [`../../apps/api/src/lib/run-artifact-paths.ts`](../../apps/api/src/lib/run-artifact-paths.ts)
 - [`../../apps/api/src/lib/workspace-policy.ts`](../../apps/api/src/lib/workspace-policy.ts)
 - [`../../apps/api/src/lib/git-runtime.ts`](../../apps/api/src/lib/git-runtime.ts)
-- [`../../apps/api/src/services/heartbeat-service.ts`](../../apps/api/src/services/heartbeat-service.ts)
+- [`../../apps/api/src/services/heartbeat-service/heartbeat-run.ts`](../../apps/api/src/services/heartbeat-service/heartbeat-run.ts)
 - [`../operations/workspace-path-surface.md`](../operations/workspace-path-surface.md)

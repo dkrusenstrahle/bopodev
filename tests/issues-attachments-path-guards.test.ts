@@ -31,7 +31,7 @@ describe("issue attachment path guards", { timeout: 60_000 }, () => {
   afterEach(async () => {
     process.env.BOPO_INSTANCE_ROOT = originalInstanceRoot;
     process.env.NODE_ENV = originalNodeEnv;
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   });
 

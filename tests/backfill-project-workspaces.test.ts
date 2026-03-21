@@ -19,7 +19,6 @@ describe("project workspace backfill", () => {
     const dbPath = join(tempRoot, "test.db");
 
     const boot = await bootstrapDatabase(dbPath);
-    const close = (boot.client as { close?: () => Promise<void> }).close;
     let companyId = "";
     let missingWorkspaceProjectId = "";
     let relativeWorkspaceProjectId = "";
@@ -43,9 +42,7 @@ describe("project workspace backfill", () => {
         workspaceLocalPath: "relative/path"
       });
     } finally {
-      if (close) {
-        await close.call(boot.client);
-      }
+      await boot.client?.close?.();
     }
 
     const backfillDryRunSummary = await backfillProjectWorkspaces({ dbPath, dryRun: true });
@@ -60,7 +57,6 @@ describe("project workspace backfill", () => {
     expect(backfillApplySummary.writableStorageRoot).toBe(true);
 
     const verifyBoot = await bootstrapDatabase(dbPath);
-    const verifyClose = (verifyBoot.client as { close?: () => Promise<void> }).close;
     try {
       const projects = await listProjects(verifyBoot.db, companyId);
       const missingWorkspaceAfter = projects.find((project) => project.id === missingWorkspaceProjectId);
@@ -75,9 +71,7 @@ describe("project workspace backfill", () => {
       expect(isAbsolute(missingWorkspaceAfter?.workspaceLocalPath ?? "")).toBe(true);
       expect(isAbsolute(relativeWorkspaceAfter?.workspaceLocalPath ?? "")).toBe(true);
     } finally {
-      if (verifyClose) {
-        await verifyClose.call(verifyBoot.client);
-      }
+      await verifyBoot.client?.close?.();
     }
   });
 });

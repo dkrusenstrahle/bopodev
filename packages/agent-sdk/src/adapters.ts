@@ -11,7 +11,11 @@ import type {
   HeartbeatContext,
   HeartbeatPromptMode
 } from "./types";
-import { ExecutionOutcomeSchema, type ExecutionOutcome } from "bopodev-contracts";
+import {
+  ExecutionOutcomeSchema,
+  type AgentFinalRunOutput,
+  type ExecutionOutcome
+} from "bopodev-contracts";
 import {
   checkRuntimeCommandHealth,
   containsUsageLimitHardStopFailure,
@@ -158,6 +162,32 @@ function toNormalizedUsage(usage: RuntimeParsedUsage | undefined): AdapterNormal
     outputTokens: Math.max(0, outputTokens),
     ...(costUsd !== undefined ? { costUsd } : {}),
     ...(summary ? { summary } : {})
+  };
+}
+
+/**
+ * Cursor and Gemini CLIs emit stream-json transcripts with usage, not a standalone heartbeat JSON blob.
+ * When structured usage was resolved from the stream but no final JSON object exists, synthesize the
+ * minimal contract shape so downstream heartbeat persistence stays consistent.
+ */
+function synthesizeStreamFinalRunOutput(
+  provider: AgentProviderType,
+  parsedUsage: RuntimeParsedUsage | undefined
+): AgentFinalRunOutput | null {
+  if (provider !== "cursor" && provider !== "gemini_cli") {
+    return null;
+  }
+  if (!parsedUsage) {
+    return null;
+  }
+  const summary =
+    (typeof parsedUsage.summary === "string" && parsedUsage.summary.trim()) ||
+    `${provider} runtime completed.`;
+  return {
+    employee_comment: summary,
+    results: [],
+    errors: [],
+    artifacts: []
   };
 }
 
@@ -1850,7 +1880,9 @@ export function toProviderResult(
         nextState: applyProviderSessionState(context, provider, sessionUpdate)
       };
     }
-    if (!runtime.finalRunOutput) {
+    const resolvedFinalRunOutput =
+      runtime.finalRunOutput ?? synthesizeStreamFinalRunOutput(provider, runtime.parsedUsage);
+    if (!resolvedFinalRunOutput) {
       const usage = toNormalizedUsage(runtime.parsedUsage);
       const detail = resolveFinalRunOutputContractDetail({ provider, runtime });
       return createContractInvalidResult({
@@ -1895,7 +1927,7 @@ export function toProviderResult(
       tokenInput: usageTokenInputTotal(runtime.parsedUsage),
       tokenOutput,
       usdCost,
-      finalRunOutput: runtime.finalRunOutput,
+      finalRunOutput: resolvedFinalRunOutput,
       usage,
       pricingProviderType,
       pricingModelId,

@@ -41,7 +41,7 @@ describe("office-space realtime snapshot", () => {
       const hireCandidate = message.event.occupants.find((occupant) => occupant.kind === "hire_candidate");
       expect(hireCandidate?.providerType).toBe("opencode");
     } finally {
-      await client.close?.();
+      await client?.close?.();
     }
   });
 });

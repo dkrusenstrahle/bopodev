@@ -49,7 +49,7 @@ describe("workflow confidence: context + comments", () => {
   });
 
   afterEach(async () => {
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   });
 

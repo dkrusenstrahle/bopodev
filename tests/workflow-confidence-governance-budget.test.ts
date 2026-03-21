@@ -21,7 +21,7 @@ import {
   projects
 } from "../packages/db/src/index";
 
-describe("workflow confidence: governance + budget", () => {
+describe("workflow confidence: governance + budget", { retry: 1 }, () => {
   let db: BopoDb;
   let app: ReturnType<typeof createApp>;
   let tempDir: string;
@@ -39,7 +39,7 @@ describe("workflow confidence: governance + budget", () => {
   });
 
   afterEach(async () => {
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   });
 

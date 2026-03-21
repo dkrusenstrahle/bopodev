@@ -34,7 +34,7 @@ describe("governance and company scope authorization", { timeout: 90_000 }, () =
   });
 
   afterEach(async () => {
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   });
 

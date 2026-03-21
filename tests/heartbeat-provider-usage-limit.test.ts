@@ -42,7 +42,7 @@ describe("heartbeat provider usage limit handling", { timeout: 90_000 }, () => {
     process.env.OPENAI_API_KEY = previousOpenAiApiKey;
     process.env.BOPO_INSTANCE_ROOT = previousInstanceRoot;
     process.env.NODE_ENV = previousNodeEnv;
-    await client.close?.();
+    await client?.close?.();
     await rm(tempDir, { recursive: true, force: true });
   });
 

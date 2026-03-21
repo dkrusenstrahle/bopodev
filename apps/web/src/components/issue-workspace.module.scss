@@ -142,11 +142,11 @@
 }
 
 .issueViewToggleButton {
-  @apply h-9 rounded-md px-4 text-muted-foreground;
+  @apply h-9 rounded-md px-4 text-sidebar-foreground;
 }
 
 .issueViewToggleButton[data-variant="outline"].issueViewToggleButtonActive {
-  @apply border-border/60 bg-sidebar-foreground/30 text-muted-foreground hover:bg-foreground;
+  @apply border-border/60 bg-muted text-sidebar-foreground hover:bg-muted;
 }
 
 .issueFiltersInput {

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -46,6 +46,7 @@ async function main() {
   const envFromFile = await loadDotEnv(join(workspaceRoot, ".env"));
   applyEnvDefaults(envFromFile);
   await stopOrphanBopoProcesses(workspaceRoot, process.env, logClearStep);
+  cleanupOwnedSystemVIpc(logClearStep);
 
   const instanceRoot = resolveInstanceRoot(process.env);
   const dbPath = normalizeOptionalPath(process.env.BOPO_DB_PATH);
@@ -70,6 +71,25 @@ async function main() {
   logClearStep("Next: run `pnpm onboard` to choose a new company, provider, and model.");
 }
 
+function cleanupOwnedSystemVIpc(log = logClearStep) {
+  if (process.platform !== "darwin" && process.platform !== "linux") {
+    return;
+  }
+  const currentUser = safeCurrentUsername();
+  if (!currentUser) {
+    return;
+  }
+  const sharedMemoryIds = readOwnedIpcIds("m", currentUser);
+  const semaphoreIds = readOwnedIpcIds("s", currentUser);
+  const removedSharedMemory = removeIpcIds("-m", sharedMemoryIds);
+  const removedSemaphores = removeIpcIds("-s", semaphoreIds);
+  if (removedSharedMemory > 0 || removedSemaphores > 0) {
+    log(
+      `Cleaned stale System V IPC resources (shared-memory: ${removedSharedMemory}, semaphores: ${removedSemaphores}).`
+    );
+  }
+}
+
 function runPnpm(args, cwd = process.cwd()) {
   const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const result = spawnSync(command, args, {
@@ -79,6 +99,58 @@ function runPnpm(args, cwd = process.cwd()) {
   });
   if (result.status !== 0) {
     throw new Error(`Command failed: pnpm ${args.join(" ")}`);
+  }
+}
+
+function readOwnedIpcIds(type, owner) {
+  const result = spawnSync("ipcs", [type === "m" ? "-m" : "-s"], {
+    encoding: "utf8"
+  });
+  if (result.status !== 0 || !result.stdout.trim()) {
+    return [];
+  }
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(type + " "))
+    .map((line) => parseIpcRow(line))
+    .filter((entry) => entry !== null && entry.owner === owner)
+    .map((entry) => entry.id);
+}
+
+function parseIpcRow(line) {
+  const parts = line.split(/\s+/);
+  if (parts.length < 5) {
+    return null;
+  }
+  const id = Number(parts[1]);
+  const owner = parts[4];
+  if (!Number.isInteger(id) || id <= 0 || !owner) {
+    return null;
+  }
+  return {
+    id,
+    owner
+  };
+}
+
+function removeIpcIds(flag, ids) {
+  let removed = 0;
+  for (const id of ids) {
+    const result = spawnSync("ipcrm", [flag, String(id)], { encoding: "utf8" });
+    if (result.status === 0) {
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
+function safeCurrentUsername() {
+  try {
+    const username = userInfo().username?.trim();
+    return username && username.length > 0 ? username : null;
+  } catch {
+    return null;
   }
 }
 

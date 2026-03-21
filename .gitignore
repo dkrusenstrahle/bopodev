@@ -18,3 +18,4 @@ tmp
 
 # PGlite can create this literal directory name if :memory: is resolved as a relative path (e.g. wrong cwd).
 packages/db/:memory:/
+.tmp/*

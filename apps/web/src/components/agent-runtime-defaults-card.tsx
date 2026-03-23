@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { RuntimeCwdPathInput } from "@/components/runtime-cwd-path-help";
 import styles from "./agent-runtime-defaults-card.module.scss";
 import {
   Select,
@@ -220,8 +221,12 @@ export function AgentRuntimeDefaultsCard({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="defaults-runtime-cwd">Runtime cwd</FieldLabel>
-              <Input id="defaults-runtime-cwd" value={defaults.runtimeCwd} onChange={(event) => update("runtimeCwd", event.target.value)} />
+              <RuntimeCwdPathInput
+                id="defaults-runtime-cwd"
+                label="Runtime cwd"
+                value={defaults.runtimeCwd}
+                onChange={(event) => update("runtimeCwd", event.target.value)}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="defaults-runtime-command">Runtime command</FieldLabel>

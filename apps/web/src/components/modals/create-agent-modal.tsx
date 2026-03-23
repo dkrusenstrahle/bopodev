@@ -31,6 +31,7 @@ import {
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { RuntimeCwdPathInput } from "@/components/runtime-cwd-path-help";
 import styles from "./create-agent-modal.module.scss";
 import {
   Select,
@@ -927,37 +928,8 @@ export function CreateAgentModal({
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor="agent-heartbeat-interval">Heartbeat interval (seconds)</FieldLabel>
-                  <Input
-                    id="agent-heartbeat-interval"
-                    value={heartbeatIntervalSec}
-                    onChange={(e) => setHeartbeatIntervalSec(e.target.value)}
-                    type="number"
-                    min={60}
-                    step="1"
-                    placeholder="300"
-                    required
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="agent-budget">Monthly budget (USD)</FieldLabel>
-                  <Input id="agent-budget" value={budget} onChange={(e) => setBudget(e.target.value)} type="number" min={0} step="1" />
-                </Field>
               </FieldGroup>
-            </section>
-
-            <section className={styles.createAgentModalSection}>
               <FieldGroup className={styles.createAgentModalFieldGroup}>
-                <Field>
-                  <FieldLabel htmlFor="agent-runtime-command">Command</FieldLabel>
-                  <Input
-                    id="agent-runtime-command"
-                    value={runtimeCommand}
-                    onChange={(e) => setRuntimeCommand(e.target.value)}
-                    placeholder="codex"
-                  />
-                </Field>
                 {showThinkingEffortControlForProvider(providerType) ? (
                   <Field>
                     <FieldLabel>Thinking effort</FieldLabel>
@@ -974,6 +946,32 @@ export function CreateAgentModal({
                     </Select>
                   </Field>
                 ) : null}
+                <Field>
+                  <FieldLabel htmlFor="agent-runtime-command">Command</FieldLabel>
+                  <Input
+                    id="agent-runtime-command"
+                    value={runtimeCommand}
+                    onChange={(e) => setRuntimeCommand(e.target.value)}
+                    placeholder="codex"
+                  />
+                </Field>
+              </FieldGroup>
+              <FieldGroup className={styles.createAgentModalFieldGroupFull}>
+                <Field>
+                  <RuntimeCwdPathInput
+                    id="agent-runtime-cwd"
+                    label="Runtime working directory"
+                    value={runtimeCwd}
+                    onChange={(e) => setRuntimeCwd(e.target.value)}
+                    placeholder="/path/to/workspace"
+                    required={runtimeCwdRequired}
+                  />
+                </Field>
+              </FieldGroup>
+            </section>
+
+            <section className={styles.createAgentModalSection}>
+              <FieldGroup className={styles.createAgentModalFieldGroup}>
                 <Field>
                   <FieldLabel htmlFor="agent-runtime-args">Extra args</FieldLabel>
                   <Input
@@ -1006,15 +1004,26 @@ export function CreateAgentModal({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="agent-runtime-cwd">Runtime working directory</FieldLabel>
+                  <FieldLabel htmlFor="agent-heartbeat-interval">Heartbeat interval (seconds)</FieldLabel>
                   <Input
-                    id="agent-runtime-cwd"
-                    value={runtimeCwd}
-                    onChange={(e) => setRuntimeCwd(e.target.value)}
-                    placeholder="/path/to/workspace"
-                    required={runtimeCwdRequired}
+                    id="agent-heartbeat-interval"
+                    value={heartbeatIntervalSec}
+                    onChange={(e) => setHeartbeatIntervalSec(e.target.value)}
+                    type="number"
+                    min={60}
+                    step="1"
+                    placeholder="300"
+                    required
                   />
                 </Field>
+                <Field>
+                  <FieldLabel htmlFor="agent-budget">Monthly budget (USD)</FieldLabel>
+                  <Input id="agent-budget" value={budget} onChange={(e) => setBudget(e.target.value)} type="number" min={0} step="1" />
+                </Field>
+              </FieldGroup>
+            </section>
+            <section className={styles.createAgentModalSection}>
+              <FieldGroup className={styles.createAgentModalFieldGroupFull}>
                 {providerType === "codex" || providerType === "claude_code" ? (
                   <Field orientation="horizontal">
                     <Checkbox
@@ -1029,8 +1038,6 @@ export function CreateAgentModal({
                     </FieldContent>
                   </Field>
                 ) : null}
-              </FieldGroup>
-              <FieldGroup className={styles.createAgentModalFieldGroup}>
                 {providerSupportsWebSearch ? (
                   <Field orientation="horizontal">
                     <Checkbox
@@ -1054,16 +1061,16 @@ export function CreateAgentModal({
                   </FieldContent>
                 </Field>
               </FieldGroup>
-              </section>
-              <section className={styles.createAgentModalSection}>
+            </section>
+            <section className={styles.createAgentModalSection}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="agent-bootstrap-prompt">Bootstrap prompt (first run)</FieldLabel>
+                  <FieldLabel htmlFor="agent-bootstrap-prompt">Bootstrap prompt</FieldLabel>
                   <Textarea
                     id="agent-bootstrap-prompt"
                     value={bootstrapPrompt}
                     onChange={(e) => setBootstrapPrompt(e.target.value)}
-                    placeholder="Optional initial setup prompt for the first run"
+                    placeholder="You are an expert developer..."
                   />
                 </Field>
                 <Field>
@@ -1092,7 +1099,7 @@ export function CreateAgentModal({
             ) : null}
             {isEditing || creationMode !== "intro" ? (
               <Button type="submit" disabled={isSubmitting || isDeleting}>
-                {isEditing ? "Save" : creationMode === "delegate" ? "Create request" : "Submit for approval"}
+                {isEditing ? "Save" : creationMode === "delegate" ? "Create request" : "Submit"}
               </Button>
             ) : null}
           </DialogFooter>

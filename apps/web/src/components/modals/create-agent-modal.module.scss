@@ -32,6 +32,14 @@
   min-width: 0;
 }
 
+.createAgentModalFieldGroupFull {
+  @apply grid gap-4 grid-cols-1;
+}
+
+.createAgentModalFieldGroupFull > * {
+  min-width: 0;
+}
+
 .createAgentModalSelectTrigger {
   @apply w-full;
 }

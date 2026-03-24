@@ -2,11 +2,29 @@
 
 ![Bopo - run your AI company from one control plane](./assets/readme-header.png)
 
-**Bopo is a local-first execution hub for people who run serious coding agents** (Claude Code, Codex, Cursor, OpenCode, and more)—not just another chat window. It is the place where work stays tied to **projects, issues, approvals, runs, and cost**, with **workspace-aware** execution and **file-backed agent memory** you can govern.
+**Run your AI company without the chaos.** [Bopo](https://bopo.dev/) is **open source and self-hosted**. It helps developer-led teams run agent work like a real company: **clear goals, assigned roles, budgets, approvals, and full task history**—so you are not babysitting agents across tabs, scripts, and lost context.
 
 If a coding agent is an employee, Bopo is the operating system around that employee.
 
-## Who Bopo Is For
+---
+
+### Set the goal, then define the team
+
+Start with what you are trying to achieve, then assign clear roles so everyone knows their job: **one mission, clear tasks**, an **org chart with reporting lines**, and **clear ownership**.
+
+### Heartbeats keep work moving
+
+Agents wake up on a schedule, pick up assignments, and continue where they left off: **scheduled execution**, **automatic delegation**, and **persistent context** so restarts do not erase the thread.
+
+### You stay in control
+
+**Approval gates**, **board-level overrides**, and **safe rollbacks** when you need them—plus **budget limits**, **alerts**, and **auto-pause** so spend does not spike quietly in the background.
+
+---
+
+**Bopo is not a replacement for your coding agent.** It is the layer that coordinates Claude Code, Codex, Cursor, OpenCode, and the rest. Connect the tools you already use; Bopo carries **mission, project goals, and role context** into every ticket so agents know *what* to do and *why*.
+
+## Who Bopo is for
 
 - Builders who juggle **multiple agents and repos** and want work to stay structured.
 - Teams that care about **ownership, approvals, and an audit trail** of what ran and what it cost.
@@ -57,6 +75,7 @@ Icons (subset):
 | Realtime | Governance, office-space, heartbeat status streams. |
 | Plugins | Extend heartbeats with capability-governed plugins. |
 | Local-first | Embedded Postgres and instance-local workspaces by default. |
+| Multi-company | Separate data, team, and workflow per company when you run more than one venture. |
 
 ## What Bopo is not
 
@@ -72,6 +91,8 @@ npx bopodev onboard
 ```
 
 Then open `http://localhost:4010`, create a project, assign an issue, and run your first heartbeat.
+
+**Learn more:** [bopo.dev](https://bopo.dev/) · **Star us on GitHub** if Bopo helps your team.
 
 ## Contributing / development
 

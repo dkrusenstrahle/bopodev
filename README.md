@@ -45,13 +45,15 @@ Bopo connects to the tools you already use. Examples include:
 | HTTP | Generic HTTP heartbeat targets |
 | Shell | Scripts and bootstrap flows |
 
-Icons (subset):
+Supported agents
 
 | CLI | Brand |
 | --- | --- |
 | Claude Code | <img src="./assets/icon_claude.svg" alt="Claude Code icon" width="28" /> |
 | Codex | <img src="./assets/icon_codex.svg" alt="Codex icon" width="28" /> |
 | OpenCode | <img src="./assets/icon_opencode.png" alt="OpenCode icon" width="28" /> |
+| Gemini CLI | <img src="./assets/icon_gemini.png" alt="Gemini icon" width="28" /> |
+| OpenClaw Gateway | <img src="./assets/icon_openclaw.png" alt="OpenClaw Gateway icon" width="28" /> |
 | Bash | <img src="./assets/icon_bash.svg" alt="Bash icon" width="28" /> |
 
 ## How teams use Bopo

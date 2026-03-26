@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -64,17 +63,20 @@ export function WeekdayMultiSelect({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
+        <button
           id={id}
           type="button"
-          variant="outline"
           role="combobox"
+          data-size="default"
           disabled={disabled}
-          className={cn("h-9 w-full justify-between font-normal", !value.length && "text-muted-foreground")}
+          className={cn(
+            "ui-select-trigger font-normal",
+            !value.length && "text-muted-foreground"
+          )}
         >
-          <span className="truncate">{summary}</span>
-          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-        </Button>
+          <span className="min-w-0 flex-1 truncate text-start">{summary}</span>
+          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+        </button>
       </PopoverTrigger>
       <PopoverContent className="min-w-60 p-2" align="start">
         <div className="flex flex-col gap-1">

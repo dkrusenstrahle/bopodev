@@ -897,7 +897,9 @@ export function LoopDetailPageClient(
                               />
                             </Field>
                             <Field>
-                              <FieldLabel>If another run is already open</FieldLabel>
+                              <FieldLabelWithHelp helpText="When a trigger fires but the last run still has an open issue: reuse that issue (coalesce), skip this firing, or create a new issue anyway.">
+                                If another run is already open
+                              </FieldLabelWithHelp>
                               <Select value={editConcurrencyPolicy} onValueChange={setEditConcurrencyPolicy}>
                                 <SelectTrigger>
                                   <SelectValue />
@@ -910,7 +912,9 @@ export function LoopDetailPageClient(
                               </Select>
                             </Field>
                             <Field>
-                              <FieldLabel>If some scheduled runs were missed</FieldLabel>
+                              <FieldLabelWithHelp helpText="After downtime or pauses: skip missed windows without backfilling, or enqueue catch-up runs—at most 25 missed fires processed in one scheduler pass.">
+                                If some scheduled runs were missed
+                              </FieldLabelWithHelp>
                               <Select value={editCatchUpPolicy} onValueChange={setEditCatchUpPolicy}>
                                 <SelectTrigger>
                                   <SelectValue />

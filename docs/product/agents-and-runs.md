@@ -34,6 +34,7 @@ From `agents` and related modals, you can:
 - create an agent (`role`, `name`, provider type),
 - configure heartbeat cadence and budget,
 - configure runtime command/args/model/cwd/env,
+- edit **capabilities** with the Markdown editor (hire, edit, and delegation flows; stored as text for org chart and routing),
 - set run policy (`workspace_write` or `full_access`, optional web search),
 - pause, resume, or terminate agents.
 

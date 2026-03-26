@@ -1337,7 +1337,15 @@ export function AgentDetailPageClient({
         <CardContent className="ui-config-kv-column">
           <div className="ui-config-kv-label">Capabilities</div>
           <div className="ui-config-kv-column-value">
-            {agent.capabilities?.trim() ? agent.capabilities.trim() : "Not set"}
+            {agent.capabilities?.trim() ? (
+              <CollapsibleMarkdown
+                content={agent.capabilities.trim()}
+                className="ui-markdown"
+                maxHeightPx={COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX}
+              />
+            ) : (
+              "Not set"
+            )}
           </div>
         </CardContent>
       </Card>

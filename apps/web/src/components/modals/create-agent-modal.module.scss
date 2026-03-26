@@ -16,6 +16,32 @@
   min-width: 0;
 }
 
+.createAgentModalIntroSection {
+  @apply min-w-0;
+}
+
+.createAgentModalIntroChoices {
+  @apply grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2;
+}
+
+.createAgentModalIntroChoice {
+  @apply flex min-h-full min-w-0 flex-col gap-3 rounded-lg border border-border bg-card/50 p-5 text-left outline-none transition-colors;
+  @apply hover:border-border hover:bg-accent/30;
+  @apply focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50;
+}
+
+.createAgentModalIntroChoiceIcon {
+  @apply flex size-10 shrink-0 items-center justify-center rounded-md border border-border/80 bg-muted/40 text-sidebar-foreground;
+}
+
+.createAgentModalIntroChoiceTitle {
+  @apply text-base font-semibold leading-snug text-sidebar-foreground;
+}
+
+.createAgentModalIntroChoiceDescription {
+  @apply text-sm leading-snug text-muted-foreground;
+}
+
 .createAgentModalSectionTitle {
   @apply text-base font-semibold;
 }

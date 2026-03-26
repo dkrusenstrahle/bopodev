@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { SendHorizontal, SlidersHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AGENT_ROLE_KEYS, AGENT_ROLE_LABELS, type AgentRoleKey } from "bopodev-contracts";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
@@ -210,6 +211,7 @@ export function CreateAgentModal({
   const [runtimeThinkingEffort, setRuntimeThinkingEffort] = useState<"auto" | "low" | "medium" | "high">("auto");
   const [bootstrapPrompt, setBootstrapPrompt] = useState("");
   const [bootstrapEditorNonce, setBootstrapEditorNonce] = useState(0);
+  const [capabilitiesEditorNonce, setCapabilitiesEditorNonce] = useState(0);
   const [runtimeEnv, setRuntimeEnv] = useState("");
   const [runtimeTimeoutSec, setRuntimeTimeoutSec] = useState("0");
   const [interruptGraceSec, setInterruptGraceSec] = useState("15");
@@ -485,6 +487,7 @@ export function CreateAgentModal({
       setCreationMode("advanced");
       setError(null);
       setBootstrapEditorNonce((n) => n + 1);
+      setCapabilitiesEditorNonce((n) => n + 1);
       return;
     }
     const defaults = readAgentRuntimeDefaults();
@@ -523,6 +526,7 @@ export function CreateAgentModal({
     setDelegateRequest("");
     setError(null);
     setBootstrapEditorNonce((n) => n + 1);
+    setCapabilitiesEditorNonce((n) => n + 1);
     if (!initialRuntimeCwd) {
       void apiGet<{ runtimeCwd: string }>("/agents/runtime-default-cwd", companyId)
         .then((result) => {
@@ -858,13 +862,13 @@ export function CreateAgentModal({
       {!hideTrigger ? (
         <DialogTrigger asChild>
           <Button variant={triggerVariant} size={triggerSize}>
-            {triggerLabel ?? (isEditing ? "Edit" : "Hire Agent")}
+            {triggerLabel ?? (isEditing ? "Edit" : "New Agent")}
           </Button>
         </DialogTrigger>
       ) : null}
       <DialogContent className={styles.createAgentModalDialogContent}>
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit agent" : "Hire AI agent"}</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit agent" : "New an AI agent"}</DialogTitle>
           <DialogDescription>
             {isEditing ? "Update the full agent configuration from one dialog." : "Hiring is routed through governance approvals by default."}
           </DialogDescription>
@@ -872,26 +876,45 @@ export function CreateAgentModal({
         <form className={styles.createAgentModalForm} onSubmit={onSubmit}>
           <div className="ui-dialog-content-scrollable">
             {!isEditing && creationMode === "intro" ? (
-              <section className={styles.createAgentModalSection}>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setCreationMode("delegate");
-                    setError(null);
-                  }}
-                >
-                  {delegateAgentLabel ? `Tell ${delegateAgentLabel} to create the agent` : "Ask leadership to create the agent"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setCreationMode("advanced");
-                    setError(null);
-                  }}
-                >
-                  Configure agent manually
-                </Button>
+              <section className={styles.createAgentModalIntroSection}>
+                <div className={styles.createAgentModalIntroChoices}>
+                  <button
+                    type="button"
+                    className={styles.createAgentModalIntroChoice}
+                    onClick={() => {
+                      setCreationMode("delegate");
+                      setError(null);
+                    }}
+                  >
+                    <span className={styles.createAgentModalIntroChoiceIcon} aria-hidden>
+                      <SendHorizontal className="size-5" strokeWidth={1.75} />
+                    </span>
+                    <span className={styles.createAgentModalIntroChoiceTitle}>
+                      {delegateAgentLabel
+                        ? `Tell ${delegateAgentLabel} to create the agent`
+                        : "Ask leadership to create the agent"}
+                    </span>
+                    <span className={styles.createAgentModalIntroChoiceDescription}>
+                      Submit a governance-backed request; approvers route and fulfill it.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.createAgentModalIntroChoice}
+                    onClick={() => {
+                      setCreationMode("advanced");
+                      setError(null);
+                    }}
+                  >
+                    <span className={styles.createAgentModalIntroChoiceIcon} aria-hidden>
+                      <SlidersHorizontal className="size-5" strokeWidth={1.75} />
+                    </span>
+                    <span className={styles.createAgentModalIntroChoiceTitle}>Configure agent manually</span>
+                    <span className={styles.createAgentModalIntroChoiceDescription}>
+                      Set provider, runtime, heartbeat, budget, and policies in this dialog.
+                    </span>
+                  </button>
+                </div>
               </section>
             ) : null}
             {!isEditing && creationMode === "delegate" ? (
@@ -946,17 +969,14 @@ export function CreateAgentModal({
                     />
                   </Field>
                   <Field>
-                    <FieldLabelWithHelp
-                      htmlFor="delegate-agent-capabilities"
-                      helpText="Short description of what this agent should do. Shown on the org chart and in team rosters. The hiring agent should copy this into the new agent’s capabilities field (or refine it) when creating the hire.">
+                    <FieldLabelWithHelp helpText="What this agent should do, in Markdown (headings, lists, links). Shown on the org chart and in team rosters. The hiring agent should copy this into the new agent’s capabilities (or refine it) when creating the hire.">
                       Capabilities
                     </FieldLabelWithHelp>
-                    <Textarea
-                      id="delegate-agent-capabilities"
-                      value={capabilities}
-                      onChange={(e) => setCapabilities(e.target.value)}
-                      placeholder="Describe what this agent can do..."
-                      rows={2}
+                    <LazyMarkdownMdxEditor
+                      editorKey={`agent-delegate-capabilities-${agent?.id ?? "new"}-${capabilitiesEditorNonce}`}
+                      markdown={capabilities}
+                      onChange={setCapabilities}
+                      placeholder="Describe what this agent can do…"
                     />
                   </Field>
                   <Field>
@@ -1048,17 +1068,14 @@ export function CreateAgentModal({
                   </Select>
                 </Field>
                 <Field className="md:col-span-2">
-                  <FieldLabelWithHelp
-                    htmlFor="agent-capabilities"
-                    helpText="Describes what this agent can do. Shown in the org chart and used for task routing.">
+                  <FieldLabelWithHelp helpText="Describes what this agent can do, in Markdown (headings, lists, links). Shown in the org chart and used for task routing; the agent page can render a formatted preview.">
                     Capabilities
                   </FieldLabelWithHelp>
-                  <Textarea
-                    id="agent-capabilities"
-                    value={capabilities}
-                    onChange={(e) => setCapabilities(e.target.value)}
-                    placeholder="Describe what this agent can do..."
-                    rows={2}
+                  <LazyMarkdownMdxEditor
+                    editorKey={`agent-capabilities-${agent?.id ?? "new"}-${capabilitiesEditorNonce}`}
+                    markdown={capabilities}
+                    onChange={setCapabilities}
+                    placeholder="Describe what this agent can do…"
                   />
                 </Field>
               </FieldGroup>
@@ -1262,7 +1279,7 @@ export function CreateAgentModal({
               <FieldGroup>
                 <Field>
                   <FieldLabelWithHelp helpText="System-style instructions injected when the agent starts or resumes. Use the markdown editor for persona, guardrails, and structure (headings, lists); the runtime receives the raw markdown text, and the agent page shows a rendered preview.">
-                    Bootstrap prompt
+                    Prompt
                   </FieldLabelWithHelp>
                   <LazyMarkdownMdxEditor
                     editorKey={`agent-bootstrap-${agent?.id ?? "new"}-${bootstrapEditorNonce}`}
@@ -1305,7 +1322,7 @@ export function CreateAgentModal({
             ) : null}
             {isEditing || creationMode !== "intro" ? (
               <Button type="submit" disabled={isSubmitting || isDeleting}>
-                {isEditing ? "Save" : creationMode === "delegate" ? "Create request" : "Submit"}
+                {isEditing ? "Save" : creationMode === "delegate" ? "Create" : "Submit"}
               </Button>
             ) : null}
           </DialogFooter>

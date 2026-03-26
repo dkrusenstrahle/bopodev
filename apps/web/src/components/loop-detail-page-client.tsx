@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { formatSmartDateTime } from "@/lib/smart-date";
 import type { WorkspacePageProps } from "@/components/workspace/workspace-page-props";
@@ -61,10 +61,13 @@ type LoopDetail = {
   description: string | null;
   projectId: string;
   assigneeAgentId: string;
+  priority: string;
   status: string;
   concurrencyPolicy: string;
   catchUpPolicy: string;
   lastTriggeredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
   triggers: TriggerRow[];
   recentRuns: RunRow[];
 };
@@ -77,6 +80,15 @@ type ActivityRow = {
   payload: Record<string, unknown>;
   createdAt: string;
 };
+
+function PropertyRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="ui-property-field">
+      <div className="ui-property-label">{label}</div>
+      <div className="ui-property-value">{value}</div>
+    </div>
+  );
+}
 
 function normalizeCronWeekday(value: number) {
   return value === 7 ? 0 : value;
@@ -282,7 +294,7 @@ function formatTriggerLastResult(raw: string | null, companyId: string | null): 
       return (
         <>
           Opened a new issue:{" "}
-          <Link href={href} className="font-medium text-primary underline underline-offset-2">
+          <Link href={href} className="ui-loop-issue-link">
             {issueId}
           </Link>
         </>
@@ -313,7 +325,7 @@ function formatLoopRunOutcomeLabel(status: string): string {
 function loopRunIssueLink(issueId: string, companyId: string) {
   const href = `/issues/${issueId}?companyId=${encodeURIComponent(companyId)}` as Route;
   return (
-    <Link href={href} className="font-medium text-primary underline underline-offset-2 hover:no-underline" title={`Issue ${issueId}`}>
+    <Link href={href} className="ui-loop-issue-link" title={`Issue ${issueId}`}>
       View issue
     </Link>
   );
@@ -328,7 +340,7 @@ function formatLoopRunResultDescription(r: RunRow, companyId: string | null): Re
         return (
           <>
             Opened a new issue:{" "}
-            <Link href={href} className="font-medium text-primary underline underline-offset-2 hover:no-underline">
+            <Link href={href} className="ui-loop-issue-link">
               {r.linkedIssueId}
             </Link>
           </>
@@ -377,7 +389,7 @@ function formatLoopRunResultDescription(r: RunRow, companyId: string | null): Re
               {loopRunIssueLink(r.linkedIssueId, companyId)}
             </>
           ) : r.linkedIssueId ? (
-            <span className="text-muted-foreground" title={r.linkedIssueId}>
+            <span className="ui-loop-issue-id-note" title={r.linkedIssueId}>
               {" "}
               (Issue {r.linkedIssueId})
             </span>
@@ -410,6 +422,7 @@ export function LoopDetailPageClient(
   const [editCatchUpPolicy, setEditCatchUpPolicy] = useState("skip_missed");
   const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null);
   const [triggerEditBusy, setTriggerEditBusy] = useState(false);
+  const [triggerDeleteBusy, setTriggerDeleteBusy] = useState(false);
   const [triggerEditScheduleKind, setTriggerEditScheduleKind] = useState<ScheduleKind>("every_day");
   const [triggerEditHour24, setTriggerEditHour24] = useState(9);
   const [triggerEditMinute, setTriggerEditMinute] = useState(0);
@@ -456,6 +469,15 @@ export function LoopDetailPageClient(
   const projectName = projects.find((p) => p.id === detail?.projectId)?.name;
   const agent = agents.find((a) => a.id === detail?.assigneeAgentId);
   const editingTrigger = detail?.triggers.find((t) => t.id === editingTriggerId) ?? null;
+
+  const loopSidebarMeta = useMemo(() => {
+    if (!detail) {
+      return { lastRunAt: null as string | null, lastRun: null as RunRow | null };
+    }
+    const lastRun = detail.recentRuns[0] ?? null;
+    const lastRunAt = detail.lastTriggeredAt ?? lastRun?.triggeredAt ?? null;
+    return { lastRunAt, lastRun };
+  }, [detail]);
 
   async function setActive(next: boolean) {
     if (!companyId || !detail) {
@@ -641,6 +663,30 @@ export function LoopDetailPageClient(
     }
   }
 
+  async function deleteTrigger() {
+    if (!companyId || !detail || !editingTriggerId) {
+      return;
+    }
+    setError(null);
+    setTriggerDeleteBusy(true);
+    try {
+      await apiDelete(`/loops/${detail.id}/triggers/${editingTriggerId}`, companyId);
+      const removedId = editingTriggerId;
+      setDetail((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        return { ...prev, triggers: prev.triggers.filter((t) => t.id !== removedId) };
+      });
+      setEditingTriggerId(null);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to delete trigger.");
+    } finally {
+      setTriggerDeleteBusy(false);
+    }
+  }
+
   async function addTrigger(e: FormEvent) {
     e.preventDefault();
     if (!companyId || !detail) {
@@ -728,12 +774,67 @@ export function LoopDetailPageClient(
     }
   }
 
+  const rightPane =
+    !detail ? null : (
+      <div className="ui-detail-sidebar">
+        <Card>
+          <CardContent className="ui-detail-sidebar-section">
+            <PropertyRow label="Title" value={detail.title} />
+            <PropertyRow
+              label="Agent"
+              value={
+                agent && companyId ? (
+                  <Link
+                    href={`/agents/${agent.id}?companyId=${encodeURIComponent(companyId)}` as Route}
+                    className="ui-link-sidebar-nested"
+                  >
+                    {agent.name}
+                  </Link>
+                ) : (
+                  (agent?.name ?? "Unknown agent")
+                )
+              }
+            />
+            <PropertyRow
+              label="Project"
+              value={
+                companyId && projectName ? (
+                  <Link
+                    href={`/projects/${detail.projectId}?companyId=${encodeURIComponent(companyId)}` as Route}
+                    className="ui-link-sidebar-nested"
+                  >
+                    {projectName}
+                  </Link>
+                ) : (
+                  (projectName ?? "Unknown")
+                )
+              }
+            />
+            <PropertyRow
+              label="Last run"
+              value={
+                loopSidebarMeta.lastRunAt
+                  ? `${formatSmartDateTime(loopSidebarMeta.lastRunAt)}${
+                      loopSidebarMeta.lastRun
+                        ? ` · ${formatLoopRunOutcomeLabel(loopSidebarMeta.lastRun.status)}`
+                        : ""
+                    }`
+                  : "Never"
+              }
+            />
+            <PropertyRow label="Created" value={formatSmartDateTime(detail.createdAt)} />
+            <PropertyRow label="Updated" value={formatSmartDateTime(detail.updatedAt)} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+
   return (
     <AppShell
       leftPane={
-        <div className="ui-page-stack min-h-0 overflow-auto">
+        <div className="ui-page-stack ui-loop-detail-scroll">
           {error ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="ui-loop-inline-error" role="alert">
               {error}
             </p>
           ) : null}
@@ -745,14 +846,6 @@ export function LoopDetailPageClient(
                     <SectionHeading title={detail.title} description="Loop details and scheduling controls." />
                   </div>
                   <div className="ui-page-header-actions">
-                    {agent ? (
-                      <AgentAvatar
-                        seed={agentAvatarSeed(agent.id, agent.name, agent.avatarSeed ?? undefined)}
-                        name={agent.name}
-                        className="h-7 w-7"
-                        size={56}
-                      />
-                    ) : null}
                     <Dialog
                       open={editOpen}
                       onOpenChange={(next) => {
@@ -763,7 +856,7 @@ export function LoopDetailPageClient(
                       }}
                     >
                     {detail.status === "archived" ? (
-                      <Badge variant="outline" className="shrink-0">
+                      <Badge variant="outline" className="ui-loop-header-badge">
                         Archived
                       </Badge>
                     ) : (
@@ -858,7 +951,9 @@ export function LoopDetailPageClient(
                 </CardContent>
               </Card>
 
-              <Tabs defaultValue="triggers" className="gap-0">
+              <SectionHeading title="Details" description="Loop details and scheduling controls." />
+
+              <Tabs defaultValue="triggers" className="ui-tabs-gap-none">
                 <TabsList>
                   <TabsTrigger value="triggers">Triggers</TabsTrigger>
                   <TabsTrigger value="runs">Runs</TabsTrigger>
@@ -867,7 +962,7 @@ export function LoopDetailPageClient(
                 <TabsContent value="triggers">
                   <Card>
                     <form onSubmit={addTrigger}>
-                      <CardContent className="pb-10">
+                      <CardContent className="ui-loop-trigger-form-card-body">
                         {scheduleKind === "custom_cron" ? (
                           <FieldGroup>
                               <Field>
@@ -896,21 +991,21 @@ export function LoopDetailPageClient(
                                 onChange={(ev) => setCustomCron(ev.target.value)}
                                 placeholder="minute hour day-of-month month day-of-week"
                                 rows={2}
-                                className="font-mono text-sm"
+                                className="ui-loop-cron-textarea"
                               />
-                              <p className="text-xs text-muted-foreground">
+                              <p className="ui-loop-form-hint">
                                 Five fields: minute, hour, day of month, month, day of week (cron syntax).
                               </p>
                             </Field>
                           </FieldGroup>
                         ) : (
                           <div
-                            className="grid w-full min-w-0 items-end gap-6"
+                            className="ui-loop-trigger-fields-row"
                             style={{
                               gridTemplateColumns: `repeat(${addTriggerGridColumnCount(scheduleKind)}, minmax(0, 1fr))`
                             }}
                           >
-                            <Field className="min-w-0">
+                            <Field className="ui-field-min-w-0">
                               <FieldLabel>Schedule</FieldLabel>
                               <Select
                                 value={scheduleKind}
@@ -930,7 +1025,7 @@ export function LoopDetailPageClient(
                               </Select>
                             </Field>
                             {scheduleKind === "monthly" ? (
-                              <Field className="min-w-0">
+                              <Field className="ui-field-min-w-0">
                                 <FieldLabel>Day</FieldLabel>
                                 <Select value={String(dayOfMonth)} onValueChange={(v) => setDayOfMonth(Number(v))}>
                                   <SelectTrigger>
@@ -948,13 +1043,13 @@ export function LoopDetailPageClient(
                             ) : null}
                             {scheduleKind === "every_minute" ? null : scheduleKind === "every_hour" ? (
                               <>
-                                <Field className="min-w-0">
+                                <Field className="ui-field-min-w-0">
                                   <FieldLabel>Minute</FieldLabel>
                                   <Select value={String(minute)} onValueChange={(v) => setMinute(Number(v))}>
                                     <SelectTrigger>
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-60">
+                                    <SelectContent className="ui-select-content-tall">
                                       {SCHEDULE_MINUTE_OPTIONS.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                           {opt.label}
@@ -966,13 +1061,13 @@ export function LoopDetailPageClient(
                               </>
                             ) : (
                               <>
-                                <Field className="min-w-0">
+                                <Field className="ui-field-min-w-0">
                                   <FieldLabel>Hour</FieldLabel>
                                   <Select value={String(hour24)} onValueChange={(v) => setHour24(Number(v))}>
                                     <SelectTrigger>
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-60">
+                                    <SelectContent className="ui-select-content-tall">
                                       {SCHEDULE_HOUR_OPTIONS.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                           {opt.label}
@@ -981,13 +1076,13 @@ export function LoopDetailPageClient(
                                     </SelectContent>
                                   </Select>
                                 </Field>
-                                <Field className="min-w-0">
+                                <Field className="ui-field-min-w-0">
                                   <FieldLabel>Minute</FieldLabel>
                                   <Select value={String(minute)} onValueChange={(v) => setMinute(Number(v))}>
                                     <SelectTrigger>
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-60">
+                                    <SelectContent className="ui-select-content-tall">
                                       {SCHEDULE_MINUTE_OPTIONS.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                           {opt.label}
@@ -999,48 +1094,52 @@ export function LoopDetailPageClient(
                               </>
                             )}
                             {scheduleKind === "weekly" ? (
-                              <Field className="min-w-0">
-                                <FieldLabel className="justify-start text-left">Days</FieldLabel>
+                              <Field className="ui-field-min-w-0">
+                                <FieldLabel className="ui-field-label-align-start">Days</FieldLabel>
                                 <WeekdayMultiSelect value={weekDays} onChange={setWeekDays} />
                               </Field>
                             ) : null}
                           </div>
                         )}
                       </CardContent>
-                      <CardFooter className="border-t items-end justify-end">
+                      <CardFooter className="ui-loop-card-footer-actions">
                         <Button type="submit" size="sm" disabled={addTriggerBusy}>
                           {addTriggerBusy ? "Adding…" : "Add trigger"}
                         </Button>
                       </CardFooter>
                     </form>
                   </Card>
-                  <div className="mt-6">
+                  <div className="ui-loop-triggers-after-form">
                     {detail.triggers.length === 0 ? (
-                      <p className="text-muted-foreground">No triggers yet.</p>
+                      <p className="ui-issue-muted-text">No triggers yet.</p>
                     ) : (
                       detail.triggers.map((t) => (
                         <Card key={t.id}>
-                          <CardContent className="space-y-2">
-                            <div className="grid grid-cols-[110px_1fr] gap-2">
-                              <span className="text-muted-foreground">Schedule</span>
-                              <span>{formatScheduleLabel(t.cronExpression)}</span>
+                          <CardContent className="ui-loop-trigger-detail-rows">
+                            <div className="ui-loop-trigger-meta-row">
+                              <span className="ui-loop-trigger-meta-label">Schedule</span>
+                              <span className="ui-loop-trigger-meta-value">{formatScheduleLabel(t.cronExpression)}</span>
                             </div>
-                            <div className="grid grid-cols-[110px_1fr] gap-2">
-                              <span className="text-muted-foreground">Next run</span>
-                              <span>{t.nextRunAt ? formatSmartDateTime(t.nextRunAt) : "Not scheduled"}</span>
+                            <div className="ui-loop-trigger-meta-row">
+                              <span className="ui-loop-trigger-meta-label">Next run</span>
+                              <span className="ui-loop-trigger-meta-value">
+                                {t.nextRunAt ? formatSmartDateTime(t.nextRunAt) : "Not scheduled"}
+                              </span>
                             </div>
-                            <div className="grid grid-cols-[110px_1fr] gap-2">
-                              <span className="text-muted-foreground">Last fired</span>
-                              <span>{t.lastFiredAt ? formatSmartDateTime(t.lastFiredAt) : "Never"}</span>
+                            <div className="ui-loop-trigger-meta-row">
+                              <span className="ui-loop-trigger-meta-label">Last fired</span>
+                              <span className="ui-loop-trigger-meta-value">
+                                {t.lastFiredAt ? formatSmartDateTime(t.lastFiredAt) : "Never"}
+                              </span>
                             </div>
-                            <div className="grid grid-cols-[110px_1fr] gap-2">
-                              <span className="text-muted-foreground">Last result</span>
-                              <span className="wrap-break-word text-sidebar-foreground">
+                            <div className="ui-loop-trigger-meta-row">
+                              <span className="ui-loop-trigger-meta-label">Last result</span>
+                              <span className="ui-loop-trigger-meta-value">
                                 {formatTriggerLastResult(t.lastResult, companyId)}
                               </span>
                             </div>
                           </CardContent>
-                          <CardFooter className="border-t items-end justify-end">
+                          <CardFooter className="ui-loop-card-footer-actions">
                             <Button type="button" size="sm" variant="outline" onClick={() => openTriggerEdit(t)}>Edit</Button>
                           </CardFooter>
                         </Card>
@@ -1082,21 +1181,21 @@ export function LoopDetailPageClient(
                                 onChange={(ev) => setTriggerEditCustomCron(ev.target.value)}
                                 placeholder="minute hour day-of-month month day-of-week"
                                 rows={2}
-                                className="font-mono text-sm"
+                                className="ui-loop-cron-textarea"
                               />
-                              <p className="text-xs text-muted-foreground">
+                              <p className="ui-loop-form-hint">
                                 Five fields: minute, hour, day of month, month, day of week (cron syntax).
                               </p>
                             </Field>
                           </FieldGroup>
                         ) : (
                           <div
-                            className="grid w-full min-w-0 items-end gap-6"
+                            className="ui-loop-trigger-fields-row"
                             style={{
                               gridTemplateColumns: `repeat(${editTriggerGridColumnCount(triggerEditScheduleKind)}, minmax(0, 1fr))`
                             }}
                           >
-                            <Field className="min-w-0">
+                            <Field className="ui-field-min-w-0">
                               <FieldLabel>Schedule</FieldLabel>
                               <Select
                                 value={triggerEditScheduleKind}
@@ -1117,7 +1216,7 @@ export function LoopDetailPageClient(
                               </Select>
                             </Field>
                             {triggerEditScheduleKind === "monthly" ? (
-                              <Field className="min-w-0">
+                              <Field className="ui-field-min-w-0">
                                 <FieldLabel>Day</FieldLabel>
                                 <Select value={String(triggerEditDayOfMonth)} onValueChange={(v) => setTriggerEditDayOfMonth(Number(v))}>
                                   <SelectTrigger>
@@ -1134,13 +1233,13 @@ export function LoopDetailPageClient(
                               </Field>
                             ) : null}
                             {triggerEditScheduleKind === "every_minute" ? null : triggerEditScheduleKind === "every_hour" ? (
-                              <Field className="min-w-0">
+                              <Field className="ui-field-min-w-0">
                                 <FieldLabel>Minute</FieldLabel>
                                 <Select value={String(triggerEditMinute)} onValueChange={(v) => setTriggerEditMinute(Number(v))}>
                                   <SelectTrigger>
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent className="max-h-60">
+                                  <SelectContent className="ui-select-content-tall">
                                     {SCHEDULE_MINUTE_OPTIONS.map((opt) => (
                                       <SelectItem key={opt.value} value={opt.value}>
                                         {opt.label}
@@ -1151,13 +1250,13 @@ export function LoopDetailPageClient(
                               </Field>
                             ) : (
                               <>
-                                <Field className="min-w-0">
+                                <Field className="ui-field-min-w-0">
                                   <FieldLabel>Hour</FieldLabel>
                                   <Select value={String(triggerEditHour24)} onValueChange={(v) => setTriggerEditHour24(Number(v))}>
                                     <SelectTrigger>
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-60">
+                                    <SelectContent className="ui-select-content-tall">
                                       {SCHEDULE_HOUR_OPTIONS.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                           {opt.label}
@@ -1166,13 +1265,13 @@ export function LoopDetailPageClient(
                                     </SelectContent>
                                   </Select>
                                 </Field>
-                                <Field className="min-w-0">
+                                <Field className="ui-field-min-w-0">
                                   <FieldLabel>Minute</FieldLabel>
                                   <Select value={String(triggerEditMinute)} onValueChange={(v) => setTriggerEditMinute(Number(v))}>
                                     <SelectTrigger>
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-60">
+                                    <SelectContent className="ui-select-content-tall">
                                       {SCHEDULE_MINUTE_OPTIONS.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                           {opt.label}
@@ -1184,12 +1283,12 @@ export function LoopDetailPageClient(
                               </>
                             )}
                             {triggerEditScheduleKind === "weekly" ? (
-                              <Field className="min-w-0">
-                                <FieldLabel className="justify-start text-left">Days</FieldLabel>
+                              <Field className="ui-field-min-w-0">
+                                <FieldLabel className="ui-field-label-align-start">Days</FieldLabel>
                                 <WeekdayMultiSelect value={triggerEditWeekDays} onChange={setTriggerEditWeekDays} />
                               </Field>
                             ) : null}
-                            <Field className="min-w-0">
+                            <Field className="ui-field-min-w-0">
                               <FieldLabel>Status</FieldLabel>
                               <Select value={triggerEditEnabled} onValueChange={(v) => setTriggerEditEnabled(v as "enabled" | "disabled")}>
                                 <SelectTrigger>
@@ -1204,7 +1303,15 @@ export function LoopDetailPageClient(
                           </div>
                         )}
                         <DialogFooter>
-                          <Button type="submit" disabled={triggerEditBusy}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => void deleteTrigger()}
+                            disabled={triggerEditBusy || triggerDeleteBusy}
+                          >
+                            {triggerDeleteBusy ? "Deleting…" : "Delete"}
+                          </Button>
+                          <Button type="submit" disabled={triggerEditBusy || triggerDeleteBusy}>
                             {triggerEditBusy ? "Saving…" : "Save trigger"}
                           </Button>
                         </DialogFooter>
@@ -1214,18 +1321,16 @@ export function LoopDetailPageClient(
                 </TabsContent>
                 <TabsContent value="runs">
                   {detail.recentRuns.length === 0 ? (
-                    <p className="text-muted-foreground">No runs yet.</p>
+                    <p className="ui-issue-muted-text">No runs yet.</p>
                   ) : (
                     detail.recentRuns.map((r) => (
-                      <Card key={r.id} className="mb-6">
+                      <Card key={r.id} className="ui-loop-run-card">
                         <CardHeader>
                           <CardTitle>{formatSmartDateTime(r.triggeredAt)}</CardTitle>
-                          <div className="text-sm leading-relaxed text-muted-foreground [&_a]:text-primary [&_a]:underline-offset-2">
-                            {formatLoopRunResultDescription(r, companyId)}
-                          </div>
+                          <div className="ui-loop-run-result">{formatLoopRunResultDescription(r, companyId)}</div>
                         </CardHeader>
                         {r.failureReason ? (
-                          <CardContent className="text-xs text-destructive">{r.failureReason}</CardContent>
+                          <CardContent className="ui-loop-run-failure-reason">{r.failureReason}</CardContent>
                         ) : null}
                       </Card>
                     ))
@@ -1233,12 +1338,12 @@ export function LoopDetailPageClient(
                 </TabsContent>
                 <TabsContent value="activity">
                   {activity.length === 0 ? (
-                    <p className="text-muted-foreground">No activity yet.</p>
+                    <p className="ui-issue-muted-text">No activity yet.</p>
                   ) : (
                     activity.map((a) => (
-                      <div key={a.id} className="rounded-md border px-4 py-3 mb-6">
-                        <div className="font-medium">{a.eventType}</div>
-                        <div className="text-xs text-muted-foreground">
+                      <div key={a.id} className="ui-loop-activity-card">
+                        <div className="ui-loop-activity-type">{a.eventType}</div>
+                        <div className="ui-loop-activity-meta">
                           {formatSmartDateTime(a.createdAt)} · {a.actorType}
                           {a.actorId ? ` · ${a.actorId}` : ""}
                         </div>
@@ -1251,6 +1356,7 @@ export function LoopDetailPageClient(
           )}
         </div>
       }
+      rightPane={rightPane}
       activeNav="Loops"
       companies={companies}
       activeCompanyId={companyId}

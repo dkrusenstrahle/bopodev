@@ -23,7 +23,7 @@ Provide one place to define goals, organize work, run agents, manage approvals, 
 
 ## Long text fields (Markdown)
 
-Several rich description fields use an **MDXEditor**-based markdown surface in forms (formatted preview as you type, same as issue document attachments), and the app renders stored Markdown with GitHub-flavored Markdown where applicable on detail pages: **project description**, **issue description**, **work loop instructions** (also copied into new issues the loop creates), **agent bootstrap prompt**, and **goal details**. Plain text still works; structure with headings, lists, links, and tables when it helps readers.
+Several rich description fields use an **MDXEditor**-based markdown surface in forms (formatted preview as you type, same as issue document attachments), and the app renders stored Markdown with GitHub-flavored Markdown where applicable on detail pages: **project description**, **issue description**, **issue comments** (composer on the issue detail page), **work loop instructions** (also copied into new issues the loop creates), **agent bootstrap prompt**, and **goal details**. Plain text still works; structure with headings, lists, links, and tables when it helps readers.
 
 ## UI Section Map
 

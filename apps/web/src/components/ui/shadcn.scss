@@ -339,6 +339,129 @@ body {
   @apply grid grid-cols-1 gap-6;
 }
 
+/* Loop detail (/loops/:id) */
+.ui-loop-detail-scroll {
+  @apply min-h-0 overflow-auto;
+}
+
+.ui-loop-inline-error {
+  @apply text-sm text-destructive;
+}
+
+.ui-loop-back-icon {
+  @apply h-7 w-7;
+}
+
+.ui-loop-header-badge {
+  @apply shrink-0;
+}
+
+.ui-loop-assignee-link {
+  @apply flex max-w-full min-w-0 items-center gap-4 rounded-md text-sidebar-foreground no-underline outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background mt-1;
+}
+
+.ui-loop-assignee-row {
+  @apply flex max-w-full min-w-0 items-center gap-4;
+}
+
+.ui-loop-assignee-name {
+  @apply min-w-0 max-w-[10rem] truncate font-medium sm:max-w-[14rem];
+}
+
+.ui-loop-assignee-avatar {
+  @apply shrink-0 rounded-full size-6;
+}
+
+.ui-tabs-gap-none {
+  .ui-tabs-list {
+    @apply mb-4;
+  }
+}
+
+.ui-loop-trigger-form-card-body {
+  @apply pb-10;
+}
+
+.ui-loop-cron-textarea {
+  @apply font-mono text-sm;
+}
+
+.ui-loop-form-hint {
+  @apply text-xs text-muted-foreground;
+}
+
+.ui-loop-trigger-fields-row {
+  @apply grid w-full min-w-0 items-end gap-6;
+}
+
+.ui-field-min-w-0 {
+  @apply min-w-0;
+}
+
+.ui-select-content-tall {
+  @apply max-h-60;
+}
+
+.ui-field-label-align-start {
+  @apply justify-start text-left;
+}
+
+.ui-loop-card-footer-actions {
+  @apply border-t items-end justify-end pt-6;
+}
+
+.ui-loop-triggers-after-form {
+  @apply flex flex-col gap-6 mt-6;
+}
+
+.ui-loop-trigger-detail-rows {
+  @apply space-y-2;
+}
+
+.ui-loop-trigger-meta-row {
+  @apply grid grid-cols-[110px_1fr] gap-2;
+}
+
+.ui-loop-trigger-meta-label {
+  @apply text-muted-foreground;
+}
+
+.ui-loop-trigger-meta-value {
+  @apply wrap-break-word text-sidebar-foreground;
+}
+
+.ui-loop-issue-link {
+  @apply font-medium text-primary underline underline-offset-2 hover:no-underline;
+}
+
+.ui-loop-issue-id-note {
+  @apply text-muted-foreground;
+}
+
+.ui-loop-run-card {
+  @apply mb-6;
+}
+
+.ui-loop-run-result {
+  @apply text-sm leading-relaxed text-muted-foreground [&_a]:text-primary [&_a]:underline-offset-2;
+}
+
+.ui-loop-run-failure-reason {
+  @apply text-xs text-destructive;
+}
+
+.ui-loop-activity-card {
+  @apply rounded-md border px-4 py-3 mb-6;
+}
+
+.ui-loop-activity-type {
+  @apply font-medium;
+}
+
+.ui-loop-activity-meta {
+  @apply text-xs text-muted-foreground;
+}
+
 .ui-panel-form {
   @apply space-y-3 rounded-xl border bg-card/70 p-4;
 }

@@ -25,7 +25,8 @@ import {
   listWorkLoopTriggers,
   createWorkLoop,
   updateWorkLoop,
-  updateWorkLoopTrigger
+  updateWorkLoopTrigger,
+  deleteWorkLoopTrigger
 } from "../services/work-loop-service";
 
 function serializeLoop(row: typeof workLoops.$inferSelect) {
@@ -327,6 +328,32 @@ export function createLoopsRouter(ctx: AppContext) {
     } catch (e) {
       return sendError(res, e instanceof Error ? e.message : "Failed to update trigger.", 422);
     }
+  });
+
+  router.delete("/:loopId/triggers/:triggerId", async (req, res) => {
+    if (!enforcePermission(req, res, "loops:write")) {
+      return;
+    }
+    const { loopId, triggerId } = req.params;
+    const loop = await getWorkLoop(ctx.db, req.companyId!, loopId);
+    if (!loop) {
+      return sendError(res, "Work loop not found.", 404);
+    }
+    const deleted = await deleteWorkLoopTrigger(ctx.db, req.companyId!, loopId, triggerId);
+    if (!deleted) {
+      return sendError(res, "Trigger not found.", 404);
+    }
+    await appendAuditEvent(ctx.db, {
+      companyId: req.companyId!,
+      actorType: "human",
+      actorId: req.actor?.id ?? null,
+      eventType: "work_loop.trigger_deleted",
+      entityType: "work_loop",
+      entityId: loopId,
+      correlationId: req.requestId ?? null,
+      payload: { triggerId }
+    });
+    return sendOk(res, { deleted: true });
   });
 
   return router;

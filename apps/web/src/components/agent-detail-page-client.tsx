@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -9,7 +10,7 @@ import { AppShell } from "@/components/app-shell";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { CollapsibleMarkdown } from "@/components/markdown-view";
+import { CollapsibleMarkdown, COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX } from "@/components/markdown-view";
 import { CreateAgentModal } from "@/components/modals/create-agent-modal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,16 @@ interface IssueRow {
   title: string;
   priority: string;
   status: "todo" | "in_progress" | "blocked" | "in_review" | "done" | "canceled";
+  updatedAt: string;
+}
+
+interface AgentWorkLoopRow {
+  id: string;
+  title: string;
+  projectId: string;
+  assigneeAgentId: string;
+  status: string;
+  lastTriggeredAt: string | null;
   updatedAt: string;
 }
 
@@ -378,7 +389,8 @@ export function AgentDetailPageClient({
   issues,
   heartbeatRuns,
   costEntries,
-  auditEvents
+  auditEvents,
+  projects
 }: {
   companyId: string;
   companies: Array<{ id: string; name: string }>;
@@ -388,6 +400,7 @@ export function AgentDetailPageClient({
   heartbeatRuns: HeartbeatRunRow[];
   costEntries: CostRow[];
   auditEvents: AuditRow[];
+  projects: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -402,6 +415,38 @@ export function AgentDetailPageClient({
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
+  const [agentWorkLoops, setAgentWorkLoops] = useState<AgentWorkLoopRow[]>([]);
+  const [loopsLoading, setLoopsLoading] = useState(true);
+  const [loopsError, setLoopsError] = useState<string | null>(null);
+
+  const loadAgentLoops = useCallback(async () => {
+    if (!companyId) {
+      setAgentWorkLoops([]);
+      setLoopsLoading(false);
+      return;
+    }
+    setLoopsLoading(true);
+    setLoopsError(null);
+    try {
+      const res = await apiGet<{ data: AgentWorkLoopRow[] }>("/loops", companyId);
+      const rows = res.data.data ?? [];
+      setAgentWorkLoops(
+        rows
+          .filter((loop) => loop.assigneeAgentId === agent.id)
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      );
+    } catch (e) {
+      setAgentWorkLoops([]);
+      setLoopsError(e instanceof ApiError ? e.message : "Failed to load work loops.");
+    } finally {
+      setLoopsLoading(false);
+    }
+  }, [companyId, agent.id]);
+
+  useEffect(() => {
+    void loadAgentLoops();
+  }, [loadAgentLoops]);
+
   const managerNameById = useMemo(() => new Map(agents.map((entry) => [entry.id, entry.name])), [agents]);
 
   const agentRuns = useMemo(
@@ -553,6 +598,69 @@ export function AgentDetailPageClient({
       }
     ],
     [companyId]
+  );
+  const agentLoopColumns = useMemo<ColumnDef<AgentWorkLoopRow>[]>(
+    () => [
+      {
+        accessorKey: "title",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Loop" />,
+        cell: ({ row }) => (
+          <Link
+            href={`/loops/${row.original.id}?companyId=${encodeURIComponent(companyId)}` as Route}
+            className="ui-run-table-link"
+          >
+            {row.original.title}
+          </Link>
+        )
+      },
+      {
+        accessorKey: "projectId",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Project" />,
+        cell: ({ row }) => {
+          const name = projects.find((p) => p.id === row.original.projectId)?.name;
+          return <span className="ui-run-table-cell-muted">{name ?? row.original.projectId}</span>;
+        }
+      },
+      {
+        accessorKey: "status",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        cell: ({ row }) => (
+          <Badge variant="outline" className={getStatusBadgeClassName(row.original.status)}>
+            {row.original.status}
+          </Badge>
+        )
+      },
+      {
+        accessorKey: "lastTriggeredAt",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Last triggered" />,
+        cell: ({ row }) =>
+          row.original.lastTriggeredAt ? (
+            <time
+              className="ui-run-table-datetime"
+              dateTime={row.original.lastTriggeredAt}
+              title={formatDateTime(row.original.lastTriggeredAt)}
+            >
+              {formatSmartDateTime(row.original.lastTriggeredAt, { includeSeconds: true })}
+            </time>
+          ) : (
+            <span className="ui-run-table-cell-muted">Never</span>
+          )
+      },
+      {
+        accessorKey: "updatedAt",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Updated" />,
+        cell: ({ row }) => (
+          <time
+            className="ui-run-table-datetime"
+            dateTime={row.original.updatedAt}
+            title={formatDateTime(row.original.updatedAt)}
+          >
+            {formatSmartDateTime(row.original.updatedAt, { includeSeconds: true })}
+          </time>
+        )
+      }
+    ],
+    [companyId, projects]
   );
   const agentRunColumns = useMemo<ColumnDef<HeartbeatRunRow>[]>(
     () => [
@@ -1060,33 +1168,50 @@ export function AgentDetailPageClient({
         </div>
       </div>
 
+      <SectionHeading title="Prompt" description="System-style instructions injected when this agent starts or resumes." />
+
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Bootstrap prompt</CardTitle>
-          <CardDescription>System-style instructions injected when this agent starts or resumes.</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="ui-detail-sidebar-section">
           {agent.bootstrapPrompt?.trim() ? (
-            <CollapsibleMarkdown content={agent.bootstrapPrompt} className="ui-markdown" maxHeightPx={280} />
+            <CollapsibleMarkdown
+              content={agent.bootstrapPrompt}
+              className="ui-markdown"
+              maxHeightPx={COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">No bootstrap prompt configured.</p>
           )}
         </CardContent>
       </Card>
 
+      <SectionHeading title="Issues" description="Latest done and in-review issues assigned to this agent." />
+      <DataTable
+        columns={completedIssueColumns}
+        data={recentDeliveryIssues}
+        emptyMessage="No done or in-review issues for this agent yet."
+        showViewOptions={false}
+      />
+
+      <SectionHeading
+        title="Loops"
+        description="Scheduled loops where this agent is the assignee (opens issues on each run)."
+      />
+      {loopsLoading ? <p className="text-sm text-muted-foreground">Loading work loops…</p> : null}
+      {loopsError ? <p className="text-sm text-destructive">{loopsError}</p> : null}
+      {!loopsLoading && !loopsError ? (
+        <DataTable
+          columns={agentLoopColumns}
+          data={agentWorkLoops}
+          emptyMessage="No loops assign this agent yet."
+          showViewOptions={false}
+        />
+      ) : null}
+
       <SectionHeading title="Runs" description="Heartbeat runs scoped to this agent." />
       <DataTable
         columns={agentRunColumns}
         data={agentRuns}
         emptyMessage="No runs have executed for this agent yet."
-        showViewOptions={false}
-      />
-
-      <SectionHeading title="Recent issues" description="Latest done and in-review issues assigned to this agent." />
-      <DataTable
-        columns={completedIssueColumns}
-        data={recentDeliveryIssues}
-        emptyMessage="No done or in-review issues for this agent yet."
         showViewOptions={false}
       />
     </div>

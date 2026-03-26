@@ -56,7 +56,7 @@
 }
 
 .mdxEditorRootCompact {
-  @apply min-h-96 max-h-96 overflow-y-auto px-1 py-0;
+  @apply min-h-52 overflow-y-auto px-1 py-0;
 }
 
 .mdxEditorContent {
@@ -65,4 +65,12 @@
 
 .mdxEditorContentCompact {
   @apply min-h-[180px];
+}
+
+.mdxEditorRootIssueComment {
+  @apply min-h-20 max-h-[min(50vh,28rem)] overflow-y-auto;
+}
+
+.mdxEditorContentIssueComment {
+  @apply min-h-16 placeholder:text-muted-foreground;
 }

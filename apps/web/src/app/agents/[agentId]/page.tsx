@@ -18,7 +18,7 @@ export default async function AgentPage({
       heartbeatRuns: true,
       auditEvents: true,
       costEntries: true,
-      projects: false,
+      projects: true,
       goals: false,
       approvals: false,
       governanceInbox: false,
@@ -41,6 +41,7 @@ export default async function AgentPage({
       heartbeatRuns={workspaceData.heartbeatRuns}
       costEntries={workspaceData.costEntries}
       auditEvents={workspaceData.auditEvents}
+      projects={workspaceData.projects}
     />
   );
 }

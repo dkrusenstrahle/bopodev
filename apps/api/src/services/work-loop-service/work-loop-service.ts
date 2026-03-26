@@ -239,6 +239,30 @@ export async function updateWorkLoopTrigger(
   return row ?? null;
 }
 
+export async function deleteWorkLoopTrigger(
+  db: BopoDb,
+  companyId: string,
+  workLoopId: string,
+  triggerId: string
+): Promise<boolean> {
+  const [existing] = await db
+    .select()
+    .from(workLoopTriggers)
+    .where(
+      and(
+        eq(workLoopTriggers.id, triggerId),
+        eq(workLoopTriggers.companyId, companyId),
+        eq(workLoopTriggers.workLoopId, workLoopId)
+      )
+    )
+    .limit(1);
+  if (!existing) {
+    return false;
+  }
+  await db.delete(workLoopTriggers).where(eq(workLoopTriggers.id, triggerId));
+  return true;
+}
+
 export async function listWorkLoopTriggers(db: BopoDb, companyId: string, workLoopId: string) {
   return db
     .select()

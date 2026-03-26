@@ -535,6 +535,29 @@ html {
   scrollbar-gutter: stable;
 }
 
+/*
+ * @mdxeditor/editor appends `mdxeditor-popup-container` with the same `editorRoot` classes as the visible
+ * surface, so in normal flow it looks like a second editor. Popups/dialogs render inside; strip box chrome.
+ */
+.mdxeditor-popup-container {
+  min-height: 0 !important;
+  max-height: none !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Issue comment: mount sits above the editor with h-0; re-enable hits for portaled UI inside the popup root. */
+.mdxeditor-popup-mount {
+  pointer-events: none;
+}
+
+.mdxeditor-popup-mount .mdxeditor-popup-container {
+  pointer-events: auto;
+}
+
 a {
   color: inherit;
   text-decoration: none;

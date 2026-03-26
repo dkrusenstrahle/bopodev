@@ -6,6 +6,9 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/** Default collapsed height for body-style markdown (issue description, agent prompt, etc.). */
+export const COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX = 280;
+
 export function MarkdownBody({ content, className }: { content: string; className?: string }) {
   return (
     <div className={cn(className)}>

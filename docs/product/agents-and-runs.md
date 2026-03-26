@@ -29,6 +29,7 @@ Explain how to configure agents safely and interpret run outcomes.
 
 From `agents` and related modals, you can:
 
+- open an agent **detail** page to see metrics, bootstrap prompt, **issues** (done / in-review), **work loops** that assign this agent, and **heartbeat runs**,
 - browse the agent directory in **table** or **cards** layout (toolbar toggle next to column view options),
 - create an agent (`role`, `name`, provider type),
 - configure heartbeat cadence and budget,

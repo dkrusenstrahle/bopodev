@@ -7,17 +7,18 @@ import type { IssuePriority, IssueStatus } from "bopodev-contracts";
 import { AGENT_ROLE_LABELS, AGENT_ROLE_KEYS, type AgentRoleKey } from "bopodev-contracts";
 import { ChevronDownIcon, FileTextIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { CollapsibleMarkdown } from "@/components/markdown-view";
+import { CollapsibleMarkdown, COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX } from "@/components/markdown-view";
 import { AgentAvatar } from "@/components/agent-avatar";
 import {
   IssueDocumentDialog,
   type IssueDocumentEditTarget
 } from "@/components/modals/add-issue-document-dialog";
 import { CreateIssueModal } from "@/components/modals/create-issue-modal";
+import { LazyMarkdownMdxEditor } from "@/components/modals/lazy-markdown-mdx-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import {
@@ -34,7 +35,6 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiDelete, apiGet, apiPost, apiPostFormData, apiPut } from "@/lib/api";
 import { formatIssueActivityActorLabel, formatIssueActivityTitle } from "@/lib/event-display";
 import { formatSmartDateTime } from "@/lib/smart-date";
@@ -47,6 +47,8 @@ interface IssueRow {
   id: string;
   projectId: string;
   parentIssueId?: string | null;
+  /** Set when this issue was opened by a work loop run. */
+  loopId?: string | null;
   goalIds?: string[];
   assigneeAgentId: string | null;
   title: string;
@@ -135,6 +137,16 @@ interface IssueAttachmentRow {
   downloadPath: string;
 }
 
+interface IssueWorkLoopRow {
+  id: string;
+  title: string;
+  projectId: string;
+  parentIssueId: string | null;
+  assigneeAgentId: string;
+  status: string;
+  updatedAt: string;
+}
+
 const issueStatusOptions = [
   { value: "todo", label: "Todo" },
   { value: "in_progress", label: "In progress" },
@@ -152,7 +164,6 @@ const issuePriorityOptions = [
 ] as const;
 const boardRecipientKey = "board:all";
 const boardRecipientLabel = "Board";
-const issueDescriptionMaxHeightPx = 280;
 const issueCommentMaxHeightPx = 220;
 
 function normalizeIssuePriority(value: string | null | undefined): IssuePriority {
@@ -460,10 +471,16 @@ export function IssueDetailPageClient({
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [loopsLoading, setLoopsLoading] = useState(false);
+  const [loopsError, setLoopsError] = useState<string | null>(null);
+  const [loops, setLoops] = useState<IssueWorkLoopRow[]>([]);
   const [comments, setComments] = useState<IssueCommentRow[]>([]);
   const [activityItems, setActivityItems] = useState<IssueActivityRow[]>([]);
   const [attachments, setAttachments] = useState<IssueAttachmentRow[]>([]);
   const [draftComment, setDraftComment] = useState("");
+  const [commentEditorMdxKey, setCommentEditorMdxKey] = useState(0);
+  /** Host for MDXEditor popups so they are not appended to `body` with duplicate min-height classes. */
+  const [commentMdxOverlayHost, setCommentMdxOverlayHost] = useState<HTMLDivElement | null>(null);
   const [selectedRecipientKey, setSelectedRecipientKey] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isHeartbeatStarting, setIsHeartbeatStarting] = useState(false);
@@ -523,6 +540,16 @@ export function IssueDetailPageClient({
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
     [allIssues, issue.id]
   );
+
+  const issueLoops = useMemo(() => {
+    const linked = loops.filter(
+      (loop) => loop.parentIssueId === issue.id || (issue.loopId != null && issue.loopId === loop.id)
+    );
+    const byId = new Map(linked.map((loop) => [loop.id, loop]));
+    return [...byId.values()].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+  }, [loops, issue.id, issue.loopId]);
   useEffect(() => {
     let cancelled = false;
 
@@ -606,6 +633,36 @@ export function IssueDetailPageClient({
       cancelled = true;
     };
   }, [companyId, issue.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLoops() {
+      setLoopsLoading(true);
+      setLoopsError(null);
+      try {
+        const result = await apiGet<{ data: IssueWorkLoopRow[] }>("/loops", companyId);
+        if (!cancelled) {
+          setLoops(result.data.data ?? []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoopsError(error instanceof ApiError ? error.message : "Failed to load work loops.");
+          setLoops([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoopsLoading(false);
+        }
+      }
+    }
+
+    void loadLoops();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
 
   async function refreshAttachments() {
     try {
@@ -733,6 +790,7 @@ export function IssueDetailPageClient({
       });
       setComments((current) => [...current.filter((comment) => comment.id !== response.data.id), response.data]);
       setDraftComment("");
+      setCommentEditorMdxKey((k) => k + 1);
       setSelectedRecipientKey(null);
       void refreshIssueView();
       if ((response.data.recipients ?? []).some((recipient) => recipient.deliveryStatus === "pending")) {
@@ -813,7 +871,7 @@ export function IssueDetailPageClient({
       <Card>
         <CardContent className="ui-detail-sidebar-section">
           {issue.body?.trim() ? (
-            <CollapsibleMarkdown content={issue.body} className="ui-markdown" maxHeightPx={issueDescriptionMaxHeightPx} />
+            <CollapsibleMarkdown content={issue.body} className="ui-markdown" maxHeightPx={COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX} />
           ) : (
             <span className="ui-issue-muted-text">No description provided.</span>
           )}
@@ -851,14 +909,83 @@ export function IssueDetailPageClient({
           {commentError ? <div className="ui-issue-error-text">{commentError}</div> : null}
           {activityError ? <div className="ui-issue-error-text">{activityError}</div> : null}
           {attachmentError ? <div className="ui-issue-error-text">{attachmentError}</div> : null}
+          {loopsError ? <div className="ui-issue-error-text">{loopsError}</div> : null}
+
+          <SectionHeading title="Details" description="Issue details and controls." />
+
           <Tabs defaultValue="comments">
             <TabsList className="ui-issue-tabs-list">
               <TabsTrigger value="comments">Comments ({visibleComments.length})</TabsTrigger>
               <TabsTrigger value="attachments">Attachments ({attachments.length})</TabsTrigger>
               <TabsTrigger value="subissues">Sub-issues ({subIssues.length})</TabsTrigger>
+              <TabsTrigger value="loops">Loops ({issueLoops.length})</TabsTrigger>
               <TabsTrigger value="activity">Activity ({activityItems.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="comments" className="ui-issue-tabs-content">
+            <form onSubmit={submitComment}>
+              <Card>
+                <CardContent>
+                  <div
+                    className={cn(
+                      "relative min-w-0",
+                      isSubmittingComment && "pointer-events-none opacity-60"
+                    )}
+                  >
+                    <div
+                      ref={setCommentMdxOverlayHost}
+                      className="mdxeditor-popup-mount pointer-events-none absolute left-0 right-0 top-0 z-[1] h-0 overflow-visible"
+                      aria-hidden
+                    />
+                    {commentMdxOverlayHost ? (
+                      <LazyMarkdownMdxEditor
+                        editorKey={`issue-comment-${issue.id}-${commentEditorMdxKey}`}
+                        markdown={draftComment}
+                        onChange={setDraftComment}
+                        placeholder="Leave a comment…"
+                        issueComment
+                        className="ui-issue-comment-mdx-editor"
+                        overlayContainer={commentMdxOverlayHost}
+                      />
+                    ) : null}
+                  </div>
+                </CardContent>
+                <CardFooter className="ui-loop-card-footer-actions gap-6">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="outline" disabled={isSubmittingComment}>
+                        {selectedRecipientLabel} <ChevronDownIcon className="ui-issue-comment-chevron" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuCheckboxItem
+                        checked={selectedRecipientKey === null}
+                        onCheckedChange={() => setSelectedRecipientKey(null)}
+                      >
+                        None
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={selectedRecipientKey === boardRecipientKey}
+                        onCheckedChange={() => setSelectedRecipientKey(boardRecipientKey)}
+                      >
+                        {boardRecipientLabel}
+                      </DropdownMenuCheckboxItem>
+                      {recipientOptions.map((recipient) => (
+                        <DropdownMenuCheckboxItem
+                          key={recipient.key}
+                          checked={selectedRecipientKey === recipient.key}
+                          onCheckedChange={() => setSelectedRecipientKey(recipient.key)}
+                        >
+                          {recipient.label}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button type="submit" disabled={!draftComment.trim() || isSubmittingComment}>
+                      {isSubmittingComment ? "Saving..." : "Comment"}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </form>
               {commentsLoading ? <div className="ui-issue-muted-text">Loading comments...</div> : null}
               {visibleComments.map((comment) => (
                 <div key={comment.id} className="ui-issue-comment-card">
@@ -923,50 +1050,6 @@ export function IssueDetailPageClient({
                 </div>
               ))}
               {!commentsLoading && visibleComments.length === 0 ? <EmptyState>No comments yet for this issue.</EmptyState> : null}
-              <form className="ui-panel-form" onSubmit={submitComment}>
-                <Textarea
-                  value={draftComment}
-                  onChange={(event) => setDraftComment(event.target.value)}
-                  placeholder="Leave a comment..."
-                  className="ui-textarea ui-textarea-min-h-24"
-                  disabled={isSubmittingComment}
-                />
-                <div className="ui-issue-form-actions">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button type="button" variant="outline" disabled={isSubmittingComment}>
-                        {selectedRecipientLabel} <ChevronDownIcon className="ui-issue-comment-chevron" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      <DropdownMenuCheckboxItem
-                        checked={selectedRecipientKey === null}
-                        onCheckedChange={() => setSelectedRecipientKey(null)}
-                      >
-                        None
-                      </DropdownMenuCheckboxItem>
-                      <DropdownMenuCheckboxItem
-                        checked={selectedRecipientKey === boardRecipientKey}
-                        onCheckedChange={() => setSelectedRecipientKey(boardRecipientKey)}
-                      >
-                        {boardRecipientLabel}
-                      </DropdownMenuCheckboxItem>
-                      {recipientOptions.map((recipient) => (
-                        <DropdownMenuCheckboxItem
-                          key={recipient.key}
-                          checked={selectedRecipientKey === recipient.key}
-                          onCheckedChange={() => setSelectedRecipientKey(recipient.key)}
-                        >
-                          {recipient.label}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button type="submit" disabled={!draftComment.trim() || isSubmittingComment}>
-                    {isSubmittingComment ? "Saving..." : "Comment"}
-                  </Button>
-                </div>
-              </form>
             </TabsContent>
             <TabsContent value="attachments" className="ui-issue-tabs-content">
               {attachmentsLoading ? <div className="ui-issue-muted-text">Loading attachments...</div> : null}
@@ -1115,6 +1198,53 @@ export function IssueDetailPageClient({
                   triggerLabel="Add sub-issue"
                   triggerVariant="outline"
                 />
+              </div>
+            </TabsContent>
+            <TabsContent value="loops" className="ui-issue-tabs-content">
+              {loopsLoading ? <div className="ui-issue-muted-text">Loading loops...</div> : null}
+              {!loopsLoading && issueLoops.length === 0 ? (
+                <EmptyState>
+                  No linked work loops yet. Loops appear here when this issue is the loop&apos;s parent issue, or when
+                  this issue was opened by a loop run.
+                </EmptyState>
+              ) : null}
+              {issueLoops.length > 0 ? (
+                <ItemGroup>
+                  {issueLoops.map((loop) => {
+                    const assignee = agents.find((a) => a.id === loop.assigneeAgentId);
+                    const assigneeLabel =
+                      assignee != null
+                        ? assignee.name.trim() || getAgentDisplayRole(assignee)
+                        : loop.assigneeAgentId;
+                    return (
+                      <Item key={loop.id} variant="outline">
+                        <ItemContent>
+                          <ItemTitle>
+                            <Link
+                              href={{ pathname: `/loops/${loop.id}`, query: { companyId } }}
+                              className="ui-link-sidebar-nested"
+                            >
+                              {loop.title}
+                            </Link>
+                          </ItemTitle>
+                          <ItemDescription>
+                            {assigneeLabel} · updated {formatDate(loop.updatedAt)}
+                          </ItemDescription>
+                        </ItemContent>
+                        <ItemActions>
+                          <Badge variant="outline" className={getStatusBadgeClassName(loop.status)}>
+                            {loop.status}
+                          </Badge>
+                        </ItemActions>
+                      </Item>
+                    );
+                  })}
+                </ItemGroup>
+              ) : null}
+              <div className="ui-issue-subissue-actions">
+                <Button asChild variant="outline">
+                  <Link href={{ pathname: "/loops", query: { companyId } }}>Open Loops</Link>
+                </Button>
               </div>
             </TabsContent>
             <TabsContent value="activity" className="ui-issue-tabs-content">

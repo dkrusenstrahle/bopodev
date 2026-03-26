@@ -110,6 +110,7 @@ Company-scoped (`x-company-id`). Permissions: `loops:read`, `loops:write`, `loop
 - `GET /loops/:loopId/activity` — audit rows for this loop.
 - `POST /loops/:loopId/triggers` — add trigger; body is a discriminated union: `{ mode: "cron", cronExpression, timezone?, label?, enabled? }` or `{ mode: "preset", preset: "daily"|"weekly", hour24, minute, dayOfWeek?, timezone?, label?, enabled? }`.
 - `PATCH /loops/:loopId/triggers/:triggerId` — update trigger fields.
+- `DELETE /loops/:loopId/triggers/:triggerId` — remove a trigger (`loops:write`).
 
 Scheduler env: `BOPO_LOOP_SWEEP_MS`, `BOPO_LOOP_SWEEP_ENABLED` (see [`../../DEVELOPING.md`](../../DEVELOPING.md)).
 

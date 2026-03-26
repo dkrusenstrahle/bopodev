@@ -25,6 +25,16 @@ export type MarkdownMdxEditorProps = {
   placeholder?: string;
   /** Larger surface for long documents; `false` matches the issue attachment editor. */
   compact?: boolean;
+  /** Shorter surface for inline issue comments (mutually exclusive with `compact` sizing). */
+  issueComment?: boolean;
+  /** Merged onto the editor root after built-in styles; use for page-specific height/layout. */
+  className?: string;
+  /**
+   * Where MDXEditor mounts its `mdxeditor-popup-container` (toolbars, dialogs).
+   * Defaults to `document.body`; set to a local element to avoid a duplicate tall root on `body`
+   * inheriting this editor's `className` / min-heights and stretching the page.
+   */
+  overlayContainer?: HTMLElement | null;
 };
 
 export function MarkdownMdxEditor({
@@ -32,7 +42,10 @@ export function MarkdownMdxEditor({
   onChange,
   editorKey,
   placeholder = "Write markdown…",
-  compact = true
+  compact = true,
+  issueComment = false,
+  className,
+  overlayContainer: overlayContainerProp
 }: MarkdownMdxEditorProps) {
   const plugins = useMemo(
     () => [
@@ -58,16 +71,26 @@ export function MarkdownMdxEditor({
     []
   );
 
+  const rootClass = issueComment
+    ? cn(styles.mdxEditorRoot, styles.mdxEditorRootIssueComment)
+    : cn(styles.mdxEditorRoot, compact && styles.mdxEditorRootCompact);
+  const contentClass = issueComment
+    ? styles.mdxEditorContentIssueComment
+    : cn(styles.mdxEditorContent, compact && styles.mdxEditorContentCompact);
+
   return (
     <MDXEditor
       key={editorKey}
       markdown={markdown}
       onChange={(next, _initialNormalize) => onChange(next)}
       plugins={plugins}
-      className={cn("dark-theme", styles.mdxEditorRoot, compact && styles.mdxEditorRootCompact)}
-      contentEditableClassName={cn(styles.mdxEditorContent, compact && styles.mdxEditorContentCompact)}
+      className={cn("dark-theme", rootClass, className)}
+      contentEditableClassName={contentClass}
       placeholder={placeholder}
-      overlayContainer={typeof document !== "undefined" ? document.body : undefined}
+      overlayContainer={
+        overlayContainerProp ??
+        (typeof document !== "undefined" ? document.body : undefined)
+      }
     />
   );
 }

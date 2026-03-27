@@ -20,7 +20,8 @@ import styles from "./markdown-mdx-editor.module.scss";
 
 export type MarkdownMdxEditorProps = {
   markdown: string;
-  onChange: (value: string) => void;
+  /** Second arg is MDXEditor’s `initialMarkdownNormalize` — true when the editor adjusted markdown on load, not user input. */
+  onChange: (value: string, initialMarkdownNormalize?: boolean) => void;
   editorKey: string;
   placeholder?: string;
   /** Larger surface for long documents; `false` matches the issue attachment editor. */
@@ -82,7 +83,7 @@ export function MarkdownMdxEditor({
     <MDXEditor
       key={editorKey}
       markdown={markdown}
-      onChange={(next, _initialNormalize) => onChange(next)}
+      onChange={(next, initialMarkdownNormalize) => onChange(next, initialMarkdownNormalize)}
       plugins={plugins}
       className={cn("dark-theme", rootClass, className)}
       contentEditableClassName={contentClass}

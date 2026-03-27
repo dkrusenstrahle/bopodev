@@ -153,6 +153,22 @@ export function AgentMarkdownDocsPageClient({
   const loadKeyRef = useRef(loadKey);
   loadKeyRef.current = loadKey;
 
+  const onEditorMarkdownChange = useCallback(
+    (next: string, initialMarkdownNormalize?: boolean) => {
+      if (initialMarkdownNormalize) {
+        setBaselineContent(next);
+        setDraftContent(next);
+        const key = loadKeyRef.current;
+        if (key) {
+          bodyCacheRef.current.set(cacheFullKey(agent.id, companyId, key), next);
+        }
+        return;
+      }
+      setDraftContent(next);
+    },
+    [agent.id, companyId]
+  );
+
   const dirtyRef = useRef(false);
   dirtyRef.current = openFile !== null && draftContent !== baselineContent;
 
@@ -461,7 +477,7 @@ export function AgentMarkdownDocsPageClient({
                   key={loadKey}
                   editorKey={loadKey}
                   markdown={draftContent}
-                  onChange={setDraftContent}
+                  onChange={onEditorMarkdownChange}
                   compact={false}
                   className="ui-agent-docs-editor"
                   overlayContainer={editorOverlayRoot ?? undefined}

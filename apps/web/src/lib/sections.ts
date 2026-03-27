@@ -1,5 +1,6 @@
 export const sectionItems = [
   { slug: "dashboard", label: "Dashboard" },
+  { slug: "chat", label: "Chat" },
   { slug: "projects", label: "Projects" },
   { slug: "issues", label: "Issues" },
   { slug: "loops", label: "Loops" },

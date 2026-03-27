@@ -23,6 +23,7 @@ import {
   Puzzle,
   LayoutTemplate,
   Menu,
+  MessageCircle,
   Plus,
   Repeat
 } from "lucide-react";
@@ -75,6 +76,7 @@ const navGroups: Array<{
     label: "Operations",
     items: [
       { slug: "inbox", label: "Inbox", icon: Inbox },
+      { slug: "chat", label: "Chat", icon: MessageCircle },
       { slug: "runs", label: "Runs", icon: Clock3 },
       { slug: "trace-logs", label: "Logs", icon: Activity }
     ]

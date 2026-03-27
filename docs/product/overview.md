@@ -31,6 +31,7 @@ Several rich description fields use an **MDXEditor**-based markdown surface in f
 Primary sections in the app:
 
 - `dashboard`
+- `ask` — owner assistant chat over company data and memory ([`owner-assistant.md`](./owner-assistant.md))
 - `projects`
 - `issues`
 - `loops`

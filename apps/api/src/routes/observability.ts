@@ -10,7 +10,8 @@ import {
   listGoals,
   listHeartbeatRunMessages,
   listHeartbeatRuns,
-  listPluginRuns
+  listPluginRuns,
+  listProjects
 } from "bopodev-db";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
@@ -24,8 +25,12 @@ import {
 } from "../services/agent-operating-file-service";
 import {
   listAgentMemoryFiles,
+  listCompanyMemoryFiles,
+  listProjectMemoryFiles,
   loadAgentMemoryContext,
   readAgentMemoryFile,
+  readCompanyMemoryFile,
+  readProjectMemoryFile,
   writeAgentMemoryFile
 } from "../services/memory-file-service";
 
@@ -249,6 +254,84 @@ export function createObservabilityRouter(ctx: AppContext) {
     return sendOk(res, {
       items: flattened
     });
+  });
+
+  router.get("/memory/company/files", async (req, res) => {
+    const companyId = req.companyId!;
+    const rawLimit = Number(req.query.limit ?? 100);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 500) : 100;
+    try {
+      const files = await listCompanyMemoryFiles({ companyId, maxFiles: limit });
+      return sendOk(res, {
+        items: files.map((file) => ({
+          relativePath: file.relativePath,
+          path: file.path
+        }))
+      });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/memory/company/file", async (req, res) => {
+    const companyId = req.companyId!;
+    const relativePath = typeof req.query.path === "string" ? req.query.path.trim() : "";
+    if (!relativePath) {
+      return sendError(res, "Query parameter 'path' is required.", 422);
+    }
+    try {
+      const file = await readCompanyMemoryFile({ companyId, relativePath });
+      return sendOk(res, file);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/memory/project/:projectId/files", async (req, res) => {
+    const companyId = req.companyId!;
+    const projectId = req.params.projectId?.trim() ?? "";
+    if (!projectId) {
+      return sendError(res, "Missing project id.", 422);
+    }
+    const projects = await listProjects(ctx.db, companyId);
+    if (!projects.some((p) => p.id === projectId)) {
+      return sendError(res, "Project not found.", 404);
+    }
+    const rawLimit = Number(req.query.limit ?? 100);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 500) : 100;
+    try {
+      const files = await listProjectMemoryFiles({ companyId, projectId, maxFiles: limit });
+      return sendOk(res, {
+        items: files.map((file) => ({
+          relativePath: file.relativePath,
+          path: file.path
+        }))
+      });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/memory/project/:projectId/file", async (req, res) => {
+    const companyId = req.companyId!;
+    const projectId = req.params.projectId?.trim() ?? "";
+    if (!projectId) {
+      return sendError(res, "Missing project id.", 422);
+    }
+    const projects = await listProjects(ctx.db, companyId);
+    if (!projects.some((p) => p.id === projectId)) {
+      return sendError(res, "Project not found.", 404);
+    }
+    const relativePath = typeof req.query.path === "string" ? req.query.path.trim() : "";
+    if (!relativePath) {
+      return sendError(res, "Query parameter 'path' is required.", 422);
+    }
+    try {
+      const file = await readProjectMemoryFile({ companyId, projectId, relativePath });
+      return sendOk(res, file);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
   });
 
   router.get("/memory/:agentId/file", async (req, res) => {

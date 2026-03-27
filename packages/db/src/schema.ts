@@ -508,6 +508,29 @@ export const agentIssueLabels = pgTable(
   (table) => [primaryKey({ columns: [table.companyId, table.issueId, table.label] })]
 );
 
+export const companyAssistantThreads = pgTable("company_assistant_threads", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
+});
+
+export const companyAssistantMessages = pgTable("company_assistant_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id")
+    .notNull()
+    .references(() => companyAssistantThreads.id, { onDelete: "cascade" }),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  body: text("body").notNull(),
+  metadataJson: text("metadata_json"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
+});
+
 export const schema = {
   companies,
   projects,
@@ -536,7 +559,9 @@ export const schema = {
   templateVersions,
   templateInstalls,
   agentIssueLabels,
-  projectWorkspaces
+  projectWorkspaces,
+  companyAssistantThreads,
+  companyAssistantMessages
 };
 
 export const touchUpdatedAtSql = sql`CURRENT_TIMESTAMP`;

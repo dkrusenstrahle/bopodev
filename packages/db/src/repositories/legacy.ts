@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, notInArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { BopoDb } from "../client";
 import {
@@ -1548,6 +1548,83 @@ export async function listCostEntries(db: BopoDb, companyId: string, limit = 200
     .where(eq(costLedger.companyId, companyId))
     .orderBy(desc(costLedger.createdAt))
     .limit(limit);
+}
+
+export type CostLedgerAggregate = {
+  rowCount: number;
+  tokenInput: number;
+  tokenOutput: number;
+  /** Sum of `usd_cost` as a decimal string (full precision from DB). */
+  usdTotal: string;
+};
+
+/** Sum every ledger row for the company in `[startInclusive, endExclusive)` (typically UTC month). */
+export async function aggregateCompanyCostLedgerInRange(
+  db: BopoDb,
+  companyId: string,
+  startInclusive: Date,
+  endExclusive: Date
+): Promise<CostLedgerAggregate> {
+  const [row] = await db
+    .select({
+      rowCount: sql<number>`count(*)::int`,
+      tokenInput: sql<string>`coalesce(sum(${costLedger.tokenInput})::text, '0')`,
+      tokenOutput: sql<string>`coalesce(sum(${costLedger.tokenOutput})::text, '0')`,
+      usdTotal: sql<string>`coalesce(sum(${costLedger.usdCost})::text, '0')`
+    })
+    .from(costLedger)
+    .where(
+      and(
+        eq(costLedger.companyId, companyId),
+        gte(costLedger.createdAt, startInclusive),
+        lt(costLedger.createdAt, endExclusive)
+      )
+    );
+
+  const parseBigIntish = (v: string) => {
+    try {
+      return Number(BigInt(v));
+    } catch {
+      return Number.parseInt(v, 10) || 0;
+    }
+  };
+
+  return {
+    rowCount: Number(row?.rowCount ?? 0),
+    tokenInput: parseBigIntish(String(row?.tokenInput ?? "0")),
+    tokenOutput: parseBigIntish(String(row?.tokenOutput ?? "0")),
+    usdTotal: String(row?.usdTotal ?? "0").trim() || "0"
+  };
+}
+
+export async function aggregateCompanyCostLedgerAllTime(
+  db: BopoDb,
+  companyId: string
+): Promise<CostLedgerAggregate> {
+  const [row] = await db
+    .select({
+      rowCount: sql<number>`count(*)::int`,
+      tokenInput: sql<string>`coalesce(sum(${costLedger.tokenInput})::text, '0')`,
+      tokenOutput: sql<string>`coalesce(sum(${costLedger.tokenOutput})::text, '0')`,
+      usdTotal: sql<string>`coalesce(sum(${costLedger.usdCost})::text, '0')`
+    })
+    .from(costLedger)
+    .where(eq(costLedger.companyId, companyId));
+
+  const parseBigIntish = (v: string) => {
+    try {
+      return Number(BigInt(v));
+    } catch {
+      return Number.parseInt(v, 10) || 0;
+    }
+  };
+
+  return {
+    rowCount: Number(row?.rowCount ?? 0),
+    tokenInput: parseBigIntish(String(row?.tokenInput ?? "0")),
+    tokenOutput: parseBigIntish(String(row?.tokenOutput ?? "0")),
+    usdTotal: String(row?.usdTotal ?? "0").trim() || "0"
+  };
 }
 
 export async function listHeartbeatRuns(db: BopoDb, companyId: string, limit = 100) {

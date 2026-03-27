@@ -184,6 +184,76 @@ export async function appendDurableFact(input: {
   return targetFile;
 }
 
+export async function listCompanyMemoryFiles(input: { companyId: string; maxFiles?: number }) {
+  const root = resolveCompanyMemoryRootPath(input.companyId);
+  await mkdir(root, { recursive: true });
+  const maxFiles = Math.max(1, Math.min(MAX_OBSERVABILITY_FILES, input.maxFiles ?? 100));
+  const files = await walkFiles(root, maxFiles);
+  return files.map((filePath) => ({
+    path: filePath,
+    relativePath: relative(root, filePath),
+    memoryRoot: root
+  }));
+}
+
+export async function readCompanyMemoryFile(input: { companyId: string; relativePath: string }) {
+  const root = resolveCompanyMemoryRootPath(input.companyId);
+  await mkdir(root, { recursive: true });
+  const candidate = resolve(root, input.relativePath);
+  if (!isInsidePath(root, candidate)) {
+    throw new Error("Requested memory path is outside of memory root.");
+  }
+  const info = await stat(candidate);
+  if (!info.isFile()) {
+    throw new Error("Requested memory path is not a file.");
+  }
+  if (info.size > MAX_OBSERVABILITY_FILE_BYTES) {
+    throw new Error("Requested memory file exceeds size limit.");
+  }
+  const content = await readFile(candidate, "utf8");
+  return {
+    path: candidate,
+    relativePath: relative(root, candidate),
+    content,
+    sizeBytes: info.size
+  };
+}
+
+export async function listProjectMemoryFiles(input: { companyId: string; projectId: string; maxFiles?: number }) {
+  const root = resolveProjectMemoryRootPath(input.companyId, input.projectId);
+  await mkdir(root, { recursive: true });
+  const maxFiles = Math.max(1, Math.min(MAX_OBSERVABILITY_FILES, input.maxFiles ?? 100));
+  const files = await walkFiles(root, maxFiles);
+  return files.map((filePath) => ({
+    path: filePath,
+    relativePath: relative(root, filePath),
+    memoryRoot: root
+  }));
+}
+
+export async function readProjectMemoryFile(input: { companyId: string; projectId: string; relativePath: string }) {
+  const root = resolveProjectMemoryRootPath(input.companyId, input.projectId);
+  await mkdir(root, { recursive: true });
+  const candidate = resolve(root, input.relativePath);
+  if (!isInsidePath(root, candidate)) {
+    throw new Error("Requested memory path is outside of memory root.");
+  }
+  const info = await stat(candidate);
+  if (!info.isFile()) {
+    throw new Error("Requested memory path is not a file.");
+  }
+  if (info.size > MAX_OBSERVABILITY_FILE_BYTES) {
+    throw new Error("Requested memory file exceeds size limit.");
+  }
+  const content = await readFile(candidate, "utf8");
+  return {
+    path: candidate,
+    relativePath: relative(root, candidate),
+    content,
+    sizeBytes: info.size
+  };
+}
+
 export async function listAgentMemoryFiles(input: {
   companyId: string;
   agentId: string;

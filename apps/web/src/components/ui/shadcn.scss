@@ -1018,7 +1018,7 @@ body {
 }
 
 .ui-sheet-content {
-  @apply fixed z-50 flex h-full w-full max-w-sm flex-col gap-4 border bg-background p-6 shadow-lg duration-200;
+  @apply fixed z-50 flex h-full w-full max-w-sm flex-col gap-4 border bg-background p-6 duration-200;
   @apply data-[state=closed]:animate-out data-[state=open]:animate-in;
   @apply data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:data-[state=closed]:slide-out-to-left data-[side=left]:data-[state=open]:slide-in-from-left;
   @apply data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:data-[state=closed]:slide-out-to-right data-[side=right]:data-[state=open]:slide-in-from-right;
@@ -1051,7 +1051,7 @@ body {
 }
 
 .ui-drawer-content {
-  @apply fixed inset-x-0 bottom-0 z-50 mt-24 flex max-h-[88dvh] flex-col rounded-t-xl border bg-background p-4 shadow-lg;
+  @apply fixed inset-x-0 bottom-0 z-50 mt-24 flex max-h-[88dvh] flex-col rounded-t-xl border bg-background p-4;
   @apply data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom;
 }
 
@@ -1505,6 +1505,9 @@ body {
   @apply flex field-sizing-content min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base text-sidebar-foreground transition-[color,box-shadow] outline-none placeholder:text-sidebar-foreground/60 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:ring-destructive/40 text-sidebar-foreground placeholder:text-sidebar-foreground/60;
   overflow-wrap: anywhere;
   word-break: break-word;
+  &.ui-ask-composer-textarea {
+    @apply bg-transparent text-base leading-normal pl-2;
+  }
 }
 
 .ui-visually-hidden {
@@ -2152,4 +2155,146 @@ body {
 
 .run-transcript-body {
   @apply break-words whitespace-pre-wrap text-foreground;
+}
+
+/* Shadcn Avatar */
+.ui-avatar {
+  @apply relative flex size-10 shrink-0 overflow-hidden rounded-full;
+}
+
+.ui-avatar-image {
+  @apply aspect-square size-full object-cover;
+}
+
+.ui-avatar-fallback {
+  @apply flex size-full items-center justify-center rounded-full bg-muted text-xs font-medium;
+}
+
+/* Ask (assistant chat) */
+.ui-ask-avatar {
+  @apply size-9 ring-1 ring-border/50;
+}
+
+.ui-ask-avatar-fallback {
+  @apply text-[10px] font-semibold uppercase tracking-tight;
+}
+
+.ui-ask-thread-card {
+  @apply min-h-0 flex-1 gap-0 overflow-hidden rounded-xl border-border/80 bg-muted/15 py-0;
+}
+
+.ui-ask-thread-messages {
+  @apply min-h-0 flex-1 space-y-4 overflow-y-auto px-10 py-10;
+}
+
+.ui-ask-thread-footer {
+  @apply shrink-0 flex-col items-stretch gap-2 pb-6;
+}
+
+.ui-ask-row {
+  @apply flex w-full gap-6;
+}
+
+.ui-ask-row--user {
+  @apply flex-row-reverse;
+}
+
+.ui-ask-row--assistant {
+  @apply justify-start;
+}
+
+.ui-ask-message-col {
+  @apply min-w-0 max-w-[min(100%,40rem)];
+}
+
+.ui-ask-message-col--user {
+  @apply text-right;
+}
+
+.ui-ask-bubble-card {
+  @apply gap-0 rounded-2xl border-0 py-0;
+}
+
+.ui-ask-bubble-card--assistant {
+  @apply border border-border/80 bg-card;
+}
+
+.ui-ask-bubble-card--user {
+  @apply border-0 bg-primary text-primary-foreground;
+}
+
+.ui-ask-bubble-card--typing {
+  @apply border border-border/80 bg-background;
+}
+
+.ui-ask-bubble-content {
+  @apply px-4 py-2.5 text-left text-base;
+}
+
+.ui-ask-bubble-content--typing {
+  @apply flex w-fit items-center gap-1.5 py-2.5;
+}
+
+.ui-ask-sender {
+  @apply mt-3 pl-4 text-xs font-medium text-muted-foreground;
+}
+
+.ui-ask-sender--user {
+  @apply text-right pr-4;
+}
+
+.ui-ask-typing-dot {
+  @apply size-2 animate-pulse rounded-full bg-muted-foreground;
+}
+
+.ui-ask-typing-dots span:nth-child(2) {
+  animation-delay: 200ms;
+}
+
+.ui-ask-typing-dots span:nth-child(3) {
+  animation-delay: 400ms;
+}
+
+.ui-ask-pill-composer {
+  @apply flex min-h-11 items-center gap-0.5 rounded-3xl border border-border/70 bg-muted/50 px-2 py-1.5 pl-4;
+}
+
+.ui-ask-composer-textarea {
+  @apply max-h-28 min-h-9 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-sm leading-snug shadow-none outline-none ring-0 ring-offset-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none;
+}
+
+.ui-ask-composer-btn-refresh {
+  @apply size-9 shrink-0 rounded-full text-muted-foreground hover:text-foreground;
+}
+
+.ui-ask-composer-btn-send {
+  @apply size-9 shrink-0 rounded-full shadow-none;
+}
+
+.ui-ask-empty-hint {
+  @apply text-sm text-muted-foreground;
+}
+
+.ui-ask-brain-dialog {
+  @apply max-h-[min(90vh,32rem)] overflow-y-auto sm:max-w-md;
+}
+
+.ui-ask-brain-options {
+  @apply flex max-h-[50vh] flex-col gap-1 overflow-y-auto py-1;
+}
+
+.ui-ask-brain-option {
+  @apply h-auto w-full flex-col items-stretch gap-0.5 whitespace-normal px-3 py-2.5 text-left;
+}
+
+.ui-ask-brain-option-label {
+  @apply font-medium;
+}
+
+.ui-ask-brain-option-type {
+  @apply text-xs font-normal text-muted-foreground;
+}
+
+.ui-ask-brain-dialog-footer {
+  @apply gap-2 sm:gap-0;
 }

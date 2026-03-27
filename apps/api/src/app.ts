@@ -2,6 +2,7 @@ import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import { pingDatabase, RepositoryValidationError } from "bopodev-db";
 import type { AppContext } from "./context";
+import { createAssistantRouter } from "./routes/assistant";
 import { createAgentsRouter } from "./routes/agents";
 import { createAuthRouter } from "./routes/auth";
 import { createAttentionRouter } from "./routes/attention";
@@ -62,6 +63,7 @@ export function createApp(ctx: AppContext) {
 
   app.use("/auth", createAuthRouter(ctx));
   app.use("/attention", createAttentionRouter(ctx));
+  app.use("/assistant", createAssistantRouter(ctx));
   app.use("/companies", createCompaniesRouter(ctx));
   app.use("/projects", createProjectsRouter(ctx));
   app.use("/issues", createIssuesRouter(ctx));

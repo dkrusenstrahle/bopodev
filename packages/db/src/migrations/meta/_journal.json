@@ -43,6 +43,13 @@
       "when": 1743000000000,
       "tag": "0005_work_loops",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1743100000000,
+      "tag": "0006_company_assistant_chat",
+      "breakpoints": true
     }
   ]
 }

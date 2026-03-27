@@ -60,10 +60,11 @@ Uses the same direct API credentials as `openai_api` / `anthropic_api` agent run
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `BOPO_ASSISTANT_PROVIDER` | `anthropic_api` | `anthropic_api` or `openai_api`. |
-| `BOPO_ASSISTANT_MODEL` | provider default | Override model id for assistant turns. |
-| `BOPO_ASSISTANT_MAX_TOOL_ROUNDS` | `8` | Max tool round-trips per user message (capped at 20). |
-| `BOPO_ASSISTANT_TIMEOUT_MS` | `120000` | HTTP timeout per provider request (capped at 300000). |
+| `BOPO_CHAT_DEFAULT_BRAIN` | unset → `codex` | Default CLI `brain` on `POST /assistant/messages` when the client omits `brain`. Must be one of the ids returned by `GET /assistant/brains` (e.g. `codex`, `cursor`, `claude_code`). |
+| `BOPO_ASSISTANT_PROVIDER` | `anthropic_api` | `anthropic_api` or `openai_api`. Used by the **direct API** assistant implementation (`runAssistantWithTools`); the standard web Chat sends CLI brains only unless the API schema is extended. |
+| `BOPO_ASSISTANT_MODEL` | provider default | Override model id for direct API assistant turns. |
+| `BOPO_ASSISTANT_MAX_TOOL_ROUNDS` | `8` | Max tool round-trips per user message for direct API mode (capped at 20). |
+| `BOPO_ASSISTANT_TIMEOUT_MS` | `120000` | HTTP timeout per provider request in direct API mode (capped at 300000). |
 
 ## OpenClaw Gateway adapter (per-agent runtime)
 

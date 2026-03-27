@@ -33,6 +33,10 @@ This glossary defines canonical terms used across product, API, and operations d
 - **Governance inbox**: actor-centric queue showing pending and recently resolved approvals.
 - **Resolve action**: approval decision (`approved`, `rejected`, `overridden`) applied to a request.
 
+## Owner Chat Terms
+
+- **Owner assistant (Chat)**: company-scoped conversational UI (`ask`) backed by `GET/POST /assistant/*`. Replies use a bounded company snapshot (CLI brains) or, when wired, direct API tool rounds. See [`product/owner-assistant.md`](./product/owner-assistant.md).
+
 ## Observability Terms
 
 - **Audit event**: immutable log of important control-plane actions.

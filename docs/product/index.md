@@ -18,6 +18,7 @@ Use this section if you are operating Bopo as a company control plane.
 - [`agent-memory-workflow.md`](./agent-memory-workflow.md): end-to-end memory capture, promotion, and reuse lifecycle.
 - [`governance-and-approvals.md`](./governance-and-approvals.md): approval model and inbox operations.
 - [`office-space-and-realtime.md`](./office-space-and-realtime.md): realtime coordination model.
+- [`owner-assistant.md`](./owner-assistant.md): **Chat** (owner assistant)—threads, brains, memory snapshot, costs, and API overview.
 
 ## Related
 

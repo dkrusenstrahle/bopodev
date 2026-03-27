@@ -52,6 +52,21 @@ Most mutating and company-scoped routes require:
 
 All attention routes are company-scoped and publish realtime updates.
 
+## Assistant (owner Chat)
+
+Company-scoped (`x-company-id`). Product guide: [`../product/owner-assistant.md`](../product/owner-assistant.md).
+
+- `GET /assistant/brains` — `{ brains: [{ providerType, label, requiresRuntimeCwd }] }` (CLI-backed adapters available for Chat).
+- `GET /assistant/messages` — query `threadId` (optional; omit for latest-or-create), `limit` (optional, 1–200). Response: `threadId`, `ceoPersona`, `messages[]` (`id`, `role`, `body`, `createdAt`, `metadata`).
+- `POST /assistant/messages` — body `{ message: string, brain?: <cli id>, threadId?: string }`. Runs one assistant turn; response includes `userMessageId`, `assistantMessageId`, `assistantBody`, `toolRoundCount`, `mode` (`api` \| `cli`), `brain`, `threadId`, and optional `cliElapsedMs`.
+- `POST /assistant/threads` — create a new empty thread; `{ threadId }`.
+
+Default `brain` when omitted is `BOPO_CHAT_DEFAULT_BRAIN` or `codex` (see configuration reference). `422` on validation errors; `503` when a direct-API turn fails for missing provider credentials.
+
+Observability helper for costs UI:
+
+- `GET /observability/assistant-chat-threads` — query `from` + `toExclusive` (ISO 8601) **or** `monthKey=YYYY-MM`; returns thread stats in that created-at window.
+
 ## Companies
 
 - `GET /companies`
@@ -194,6 +209,7 @@ Queue route supports filters: `status`, `agentId`, `jobType`, `limit`.
 - `GET /observability/memory/:agentId/file?path=...`
 - `PUT /observability/memory/:agentId/file?path=...` — JSON body `{ "content": "<utf-8 string>" }`; requires `agents:write`
 - `GET /observability/memory/:agentId/context-preview` (supports `projectIds`, `query`)
+- `GET /observability/assistant-chat-threads` (supports `from` + `toExclusive` or `monthKey`; assistant thread stats for costs)
 - `GET /observability/agent-operating/:agentId/files` (supports `limit`; lists `*.md` under the agent operating directory)
 - `GET /observability/agent-operating/:agentId/file?path=...`
 - `PUT /observability/agent-operating/:agentId/file?path=...` — JSON body `{ "content": "<utf-8 string>" }`; requires `agents:write` (only `.md` paths)
@@ -253,4 +269,5 @@ Operational notes:
 
 - Domain model: [`domain-model.md`](./domain-model.md)
 - Product workflows: [`../product/daily-workflows.md`](../product/daily-workflows.md)
+- Owner Chat: [`../product/owner-assistant.md`](../product/owner-assistant.md)
 - Troubleshooting: [`../operations/troubleshooting.md`](../operations/troubleshooting.md)

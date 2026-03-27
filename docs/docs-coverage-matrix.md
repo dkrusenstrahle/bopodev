@@ -22,6 +22,7 @@ Status values:
 | Observability, logs, costs, and artifacts | `runs`, `trace-logs`, `costs` | `docs/product/agents-and-runs.md`, `docs/developer/api-reference.md`, `docs/operations/troubleshooting.md` | needs-refresh | Ensure artifact download and memory endpoints stay current. |
 | Templates and plugin workflows | `templates`, `plugins`, `settings/templates`, `settings/plugins` | `docs/product/plugins-and-integrations.md`, `docs/developer/plugin-system.md`, `docs/developer/plugin-authoring.md` | partial | Product-level template workflow depth is still light. |
 | Model management | `models`, `settings/models` | `docs/developer/configuration-reference.md`, `docs/developer/api-reference.md` | partial | Add richer operator guidance over time if UX expands. |
+| Owner assistant (Chat) | `ask` | `docs/product/owner-assistant.md`, `docs/developer/api-reference.md`, `docs/developer/configuration-reference.md` | covered | Threads, CLI brains, snapshot vs direct API path, memory anchor, costs. |
 
 ## Developer and Platform Coverage
 

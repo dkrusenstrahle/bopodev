@@ -40,6 +40,53 @@ describe("agent runtime skill injection", () => {
     await rm(codexHome, { recursive: true, force: true });
   });
 
+  it("injects company workspace skills before bundled Bopo skills", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "bopodev-codex-home-coskill-"));
+    const companyWs = await mkdtemp(join(tmpdir(), "bopodev-company-ws-"));
+    const corpSkill = join(companyWs, "skills", "corp-custom-skill");
+    await mkdir(corpSkill, { recursive: true });
+    await writeFile(join(corpSkill, "SKILL.md"), "---\nname: corp-custom-skill\n---\n\n# Corp\n", "utf8");
+
+    const run = await executeAgentRuntime("codex", "test prompt", {
+      command: process.execPath,
+      args: ["-e", "console.log('ok')"],
+      env: { CODEX_HOME: codexHome, BOPODEV_COMPANY_WORKSPACE_ROOT: companyWs }
+    });
+
+    expect(run.ok).toBe(true);
+    await expect(access(join(codexHome, "skills", "corp-custom-skill", "SKILL.md"))).resolves.toBeUndefined();
+    await expect(access(join(codexHome, "skills", "bopodev-control-plane"))).resolves.toBeUndefined();
+
+    await rm(codexHome, { recursive: true, force: true });
+    await rm(companyWs, { recursive: true, force: true });
+  });
+
+  it("injects materialized linked skills after company workspace skills", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "bopodev-codex-linked-"));
+    const companyWs = await mkdtemp(join(tmpdir(), "bopodev-company-ws-linked-"));
+    const materialized = await mkdtemp(join(tmpdir(), "bopodev-mat-linked-"));
+    const linkedSkill = join(materialized, "linked-only-skill");
+    await mkdir(linkedSkill, { recursive: true });
+    await writeFile(join(linkedSkill, "SKILL.md"), "---\nname: linked-only-skill\n---\n\n# Linked\n", "utf8");
+
+    const run = await executeAgentRuntime("codex", "test prompt", {
+      command: process.execPath,
+      args: ["-e", "console.log('ok')"],
+      env: {
+        CODEX_HOME: codexHome,
+        BOPODEV_COMPANY_WORKSPACE_ROOT: companyWs,
+        BOPODEV_MATERIALIZED_LINKED_SKILLS_ROOT: materialized
+      }
+    });
+
+    expect(run.ok).toBe(true);
+    await expect(access(join(codexHome, "skills", "linked-only-skill", "SKILL.md"))).resolves.toBeUndefined();
+
+    await rm(codexHome, { recursive: true, force: true });
+    await rm(companyWs, { recursive: true, force: true });
+    await rm(materialized, { recursive: true, force: true });
+  });
+
   it("adds a temporary --add-dir for claude_code and removes it after execution", async () => {
     const run = await executeAgentRuntime("claude_code", "prompt payload", {
       command: process.execPath,

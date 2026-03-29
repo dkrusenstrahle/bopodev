@@ -758,8 +758,8 @@ async function prepareSkillInjection(
     return noSkillInjection();
   }
 
-  const skillsSource = await resolveSkillsSourceDir();
-  if (!skillsSource) {
+  const skillRoots = await resolveSkillInjectionSourceRoots(env);
+  if (skillRoots.length === 0) {
     return {
       ...noSkillInjection(),
       warning: "[bopodev] skills injection skipped: no skills directory found."
@@ -768,7 +768,9 @@ async function prepareSkillInjection(
 
   if (provider === "codex") {
     try {
-      await ensureCodexSkillsInjected(skillsSource, env);
+      for (const dir of skillRoots) {
+        await ensureCodexSkillsInjected(dir, env);
+      }
       return noSkillInjection();
     } catch (error) {
       return {
@@ -780,7 +782,9 @@ async function prepareSkillInjection(
 
   if (provider === "cursor") {
     try {
-      await ensureSkillsInjectedAtHome(skillsSource, join(homedir(), ".cursor", "skills"));
+      for (const dir of skillRoots) {
+        await ensureSkillsInjectedAtHome(dir, join(homedir(), ".cursor", "skills"));
+      }
       return noSkillInjection();
     } catch (error) {
       return {
@@ -792,7 +796,9 @@ async function prepareSkillInjection(
 
   if (provider === "opencode") {
     try {
-      await ensureSkillsInjectedAtHome(skillsSource, join(homedir(), ".claude", "skills"));
+      for (const dir of skillRoots) {
+        await ensureSkillsInjectedAtHome(dir, join(homedir(), ".claude", "skills"));
+      }
       return noSkillInjection();
     } catch (error) {
       return {
@@ -808,7 +814,7 @@ async function prepareSkillInjection(
   }
 
   try {
-    const tempSkillsRoot = await buildClaudeSkillsAddDir(skillsSource);
+    const tempSkillsRoot = await buildClaudeSkillsAddDirFromRoots(skillRoots);
     return {
       additionalArgs: ["--add-dir", tempSkillsRoot],
       cleanup: async () => {
@@ -1462,6 +1468,27 @@ async function resolveSkillsSourceDir() {
   return null;
 }
 
+/** Company `skills/`, then per-run materialized linked skills (URL-only), then bundled — first wins per skill id. */
+async function resolveSkillInjectionSourceRoots(env: NodeJS.ProcessEnv): Promise<string[]> {
+  const roots: string[] = [];
+  const workspaceRoot = resolveControlPlaneEnvValue(env, "COMPANY_WORKSPACE_ROOT").trim();
+  if (workspaceRoot.length > 0) {
+    const companySkills = join(workspaceRoot, SKILLS_DIR_NAME);
+    if (await isDirectory(companySkills)) {
+      roots.push(companySkills);
+    }
+  }
+  const linkedRoot = resolveControlPlaneEnvValue(env, "MATERIALIZED_LINKED_SKILLS_ROOT").trim();
+  if (linkedRoot.length > 0 && (await isDirectory(linkedRoot))) {
+    roots.push(linkedRoot);
+  }
+  const bundled = await resolveSkillsSourceDir();
+  if (bundled) {
+    roots.push(bundled);
+  }
+  return roots;
+}
+
 async function ensureCodexSkillsInjected(skillsSourceDir: string, env: NodeJS.ProcessEnv) {
   const codexHome = resolveCodexHome(env);
   const targetRoot = join(codexHome, SKILLS_DIR_NAME);
@@ -1678,21 +1705,28 @@ function sanitizePathSegment(value: string | undefined) {
   return trimmed.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
-async function buildClaudeSkillsAddDir(skillsSourceDir: string) {
+async function buildClaudeSkillsAddDirFromRoots(skillsSourceRoots: string[]) {
   const tempRoot = await mkdtemp(join(tmpdir(), "bopodev-skills-"));
   const skillsTargetDir = join(tempRoot, CLAUDE_SKILLS_DIR);
   await mkdir(skillsTargetDir, { recursive: true });
 
-  const entries = await readdir(skillsSourceDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
+  for (const skillsSourceDir of skillsSourceRoots) {
+    const entries = await readdir(skillsSourceDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const source = join(skillsSourceDir, entry.name);
+      if (!(await hasSkillManifest(source))) {
+        continue;
+      }
+      const target = join(skillsTargetDir, entry.name);
+      const existing = await lstat(target).catch(() => null);
+      if (existing) {
+        continue;
+      }
+      await symlink(source, target);
     }
-    const source = join(skillsSourceDir, entry.name);
-    if (!(await hasSkillManifest(source))) {
-      continue;
-    }
-    await symlink(source, join(skillsTargetDir, entry.name));
   }
 
   return tempRoot;

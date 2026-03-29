@@ -25,7 +25,8 @@ import {
   Menu,
   MessageCircle,
   Plus,
-  Repeat
+  Repeat,
+  BookOpen
 } from "lucide-react";
 import type { SectionLabel, SectionSlug } from "@/lib/sections";
 import {
@@ -101,6 +102,7 @@ const settingsNavItems: Array<{
 }> = [
   { href: "/settings/templates", label: "Templates", icon: LayoutTemplate, isActive: (pathname) => pathname.startsWith("/settings/templates") },
   { href: "/settings/plugins", label: "Plugins", icon: Puzzle, isActive: (pathname) => pathname.startsWith("/settings/plugins") },
+  { href: "/settings/skills", label: "Skills", icon: BookOpen, isActive: (pathname) => pathname.startsWith("/settings/skills") },
   {
     href: "/settings",
     label: "Settings",

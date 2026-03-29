@@ -36,6 +36,8 @@ export type MarkdownMdxEditorProps = {
    * inheriting this editor's `className` / min-heights and stretching the page.
    */
   overlayContainer?: HTMLElement | null;
+  /** Rich markdown preview without editing (uses MDXEditor styling; no Tailwind `prose` required). */
+  readOnly?: boolean;
 };
 
 export function MarkdownMdxEditor({
@@ -46,7 +48,8 @@ export function MarkdownMdxEditor({
   compact = true,
   issueComment = false,
   className,
-  overlayContainer: overlayContainerProp
+  overlayContainer: overlayContainerProp,
+  readOnly = false
 }: MarkdownMdxEditorProps) {
   const plugins = useMemo(
     () => [
@@ -83,6 +86,7 @@ export function MarkdownMdxEditor({
     <MDXEditor
       key={editorKey}
       markdown={markdown}
+      readOnly={readOnly}
       onChange={(next, initialMarkdownNormalize) => onChange(next, initialMarkdownNormalize)}
       plugins={plugins}
       className={cn("dark-theme", rootClass, className)}

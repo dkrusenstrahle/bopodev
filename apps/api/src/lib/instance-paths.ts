@@ -61,6 +61,11 @@ export function resolveCompanyProjectsWorkspacePath(companyId: string) {
   return join(resolveBopoInstanceRoot(), "workspaces", safeCompanyId);
 }
 
+/** Company-managed runtime skills (`skills/<id>/SKILL.md`), exportable with company zip. */
+export function resolveCompanySkillsPath(companyId: string) {
+  return join(resolveCompanyProjectsWorkspacePath(companyId), "skills");
+}
+
 export function resolveAgentFallbackWorkspacePath(companyId: string, agentId: string) {
   const safeCompanyId = assertPathSegment(companyId, "companyId");
   const safeAgentId = assertPathSegment(agentId, "agentId");

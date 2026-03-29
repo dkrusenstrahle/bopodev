@@ -587,7 +587,8 @@ export const ControlPlaneRuntimeEnvSchema = z
     BOPODEV_LINKED_ISSUE_IDS: z.string().optional(),
     BOPODEV_COMPANY_WORKSPACE_ROOT: z.string().optional(),
     BOPODEV_AGENT_HOME: z.string().optional(),
-    BOPODEV_AGENT_OPERATING_DIR: z.string().optional()
+    BOPODEV_AGENT_OPERATING_DIR: z.string().optional(),
+    BOPODEV_MATERIALIZED_LINKED_SKILLS_ROOT: z.string().optional()
   })
   .superRefine((value, ctx) => {
     const actorType = value.BOPODEV_ACTOR_TYPE;

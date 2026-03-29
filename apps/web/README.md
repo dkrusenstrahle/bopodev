@@ -13,10 +13,11 @@ Next.js web client for the Bopo control plane.
 - `/dashboard`, `/issues`, `/projects`, `/goals`, `/loops`, `/agents`, `/org-chart`, `/governance`, `/inbox`
 - `/office-space`, `/runs`, `/trace-logs`, `/costs`
 - `/plugins`, `/templates`, `/models`
-- `/settings`, `/settings/templates`, `/settings/plugins`, `/settings/models`
+- `/settings`, `/settings/templates`, `/settings/plugins`, `/settings/skills`, `/settings/models`
 
 Route notes:
 
+- **Skills** (`/settings/skills`) — company `skills/` packages, built-in Bopo skill reference, URL import (requires `agents:write` to create or save).
 - **Logs** (`/trace-logs`) is in the main sidebar under **Operations**, below **Runs** (not under Settings).
 - `/` redirects to `/issues`.
 - Detail routes include `/issues/[issueId]`, `/projects/[projectId]`, `/loops/[loopId]`, `/runs/[runId]`, and `/agents/[agentId]`.

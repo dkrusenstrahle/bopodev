@@ -59,6 +59,7 @@ import { createHeartbeatRunsRealtimeEvent, loadHeartbeatRunsRealtimeSnapshot } f
 import { publishAttentionSnapshot } from "../../realtime/attention";
 import { publishOfficeOccupantForAgent } from "../../realtime/office-space";
 import { appendProjectBudgetUsage, checkAgentBudget, checkProjectBudget } from "../budget-service";
+import { materializeLinkedSkillsForRuntime } from "../company-skill-file-service";
 import { appendDurableFact, loadAgentMemoryContext, persistHeartbeatMemory } from "../memory-file-service";
 import { calculateModelPricedUsdCost } from "../model-pricing";
 import { runPluginHook } from "../plugin-runtime";
@@ -527,6 +528,7 @@ export async function runHeartbeatForAgent(
   let transcriptLiveHighSignalCount = 0;
   let transcriptPersistFailureReported = false;
   let pluginFailureSummary: string[] = [];
+  let linkedSkillsMaterializationCleanup: (() => Promise<void>) | null = null;
   const seenResultMessages = new Set<string>();
   const runDigestSignals: RunDigestSignal[] = [];
 
@@ -706,13 +708,18 @@ export async function runHeartbeatForAgent(
     if (runMode === "redo") {
       state = clearResumeState(state);
     }
-    const heartbeatRuntimeEnv = buildHeartbeatRuntimeEnv({
-      companyId,
-      agentId: agent.id,
-      heartbeatRunId: runId,
-      canHireAgents: agent.canHireAgents,
-      wakeContext: options?.wakeContext
-    });
+    const linkedMaterialized = await materializeLinkedSkillsForRuntime(companyId);
+    linkedSkillsMaterializationCleanup = linkedMaterialized.cleanup;
+    const heartbeatRuntimeEnv: Record<string, string> = {
+      ...buildHeartbeatRuntimeEnv({
+        companyId,
+        agentId: agent.id,
+        heartbeatRunId: runId,
+        canHireAgents: agent.canHireAgents,
+        wakeContext: options?.wakeContext
+      }),
+      ...(linkedMaterialized.root ? { BOPODEV_MATERIALIZED_LINKED_SKILLS_ROOT: linkedMaterialized.root } : {})
+    };
     const runtimeFromConfig = {
       command: persistedRuntime.runtimeCommand,
       args: persistedRuntime.runtimeArgs,
@@ -1735,6 +1742,14 @@ export async function runHeartbeatForAgent(
       });
     }
   } finally {
+    if (linkedSkillsMaterializationCleanup) {
+      try {
+        await linkedSkillsMaterializationCleanup();
+      } catch {
+        // Best effort: linked skill temp dir cleanup should not mask heartbeat teardown.
+      }
+      linkedSkillsMaterializationCleanup = null;
+    }
     await transcriptWriteQueue;
     if (discardIdleNoWorkRunAfterFlush) {
       try {

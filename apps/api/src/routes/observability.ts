@@ -24,6 +24,15 @@ import {
   readAgentOperatingFile,
   writeAgentOperatingFile
 } from "../services/agent-operating-file-service";
+import { BUILTIN_BOPO_SKILLS } from "../lib/builtin-bopo-skills";
+import {
+  createCompanySkillPackage,
+  linkCompanySkillFromUrl,
+  listCompanySkillFiles,
+  listCompanySkillPackages,
+  readCompanySkillFile,
+  writeCompanySkillFile
+} from "../services/company-skill-file-service";
 import {
   listAgentMemoryFiles,
   listCompanyMemoryFiles,
@@ -505,6 +514,125 @@ export function createObservabilityRouter(ctx: AppContext) {
         agentId,
         relativePath,
         content: body.content
+      });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/builtin-skills", async (_req, res) => {
+    return sendOk(
+      res,
+      BUILTIN_BOPO_SKILLS.map((row) => ({
+        id: row.id,
+        title: row.title,
+        content: row.content
+      }))
+    );
+  });
+
+  router.get("/company-skills", async (req, res) => {
+    const companyId = req.companyId!;
+    try {
+      const { items: packages } = await listCompanySkillPackages({ companyId, maxSkills: 80 });
+      const items = await Promise.all(
+        packages.map(async (pack) => {
+          const { relativePaths, hasLocalSkillMd } = await listCompanySkillFiles({
+            companyId,
+            skillId: pack.skillId,
+            maxFiles: 200
+          });
+          return {
+            skillId: pack.skillId,
+            linkedUrl: pack.linkedUrl,
+            hasLocalSkillMd,
+            files: relativePaths.map((relativePath) => ({ relativePath }))
+          };
+        })
+      );
+      return sendOk(res, { items });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/company-skills/file", async (req, res) => {
+    const companyId = req.companyId!;
+    const skillId = typeof req.query.skillId === "string" ? req.query.skillId.trim() : "";
+    const relativePath = typeof req.query.path === "string" ? req.query.path.trim() : "";
+    if (!skillId || !relativePath) {
+      return sendError(res, "Query parameters 'skillId' and 'path' are required.", 422);
+    }
+    try {
+      const file = await readCompanySkillFile({ companyId, skillId, relativePath });
+      return sendOk(res, { content: file.content });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.put("/company-skills/file", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const skillId = typeof req.query.skillId === "string" ? req.query.skillId.trim() : "";
+    const relativePath = typeof req.query.path === "string" ? req.query.path.trim() : "";
+    if (!skillId || !relativePath) {
+      return sendError(res, "Query parameters 'skillId' and 'path' are required.", 422);
+    }
+    const body = req.body as { content?: unknown };
+    if (typeof body?.content !== "string") {
+      return sendError(res, "Expected JSON body with string 'content'.", 422);
+    }
+    try {
+      const result = await writeCompanySkillFile({
+        companyId,
+        skillId,
+        relativePath,
+        content: body.content
+      });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.post("/company-skills/create", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const body = req.body as { skillId?: unknown };
+    if (typeof body?.skillId !== "string" || !body.skillId.trim()) {
+      return sendError(res, "Expected JSON body with string 'skillId'.", 422);
+    }
+    try {
+      const result = await createCompanySkillPackage({ companyId, skillId: body.skillId });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.post("/company-skills/link-url", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const body = req.body as { url?: unknown; skillId?: unknown };
+    if (typeof body?.url !== "string" || !body.url.trim()) {
+      return sendError(res, "Expected JSON body with string 'url'.", 422);
+    }
+    if (typeof body?.skillId !== "string" || !body.skillId.trim()) {
+      return sendError(res, "Expected JSON body with string 'skillId'.", 422);
+    }
+    try {
+      const result = await linkCompanySkillFromUrl({
+        companyId,
+        skillId: body.skillId,
+        url: body.url
       });
       return sendOk(res, result);
     } catch (error) {

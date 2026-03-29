@@ -1977,7 +1977,7 @@ body {
 }
 
 .run-sidebar-item-id {
-  @apply min-w-0 truncate font-mono text-xs font-semibold text-sidebar-foreground;
+  @apply min-w-0 truncate font-mono text-sm font-semibold text-sidebar-foreground;
 }
 
 .run-sidebar-item-badge {
@@ -2075,6 +2075,43 @@ body {
 
 .ui-agent-docs-editor {
   @apply flex-1 overflow-y-auto;
+}
+
+.ui-agent-docs-sidebar-caption {
+  @apply truncate px-2 text-xs text-muted-foreground;
+}
+
+/* Settings /skills — sidebar + dialogs */
+.ui-settings-skills-sidebar-actions {
+  @apply flex gap-6 mt-6 border-t border-border pt-6;
+}
+
+.ui-settings-skills-pack-title {
+  @apply px-3 pb-1 text-xs font-medium text-muted-foreground;
+}
+
+.ui-settings-skills-sidebar-item--nested {
+  @apply pl-5;
+}
+
+.ui-settings-skills-dialog-code {
+  @apply rounded bg-muted px-1 py-0.5 text-xs font-mono;
+}
+
+.ui-settings-skills-alert {
+  @apply mt-2;
+}
+
+.ui-settings-skills-sidebar-alert {
+  @apply mx-2 mt-2;
+}
+
+.ui-settings-skills-linked-pill {
+  @apply ml-2 shrink-0 rounded-full border border-border bg-muted px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground;
+}
+
+.ui-settings-skills-external-link {
+  @apply font-medium text-primary underline-offset-4 hover:underline break-all;
 }
 
 .run-transcript-card-content {

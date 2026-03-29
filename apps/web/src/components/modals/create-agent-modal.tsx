@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { SendHorizontal, SlidersHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -113,6 +114,20 @@ const defaultVisibleProviders: ProviderOption[] = [
   { providerType: "openclaw_gateway", label: "OpenClaw Gateway" }
 ];
 
+function providerSupportsSkillLibrary(providerType: ProviderType): boolean {
+  return (
+    providerType === "codex" ||
+    providerType === "claude_code" ||
+    providerType === "cursor" ||
+    providerType === "opencode"
+  );
+}
+
+function firstLineDescription(markdown: string): string {
+  const line = markdown.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  return line.replace(/^#+\s*/, "").trim().slice(0, 200);
+}
+
 function normalizeRoleKey(roleKey: AgentRoleKey | null | undefined, legacyRole: string | null | undefined): AgentRoleKey {
   if (roleKey && AGENT_ROLE_KEYS.includes(roleKey)) {
     return roleKey;
@@ -167,6 +182,8 @@ export function CreateAgentModal({
     interruptGraceSec?: number | null;
     runPolicyJson?: string | null;
     stateBlob?: string;
+    /** null = all company skills; else company skill ids only (built-ins always on). */
+    enabledSkillIds?: string[] | null;
   };
   availableAgents?: Array<{ id: string; name: string }>;
   projects?: ProjectOption[];
@@ -217,6 +234,12 @@ export function CreateAgentModal({
   const [interruptGraceSec, setInterruptGraceSec] = useState("15");
   const [sandboxMode, setSandboxMode] = useState<"workspace_write" | "full_access">("workspace_write");
   const [allowWebSearch, setAllowWebSearch] = useState(false);
+  const [skillAttachMode, setSkillAttachMode] = useState<"all" | "explicit">("explicit");
+  const [explicitCompanySkillIds, setExplicitCompanySkillIds] = useState<string[]>([]);
+  const [skillsCompany, setSkillsCompany] = useState<
+    Array<{ skillId: string; linkedUrl: string | null; hasLocalSkillMd: boolean }>
+  >([]);
+  const [skillsLibraryError, setSkillsLibraryError] = useState<string | null>(null);
   const isEditing = Boolean(agent);
   const [creationMode, setCreationMode] = useState<"intro" | "delegate" | "advanced">(isEditing ? "advanced" : "intro");
   const [delegateProjectId, setDelegateProjectId] = useState("");
@@ -484,6 +507,14 @@ export function CreateAgentModal({
       );
       setSandboxMode(runPolicy.sandboxMode as "workspace_write" | "full_access");
       setAllowWebSearch(runPolicy.allowWebSearch);
+      const es = agent.enabledSkillIds;
+      if (es === null || es === undefined) {
+        setSkillAttachMode("all");
+        setExplicitCompanySkillIds([]);
+      } else {
+        setSkillAttachMode("explicit");
+        setExplicitCompanySkillIds(es);
+      }
       setCreationMode("advanced");
       setError(null);
       setBootstrapEditorNonce((n) => n + 1);
@@ -521,6 +552,8 @@ export function CreateAgentModal({
     setInterruptGraceSec(effectiveDefaults.interruptGraceSec);
     setSandboxMode(effectiveDefaults.sandboxMode);
     setAllowWebSearch(effectiveDefaults.allowWebSearch);
+    setSkillAttachMode("explicit");
+    setExplicitCompanySkillIds([]);
     setCreationMode("intro");
     setDelegateProjectId(projects?.[0]?.id ?? "");
     setDelegateRequest("");
@@ -554,6 +587,32 @@ export function CreateAgentModal({
   }, [dialogOpen, companyId]);
 
   useEffect(() => {
+    if (!dialogOpen || !companyId) {
+      return;
+    }
+    let cancelled = false;
+    setSkillsLibraryError(null);
+    void (async () => {
+      try {
+        const co = await apiGet<{
+          items: Array<{ skillId: string; linkedUrl: string | null; hasLocalSkillMd: boolean }>;
+        }>("/observability/company-skills", companyId);
+        if (cancelled) {
+          return;
+        }
+        setSkillsCompany(co.data.items);
+      } catch {
+        if (!cancelled) {
+          setSkillsLibraryError("Could not load skills library.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dialogOpen, companyId]);
+
+  useEffect(() => {
     if (providerType !== "codex" && allowWebSearch) {
       setAllowWebSearch(false);
     }
@@ -584,7 +643,12 @@ export function CreateAgentModal({
         bootstrapPrompt: bootstrapPrompt || undefined,
         runtimeTimeoutSec: Number(runtimeTimeoutSec || "0"),
         interruptGraceSec: Number(interruptGraceSec || "15"),
-        runPolicy: { sandboxMode, allowWebSearch }
+        runPolicy: { sandboxMode, allowWebSearch },
+        ...(providerSupportsSkillLibrary(providerType)
+          ? skillAttachMode === "explicit"
+            ? { enabledSkillIds: explicitCompanySkillIds }
+            : { enabledSkillIds: null }
+          : {})
       }
     };
     void fetchAdapterModelsForProvider(companyId, providerType, body)
@@ -609,7 +673,9 @@ export function CreateAgentModal({
     interruptGraceSec,
     sandboxMode,
     allowWebSearch,
-    bootstrapPrompt
+    bootstrapPrompt,
+    skillAttachMode,
+    explicitCompanySkillIds
   ]);
 
   useEffect(() => {
@@ -735,7 +801,12 @@ export function CreateAgentModal({
         runPolicy: {
           sandboxMode,
           allowWebSearch
-        }
+        },
+        ...(providerSupportsSkillLibrary(providerType)
+          ? skillAttachMode === "explicit"
+            ? { enabledSkillIds: explicitCompanySkillIds }
+            : { enabledSkillIds: null }
+          : {})
       };
 
       if (providerType === "opencode") {
@@ -1275,6 +1346,71 @@ export function CreateAgentModal({
                 </Field>
               </FieldGroup>
             </section>
+            {providerSupportsSkillLibrary(providerType) ? (
+              <section className={styles.createAgentModalSection}>
+                <h3 className={styles.createAgentModalSectionTitle}>Skills</h3>
+                <FieldGroup className={styles.createAgentModalFieldGroupFull}>
+                  <Field orientation="horizontal">
+                    <button
+                      type="button"
+                      id="agent-skills-all-toggle"
+                      role="switch"
+                      aria-checked={skillAttachMode === "all"}
+                      aria-label="Inject all company skills"
+                      className={styles.createAgentModalSkillsAllSwitch}
+                      onClick={() => {
+                        const nextAll = skillAttachMode !== "all";
+                        setSkillAttachMode(nextAll ? "all" : "explicit");
+                        if (nextAll) {
+                          setExplicitCompanySkillIds([]);
+                        }
+                      }}
+                    >
+                      <span className={styles.createAgentModalSkillsAllSwitchThumb} aria-hidden />
+                    </button>
+                    <FieldContent>
+                      <FieldLabel htmlFor="agent-skills-all-toggle">All company skills</FieldLabel>
+                    </FieldContent>
+                  </Field>
+                  {skillsLibraryError ? <p className={styles.createAgentModalText}>{skillsLibraryError}</p> : null}
+                  {skillAttachMode === "explicit" ? (
+                    skillsCompany.length > 0 ? (
+                      <div className={styles.createAgentModalSkillsList}>
+                        {skillsCompany.map((row) => {
+                          const checked = explicitCompanySkillIds.includes(row.skillId);
+                          const settingsUrl =
+                            `/settings/skills?companyId=${encodeURIComponent(companyId)}&kind=company&skillId=${encodeURIComponent(row.skillId)}&path=SKILL.md` as Route;
+                          return (
+                            <div key={`co-${row.skillId}`} className={styles.createAgentModalSkillRow}>
+                              <Checkbox
+                                id={`agent-skill-co-${row.skillId}`}
+                                checked={checked}
+                                onCheckedChange={(v) => {
+                                  const on = v === true;
+                                  setExplicitCompanySkillIds((prev) =>
+                                    on
+                                      ? [...new Set([...prev, row.skillId])]
+                                      : prev.filter((x) => x !== row.skillId)
+                                  );
+                                }}
+                              />
+                              <div className={styles.createAgentModalSkillMain}>
+                                <div className={styles.createAgentModalSkillTitle}>{row.skillId}</div>
+                              </div>
+                              <a className={styles.createAgentModalSkillViewLink} href={settingsUrl}>
+                                View
+                              </a>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className={styles.createAgentModalText}>No company skills yet. Add them in Settings → Skills.</p>
+                    )
+                  ) : null}
+                </FieldGroup>
+              </section>
+            ) : null}
             <section className={styles.createAgentModalSection}>
               <FieldGroup>
                 <Field>

@@ -82,3 +82,52 @@
   overflow-wrap: anywhere;
   word-break: break-all;
 }
+
+.createAgentModalSkillsAllSwitch {
+  @apply relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-input bg-muted p-0.5 transition-colors;
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+
+  &[aria-checked="true"] {
+    @apply border-primary bg-primary;
+  }
+}
+
+.createAgentModalSkillsAllSwitchThumb {
+  @apply pointer-events-none block size-5 rounded-full bg-background shadow-sm transition-transform duration-200 ease-out;
+  transform: translateX(0);
+}
+
+.createAgentModalSkillsAllSwitch[aria-checked="true"] .createAgentModalSkillsAllSwitchThumb {
+  transform: translateX(1.25rem);
+}
+
+.createAgentModalSkillsList {
+  @apply max-h-[min(40vh,22rem)] overflow-y-auto rounded-md border border-border/80 bg-muted/15 px-4 py-1;
+}
+
+.createAgentModalSkillRow {
+  @apply flex gap-6 border-b border-border/50 py-3 last:border-b-0;
+  button {
+    @apply mt-0.5;
+  }
+}
+
+.createAgentModalSkillMain {
+  @apply min-w-0 flex-1;
+}
+
+.createAgentModalSkillTitle {
+  @apply text-sm font-semibold text-foreground;
+}
+
+.createAgentModalSkillMeta {
+  @apply mt-0.5 text-xs text-muted-foreground;
+}
+
+.createAgentModalSkillDesc {
+  @apply mt-1 line-clamp-2 text-sm text-muted-foreground;
+}
+
+.createAgentModalSkillViewLink {
+  @apply shrink-0 self-start pt-0.5 text-sm font-medium text-muted-foreground underline-offset-4 hover:underline;
+}

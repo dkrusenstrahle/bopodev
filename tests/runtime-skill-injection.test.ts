@@ -1,4 +1,4 @@
-import { access, chmod, lstat, mkdir, readlink, rm, writeFile } from "node:fs/promises";
+import { access, chmod, lstat, mkdir, readdir, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtemp } from "node:fs/promises";
@@ -85,6 +85,48 @@ describe("agent runtime skill injection", () => {
     await rm(codexHome, { recursive: true, force: true });
     await rm(companyWs, { recursive: true, force: true });
     await rm(materialized, { recursive: true, force: true });
+  });
+
+  it("always injects bundled skills and restricts company skills when BOPODEV_ENABLED_SKILL_IDS is set", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "bopodev-codex-filter-"));
+    const companyWs = await mkdtemp(join(tmpdir(), "bopodev-company-ws-filter-"));
+    const corpSkill = join(companyWs, "skills", "corp-custom-skill");
+    await mkdir(corpSkill, { recursive: true });
+    await writeFile(join(corpSkill, "SKILL.md"), "---\nname: corp-custom-skill\n---\n\n# Corp\n", "utf8");
+
+    const run = await executeAgentRuntime("codex", "test prompt", {
+      command: process.execPath,
+      args: ["-e", "console.log('ok')"],
+      env: {
+        CODEX_HOME: codexHome,
+        BOPODEV_COMPANY_WORKSPACE_ROOT: companyWs,
+        BOPODEV_ENABLED_SKILL_IDS: "bopodev-create-agent"
+      }
+    });
+
+    expect(run.ok).toBe(true);
+    await expect(access(join(codexHome, "skills", "corp-custom-skill"))).rejects.toBeTruthy();
+    await expect(access(join(codexHome, "skills", "bopodev-create-agent", "SKILL.md"))).resolves.toBeUndefined();
+    await expect(access(join(codexHome, "skills", "bopodev-control-plane", "SKILL.md"))).resolves.toBeUndefined();
+    await expect(access(join(codexHome, "skills", "para-memory-files", "SKILL.md"))).resolves.toBeUndefined();
+
+    await rm(codexHome, { recursive: true, force: true });
+    await rm(companyWs, { recursive: true, force: true });
+  });
+
+  it("injects only bundled skills when BOPODEV_ENABLED_SKILL_IDS is empty", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "bopodev-codex-empty-filter-"));
+    const run = await executeAgentRuntime("codex", "test prompt", {
+      command: process.execPath,
+      args: ["-e", "console.log('ok')"],
+      env: { CODEX_HOME: codexHome, BOPODEV_ENABLED_SKILL_IDS: "" }
+    });
+    expect(run.ok).toBe(true);
+    const entries = await readdir(join(codexHome, "skills"));
+    expect(new Set(entries)).toEqual(
+      new Set(["bopodev-control-plane", "bopodev-create-agent", "para-memory-files"])
+    );
+    await rm(codexHome, { recursive: true, force: true });
   });
 
   it("adds a temporary --add-dir for claude_code and removes it after execution", async () => {

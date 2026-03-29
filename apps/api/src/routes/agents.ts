@@ -62,7 +62,8 @@ const legacyRuntimeConfigSchema = z.object({
       sandboxMode: z.enum(["workspace_write", "full_access"]).optional(),
       allowWebSearch: z.boolean().optional()
     })
-    .optional()
+    .optional(),
+  enabledSkillIds: z.array(z.string().min(1)).max(64).nullable().optional()
 });
 
 const createAgentSchema = AgentCreateRequestSchema.extend({
@@ -118,7 +119,8 @@ const UPDATE_AGENT_ALLOWED_KEYS = new Set([
   "runtimeTimeoutSec",
   "interruptGraceSec",
   "runtimeEnv",
-  "runPolicy"
+  "runPolicy",
+  "enabledSkillIds"
 ]);
 const UPDATE_RUNTIME_CONFIG_ALLOWED_KEYS = new Set([
   "runtimeCommand",
@@ -130,15 +132,18 @@ const UPDATE_RUNTIME_CONFIG_ALLOWED_KEYS = new Set([
   "bootstrapPrompt",
   "runtimeTimeoutSec",
   "interruptGraceSec",
-  "runPolicy"
+  "runPolicy",
+  "enabledSkillIds"
 ]);
 
 function toAgentResponse(agent: Record<string, unknown>) {
+  const rt = parseRuntimeConfigFromAgentRow(agent);
   return {
     ...agent,
     monthlyBudgetUsd:
       typeof agent.monthlyBudgetUsd === "number" ? agent.monthlyBudgetUsd : Number(agent.monthlyBudgetUsd ?? 0),
-    usedBudgetUsd: typeof agent.usedBudgetUsd === "number" ? agent.usedBudgetUsd : Number(agent.usedBudgetUsd ?? 0)
+    usedBudgetUsd: typeof agent.usedBudgetUsd === "number" ? agent.usedBudgetUsd : Number(agent.usedBudgetUsd ?? 0),
+    enabledSkillIds: rt.enabledSkillIds === undefined ? null : rt.enabledSkillIds
   };
 }
 
@@ -400,13 +405,20 @@ export function createAgentsRouter(ctx: AppContext) {
           runtimeTimeoutSec: parsed.data.runtimeTimeoutSec,
           interruptGraceSec: parsed.data.interruptGraceSec,
           runtimeEnv: parsed.data.runtimeEnv,
-          runPolicy: parsed.data.runPolicy
+          runPolicy: parsed.data.runPolicy,
+          enabledSkillIds: parsed.data.enabledSkillIds
         },
         defaultRuntimeCwd
       });
       runtimeConfig = enforceRuntimeCwdPolicy(req.companyId!, runtimeConfig);
     } catch (error) {
       return sendError(res, String(error), 422);
+    }
+    const rc = parsed.data.runtimeConfig;
+    const hasEnabledSkillIdsKey =
+      rc !== undefined && rc !== null && typeof rc === "object" && "enabledSkillIds" in rc;
+    if (!hasEnabledSkillIdsKey && parsed.data.enabledSkillIds === undefined) {
+      runtimeConfig = { ...runtimeConfig, enabledSkillIds: [] };
     }
     runtimeConfig.runtimeModel = await resolveOpencodeRuntimeModel(parsed.data.providerType, runtimeConfig);
     runtimeConfig.runtimeModel = resolveRuntimeModelForProvider(parsed.data.providerType, runtimeConfig.runtimeModel);
@@ -560,7 +572,8 @@ export function createAgentsRouter(ctx: AppContext) {
       parsed.data.runtimeTimeoutSec !== undefined ||
       parsed.data.interruptGraceSec !== undefined ||
       parsed.data.runtimeEnv !== undefined ||
-      parsed.data.runPolicy !== undefined;
+      parsed.data.runPolicy !== undefined ||
+      parsed.data.enabledSkillIds !== undefined;
     try {
       let nextRuntime = {
         ...existingRuntime,
@@ -581,7 +594,8 @@ export function createAgentsRouter(ctx: AppContext) {
                 runtimeTimeoutSec: parsed.data.runtimeTimeoutSec ?? existingRuntime.runtimeTimeoutSec,
                 interruptGraceSec: parsed.data.interruptGraceSec,
                 runtimeEnv: parsed.data.runtimeEnv,
-                runPolicy: parsed.data.runPolicy
+                runPolicy: parsed.data.runPolicy,
+                enabledSkillIds: parsed.data.enabledSkillIds
               }
             })
           : {})

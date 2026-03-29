@@ -588,7 +588,8 @@ export const ControlPlaneRuntimeEnvSchema = z
     BOPODEV_COMPANY_WORKSPACE_ROOT: z.string().optional(),
     BOPODEV_AGENT_HOME: z.string().optional(),
     BOPODEV_AGENT_OPERATING_DIR: z.string().optional(),
-    BOPODEV_MATERIALIZED_LINKED_SKILLS_ROOT: z.string().optional()
+    BOPODEV_MATERIALIZED_LINKED_SKILLS_ROOT: z.string().optional(),
+    BOPODEV_ENABLED_SKILL_IDS: z.string().optional()
   })
   .superRefine((value, ctx) => {
     const actorType = value.BOPODEV_ACTOR_TYPE;
@@ -753,6 +754,46 @@ export const RunPolicySchema = z.object({
   allowWebSearch: z.boolean().default(false)
 });
 export type RunPolicy = z.infer<typeof RunPolicySchema>;
+
+/** Bundled Bopo skill folder names under `skills/`; always injected when using an explicit company allowlist. */
+export const BUILTIN_BOPO_SKILL_IDS: readonly string[] = [
+  "bopodev-control-plane",
+  "bopodev-create-agent",
+  "para-memory-files"
+] as const;
+
+const BUILTIN_BOPO_SKILL_ID_SET = new Set<string>(BUILTIN_BOPO_SKILL_IDS);
+
+export function isBuiltinBopoSkillId(id: string): boolean {
+  return BUILTIN_BOPO_SKILL_ID_SET.has(id.trim());
+}
+
+/** Removes bundled skill ids from a stored list (legacy rows may still include them). */
+export function companySkillAllowlistOnly(ids: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of ids) {
+    const id = raw.trim();
+    if (!id || seen.has(id) || isBuiltinBopoSkillId(id)) {
+      continue;
+    }
+    seen.add(id);
+    out.push(id);
+    if (out.length >= 64) {
+      break;
+    }
+  }
+  return out;
+}
+
+/** Builds the full injection allowlist: bundled skills plus company skill ids. `undefined` = caller should not set a filter (inject all). */
+export function mergeBuiltinSkillIdsForInjection(companySkillIds: string[] | undefined): string[] | undefined {
+  if (companySkillIds === undefined) {
+    return undefined;
+  }
+  return Array.from(new Set([...BUILTIN_BOPO_SKILL_IDS, ...companySkillIds]));
+}
+
 export const AgentRuntimeConfigSchema = z.object({
   runtimeCommand: z.string().optional(),
   runtimeArgs: z.array(z.string()).default([]),
@@ -761,6 +802,8 @@ export const AgentRuntimeConfigSchema = z.object({
   runtimeModel: z.string().optional(),
   runtimeThinkingEffort: ThinkingEffortSchema.default("auto"),
   bootstrapPrompt: z.string().optional(),
+  /** Company / custom skill package ids only (folder names under the company workspace `skills/`). Bundled Bopo skills are always injected when this list is set. Empty array = bundled only. `null` = inject every skill (legacy). When omitted during a partial update, other layers may leave the previous value. */
+  enabledSkillIds: z.array(z.string().min(1)).max(64).nullable().optional(),
   runtimeTimeoutSec: z.number().int().nonnegative().default(0),
   interruptGraceSec: z.number().int().nonnegative().default(15),
   runPolicy: RunPolicySchema.default({
@@ -928,6 +971,8 @@ export const AgentSchema = z.object({
   runtimeTimeoutSec: z.number().int().nonnegative().nullable().optional(),
   interruptGraceSec: z.number().int().nonnegative().nullable().optional(),
   runPolicyJson: z.string().nullable().optional(),
+  /** null = inject all skills (legacy). Otherwise company skill ids only; bundled Bopo skills are always injected. */
+  enabledSkillIds: z.array(z.string()).nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string()
 });

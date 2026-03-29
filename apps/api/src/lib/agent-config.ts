@@ -1,4 +1,9 @@
-import { AgentRuntimeConfigSchema, type AgentRuntimeConfig, type ThinkingEffort } from "bopodev-contracts";
+import {
+  AgentRuntimeConfigSchema,
+  companySkillAllowlistOnly,
+  type AgentRuntimeConfig,
+  type ThinkingEffort
+} from "bopodev-contracts";
 import { normalizeAbsolutePath } from "./instance-paths";
 
 export type LegacyRuntimeFields = {
@@ -16,6 +21,8 @@ export type LegacyRuntimeFields = {
     allowWebSearch?: boolean;
   };
   runtimeEnv?: Record<string, string>;
+  /** Company skill ids only (bundled ids are stripped on normalize). */
+  enabledSkillIds?: string[] | null;
 };
 
 export type NormalizedRuntimeConfig = {
@@ -26,6 +33,8 @@ export type NormalizedRuntimeConfig = {
   runtimeModel?: string;
   runtimeThinkingEffort: ThinkingEffort;
   bootstrapPrompt?: string;
+  /** Omitted = inject all skills (legacy). Present = company skill ids only; bundled skills are always injected. */
+  enabledSkillIds?: string[];
   runtimeTimeoutSec: number;
   interruptGraceSec: number;
   runPolicy: {
@@ -109,6 +118,9 @@ export function normalizeRuntimeConfig(input: {
   if (legacy.runPolicy !== undefined) {
     merged.runPolicy = legacy.runPolicy;
   }
+  if (legacy.enabledSkillIds !== undefined) {
+    merged.enabledSkillIds = legacy.enabledSkillIds;
+  }
 
   const parsed = AgentRuntimeConfigSchema.partial().parse({
     ...merged,
@@ -131,7 +143,11 @@ export function normalizeRuntimeConfig(input: {
     runPolicy: {
       sandboxMode: parsed.runPolicy?.sandboxMode ?? "workspace_write",
       allowWebSearch: parsed.runPolicy?.allowWebSearch ?? false
-    }
+    },
+    enabledSkillIds:
+      parsed.enabledSkillIds === null || parsed.enabledSkillIds === undefined
+        ? undefined
+        : companySkillAllowlistOnly(parsed.enabledSkillIds)
   };
 }
 
@@ -165,6 +181,8 @@ export function parseRuntimeConfigFromAgentRow(agent: Record<string, unknown>): 
     runtimeModel,
     runtimeThinkingEffort: parseThinkingEffort(agent.runtimeThinkingEffort),
     bootstrapPrompt: toText(agent.bootstrapPrompt),
+    enabledSkillIds:
+      fallback.enabledSkillIds === undefined ? undefined : companySkillAllowlistOnly(fallback.enabledSkillIds),
     runtimeTimeoutSec: Math.max(0, timeoutSec),
     interruptGraceSec: Math.max(0, toNumber(agent.interruptGraceSec) ?? 15),
     runPolicy
@@ -187,14 +205,18 @@ export function runtimeConfigToDb(runtime: NormalizedRuntimeConfig) {
 }
 
 export function runtimeConfigToStateBlobPatch(runtime: NormalizedRuntimeConfig) {
+  const runtimePatch: Record<string, unknown> = {
+    command: runtime.runtimeCommand,
+    args: runtime.runtimeArgs,
+    cwd: runtime.runtimeCwd,
+    env: runtime.runtimeEnv,
+    timeoutMs: runtime.runtimeTimeoutSec > 0 ? runtime.runtimeTimeoutSec * 1000 : undefined
+  };
+  if (runtime.enabledSkillIds !== undefined) {
+    runtimePatch.enabledSkillIds = runtime.enabledSkillIds;
+  }
   return {
-    runtime: {
-      command: runtime.runtimeCommand,
-      args: runtime.runtimeArgs,
-      cwd: runtime.runtimeCwd,
-      env: runtime.runtimeEnv,
-      timeoutMs: runtime.runtimeTimeoutSec > 0 ? runtime.runtimeTimeoutSec * 1000 : undefined
-    },
+    runtime: runtimePatch,
     promptTemplate: runtime.bootstrapPrompt
   };
 }
@@ -208,6 +230,7 @@ function parseRuntimeFromStateBlob(raw: unknown) {
       env?: Record<string, string>;
       model?: string;
       timeoutMs?: number;
+      enabledSkillIds?: string[];
     };
   }
   try {
@@ -219,6 +242,7 @@ function parseRuntimeFromStateBlob(raw: unknown) {
         env?: unknown;
         model?: unknown;
         timeoutMs?: unknown;
+        enabledSkillIds?: unknown;
       };
     };
     const runtime = parsed.runtime ?? {};
@@ -228,11 +252,35 @@ function parseRuntimeFromStateBlob(raw: unknown) {
       cwd: typeof runtime.cwd === "string" ? runtime.cwd : undefined,
       env: toRecord(runtime.env),
       model: typeof runtime.model === "string" && runtime.model.trim().length > 0 ? runtime.model.trim() : undefined,
-      timeoutMs: toNumber(runtime.timeoutMs)
+      timeoutMs: toNumber(runtime.timeoutMs),
+      enabledSkillIds: parseEnabledSkillIdsFromState(runtime.enabledSkillIds)
     };
   } catch {
     return {};
   }
+}
+
+function parseEnabledSkillIdsFromState(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    out.push(trimmed);
+    if (out.length >= 64) {
+      break;
+    }
+  }
+  return out;
 }
 
 function parseStringArray(raw: unknown) {

@@ -367,15 +367,22 @@ export async function linkCompanySkillFromUrl(input: { companyId: string; skillI
   return { skillId: id, url: url.toString() };
 }
 
-export async function materializeLinkedSkillsForRuntime(companyId: string): Promise<{
+export async function materializeLinkedSkillsForRuntime(
+  companyId: string,
+  options?: { enabledSkillIds?: string[] }
+): Promise<{
   root: string | null;
   cleanup: () => Promise<void>;
 }> {
   const { skillsRoot, items } = await listCompanySkillPackages({ companyId, maxSkills: 100 });
   const tmpRoot = await mkdtemp(join(tmpdir(), "bopodev-linked-skills-"));
+  const allow = options?.enabledSkillIds;
   let written = 0;
   try {
     for (const item of items) {
+      if (allow !== undefined && !allow.includes(item.skillId)) {
+        continue;
+      }
       if (!item.linkedUrl) {
         continue;
       }

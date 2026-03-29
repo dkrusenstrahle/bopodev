@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BUILTIN_BOPO_SKILL_IDS } from "bopodev-contracts";
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -8,6 +9,12 @@ export type BuiltinBopoSkill = {
   id: string;
   title: string;
   content: string;
+};
+
+const BUILTIN_TITLES: Record<string, string> = {
+  "bopodev-control-plane": "Bopo control plane",
+  "bopodev-create-agent": "Bopo create agent",
+  "para-memory-files": "PARA memory files"
 };
 
 function readBundled(id: string, title: string): BuiltinBopoSkill {
@@ -24,8 +31,6 @@ function readBundled(id: string, title: string): BuiltinBopoSkill {
 }
 
 /** Injected into local agent runtimes alongside company `skills/`. Read-only in Settings UI. */
-export const BUILTIN_BOPO_SKILLS: BuiltinBopoSkill[] = [
-  readBundled("bopodev-control-plane", "Bopo control plane"),
-  readBundled("bopodev-create-agent", "Bopo create agent"),
-  readBundled("para-memory-files", "PARA memory files")
-];
+export const BUILTIN_BOPO_SKILLS: BuiltinBopoSkill[] = BUILTIN_BOPO_SKILL_IDS.map((id) =>
+  readBundled(id, BUILTIN_TITLES[id] ?? id)
+);

@@ -3,7 +3,11 @@ import { access, cp, lstat, mkdir, mkdtemp, readdir, rm, symlink } from "node:fs
 import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AgentFinalRunOutputSchema, type AgentFinalRunOutput } from "bopodev-contracts";
+import {
+  AgentFinalRunOutputSchema,
+  BUILTIN_BOPO_SKILL_IDS,
+  type AgentFinalRunOutput
+} from "bopodev-contracts";
 import type { AgentRuntimeConfig } from "./types";
 
 type LocalProvider = "claude_code" | "codex" | "cursor" | "opencode" | "gemini_cli";
@@ -750,6 +754,31 @@ type SkillInjectionContext = {
   cleanup: () => Promise<void>;
 };
 
+const BUILTIN_BOPO_SKILL_ID_SET = new Set<string>(BUILTIN_BOPO_SKILL_IDS);
+
+function resolveEnabledSkillIdFilter(env: NodeJS.ProcessEnv): Set<string> | null {
+  const key = "BOPODEV_ENABLED_SKILL_IDS";
+  // Missing key = legacy "all skills". Present + empty = explicit none (matches heartbeat env contract).
+  if (!Object.hasOwn(env, key)) {
+    return null;
+  }
+  const raw = String(env[key] ?? "").trim();
+  if (raw === "") {
+    return new Set<string>();
+  }
+  return new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+}
+
+function shouldInjectSkill(skillDirName: string, filter: Set<string> | null): boolean {
+  if (filter === null) {
+    return true;
+  }
+  if (BUILTIN_BOPO_SKILL_ID_SET.has(skillDirName)) {
+    return true;
+  }
+  return filter.has(skillDirName);
+}
+
 async function prepareSkillInjection(
   provider: LocalProvider | undefined,
   env: NodeJS.ProcessEnv
@@ -766,10 +795,12 @@ async function prepareSkillInjection(
     };
   }
 
+  const skillFilter = resolveEnabledSkillIdFilter(env);
+
   if (provider === "codex") {
     try {
       for (const dir of skillRoots) {
-        await ensureCodexSkillsInjected(dir, env);
+        await ensureCodexSkillsInjected(dir, env, skillFilter);
       }
       return noSkillInjection();
     } catch (error) {
@@ -783,7 +814,7 @@ async function prepareSkillInjection(
   if (provider === "cursor") {
     try {
       for (const dir of skillRoots) {
-        await ensureSkillsInjectedAtHome(dir, join(homedir(), ".cursor", "skills"));
+        await ensureSkillsInjectedAtHome(dir, join(homedir(), ".cursor", "skills"), skillFilter);
       }
       return noSkillInjection();
     } catch (error) {
@@ -797,7 +828,7 @@ async function prepareSkillInjection(
   if (provider === "opencode") {
     try {
       for (const dir of skillRoots) {
-        await ensureSkillsInjectedAtHome(dir, join(homedir(), ".claude", "skills"));
+        await ensureSkillsInjectedAtHome(dir, join(homedir(), ".claude", "skills"), skillFilter);
       }
       return noSkillInjection();
     } catch (error) {
@@ -814,7 +845,7 @@ async function prepareSkillInjection(
   }
 
   try {
-    const tempSkillsRoot = await buildClaudeSkillsAddDirFromRoots(skillRoots);
+    const tempSkillsRoot = await buildClaudeSkillsAddDirFromRoots(skillRoots, skillFilter);
     return {
       additionalArgs: ["--add-dir", tempSkillsRoot],
       cleanup: async () => {
@@ -1489,7 +1520,11 @@ async function resolveSkillInjectionSourceRoots(env: NodeJS.ProcessEnv): Promise
   return roots;
 }
 
-async function ensureCodexSkillsInjected(skillsSourceDir: string, env: NodeJS.ProcessEnv) {
+async function ensureCodexSkillsInjected(
+  skillsSourceDir: string,
+  env: NodeJS.ProcessEnv,
+  skillFilter: Set<string> | null
+) {
   const codexHome = resolveCodexHome(env);
   const targetRoot = join(codexHome, SKILLS_DIR_NAME);
   await mkdir(targetRoot, { recursive: true });
@@ -1498,6 +1533,9 @@ async function ensureCodexSkillsInjected(skillsSourceDir: string, env: NodeJS.Pr
   const entries = await readdir(skillsSourceDir, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) {
+      continue;
+    }
+    if (!shouldInjectSkill(entry.name, skillFilter)) {
       continue;
     }
     const source = join(skillsSourceDir, entry.name);
@@ -1594,12 +1632,19 @@ async function withProviderRuntimeIsolation(
   };
 }
 
-async function ensureSkillsInjectedAtHome(skillsSourceDir: string, targetRoot: string) {
+async function ensureSkillsInjectedAtHome(
+  skillsSourceDir: string,
+  targetRoot: string,
+  skillFilter: Set<string> | null
+) {
   await mkdir(targetRoot, { recursive: true });
   await pruneBrokenSkillSymlinks(targetRoot);
   const entries = await readdir(skillsSourceDir, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (!shouldInjectSkill(entry.name, skillFilter)) {
+      continue;
+    }
     const source = join(skillsSourceDir, entry.name);
     if (!(await hasSkillManifest(source))) continue;
     const target = join(targetRoot, entry.name);
@@ -1705,7 +1750,10 @@ function sanitizePathSegment(value: string | undefined) {
   return trimmed.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
-async function buildClaudeSkillsAddDirFromRoots(skillsSourceRoots: string[]) {
+async function buildClaudeSkillsAddDirFromRoots(
+  skillsSourceRoots: string[],
+  skillFilter: Set<string> | null
+) {
   const tempRoot = await mkdtemp(join(tmpdir(), "bopodev-skills-"));
   const skillsTargetDir = join(tempRoot, CLAUDE_SKILLS_DIR);
   await mkdir(skillsTargetDir, { recursive: true });
@@ -1714,6 +1762,9 @@ async function buildClaudeSkillsAddDirFromRoots(skillsSourceRoots: string[]) {
     const entries = await readdir(skillsSourceDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) {
+        continue;
+      }
+      if (!shouldInjectSkill(entry.name, skillFilter)) {
         continue;
       }
       const source = join(skillsSourceDir, entry.name);

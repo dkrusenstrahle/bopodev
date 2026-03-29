@@ -75,7 +75,8 @@ const hireAgentPayloadSchema = AgentCreateRequestSchema.extend({
       sandboxMode: z.enum(["workspace_write", "full_access"]).optional(),
       allowWebSearch: z.boolean().optional()
     })
-    .optional()
+    .optional(),
+  enabledSkillIds: z.array(z.string().min(1)).max(64).nullable().optional()
 });
 
 const activateGoalPayloadSchema = z.object({
@@ -239,7 +240,7 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
       )
     );
     const defaultRuntimeCwd = await resolveDefaultRuntimeCwdForCompany(db, companyId);
-    const runtimeConfig = normalizeRuntimeConfig({
+    let runtimeConfig = normalizeRuntimeConfig({
       runtimeConfig: parsed.data.runtimeConfig,
       legacy: {
         runtimeCommand: parsed.data.runtimeCommand,
@@ -252,10 +253,17 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
         runtimeTimeoutSec: parsed.data.runtimeTimeoutSec,
         interruptGraceSec: parsed.data.interruptGraceSec,
         runtimeEnv: parsed.data.runtimeEnv,
-        runPolicy: parsed.data.runPolicy
+        runPolicy: parsed.data.runPolicy,
+        enabledSkillIds: parsed.data.enabledSkillIds
       },
       defaultRuntimeCwd
     });
+    const rc = parsed.data.runtimeConfig;
+    const hasEnabledSkillIdsKey =
+      rc !== undefined && rc !== null && typeof rc === "object" && "enabledSkillIds" in rc;
+    if (!hasEnabledSkillIdsKey && parsed.data.enabledSkillIds === undefined) {
+      runtimeConfig = { ...runtimeConfig, enabledSkillIds: [] };
+    }
     if (runtimeConfig.runtimeCwd) {
       try {
         runtimeConfig.runtimeCwd = assertRuntimeCwdForCompany(companyId, runtimeConfig.runtimeCwd, "runtimeCwd");

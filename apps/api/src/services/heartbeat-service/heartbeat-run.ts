@@ -9,6 +9,7 @@ import {
   ControlPlaneRequestHeadersSchema,
   ControlPlaneRuntimeEnvSchema,
   ExecutionOutcomeSchema,
+  mergeBuiltinSkillIdsForInjection,
   type ExecutionOutcome,
   type RunArtifact,
   type RunCompletionReason,
@@ -708,7 +709,13 @@ export async function runHeartbeatForAgent(
     if (runMode === "redo") {
       state = clearResumeState(state);
     }
-    const linkedMaterialized = await materializeLinkedSkillsForRuntime(companyId);
+    const mergedSkillIds = mergeRuntimeForExecution(
+      { enabledSkillIds: persistedRuntime.enabledSkillIds },
+      state.runtime
+    ).enabledSkillIds;
+    const linkedMaterialized = await materializeLinkedSkillsForRuntime(companyId, {
+      enabledSkillIds: mergedSkillIds
+    });
     linkedSkillsMaterializationCleanup = linkedMaterialized.cleanup;
     const heartbeatRuntimeEnv: Record<string, string> = {
       ...buildHeartbeatRuntimeEnv({
@@ -752,15 +759,27 @@ export async function runHeartbeatForAgent(
       thinkingEffort: persistedRuntime.runtimeThinkingEffort,
       bootstrapPrompt: persistedRuntime.bootstrapPrompt,
       interruptGraceSec: persistedRuntime.interruptGraceSec,
-      runPolicy: persistedRuntime.runPolicy
+      runPolicy: persistedRuntime.runPolicy,
+      enabledSkillIds: persistedRuntime.enabledSkillIds
     };
     const mergedRuntime = mergeRuntimeForExecution(runtimeFromConfig, state.runtime);
+    const runtimeForWorkspace = {
+      ...mergedRuntime,
+      env: {
+        ...(mergedRuntime.env ?? {}),
+        ...(mergedRuntime.enabledSkillIds !== undefined
+          ? {
+              BOPODEV_ENABLED_SKILL_IDS: mergeBuiltinSkillIdsForInjection(mergedRuntime.enabledSkillIds)!.join(",")
+            }
+          : {})
+      }
+    };
     const workspaceResolution = await resolveRuntimeWorkspaceForWorkItems(
       db,
       companyId,
       agent.id,
       contextWorkItems,
-      mergedRuntime
+      runtimeForWorkspace
     );
     await mkdir(join(resolveAgentFallbackWorkspace(companyId, agent.id), "operating"), { recursive: true });
     state = {
@@ -3395,6 +3414,7 @@ function parseAgentState(stateBlob: string | null) {
           model?: string;
           thinkingEffort?: "auto" | "low" | "medium" | "high";
           bootstrapPrompt?: string;
+          enabledSkillIds?: string[];
           runPolicy?: {
             sandboxMode?: "workspace_write" | "full_access";
             allowWebSearch?: boolean;
@@ -3939,6 +3959,7 @@ function mergeRuntimeForExecution(
         model?: string;
         thinkingEffort?: "auto" | "low" | "medium" | "high";
         bootstrapPrompt?: string;
+        enabledSkillIds?: string[];
         runPolicy?: {
           sandboxMode?: "workspace_write" | "full_access";
           allowWebSearch?: boolean;
@@ -3958,6 +3979,7 @@ function mergeRuntimeForExecution(
         model?: string;
         thinkingEffort?: "auto" | "low" | "medium" | "high";
         bootstrapPrompt?: string;
+        enabledSkillIds?: string[];
         runPolicy?: {
           sandboxMode?: "workspace_write" | "full_access";
           allowWebSearch?: boolean;

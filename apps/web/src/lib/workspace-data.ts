@@ -72,6 +72,8 @@ export interface WorkspaceData {
     interruptGraceSec?: number | null;
     runPolicyJson?: string | null;
     stateBlob?: string;
+    /** Company skill ids only when set; built-ins always inject. */
+    enabledSkillIds?: string[] | null;
   }>;
   heartbeatRuns: Array<{
     id: string;

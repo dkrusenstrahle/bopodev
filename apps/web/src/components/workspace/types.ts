@@ -44,6 +44,8 @@ export interface AgentRow {
   interruptGraceSec?: number | null;
   runPolicyJson?: string | null;
   stateBlob?: string;
+  /** null = all company skills (legacy). Otherwise company ids only; built-in skills always inject. */
+  enabledSkillIds?: string[] | null;
 }
 
 export interface HeartbeatRunRow {

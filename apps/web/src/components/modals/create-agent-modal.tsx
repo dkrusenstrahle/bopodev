@@ -239,7 +239,12 @@ export function CreateAgentModal({
   const [skillAttachMode, setSkillAttachMode] = useState<"all" | "explicit">("explicit");
   const [explicitCompanySkillIds, setExplicitCompanySkillIds] = useState<string[]>([]);
   const [skillsCompany, setSkillsCompany] = useState<
-    Array<{ skillId: string; linkedUrl: string | null; hasLocalSkillMd: boolean }>
+    Array<{
+      skillId: string;
+      linkedUrl: string | null;
+      linkLastFetchedAt: string | null;
+      hasLocalSkillMd: boolean;
+    }>
   >([]);
   const [skillsLibraryError, setSkillsLibraryError] = useState<string | null>(null);
   const isEditing = Boolean(agent);
@@ -597,7 +602,12 @@ export function CreateAgentModal({
     void (async () => {
       try {
         const co = await apiGet<{
-          items: Array<{ skillId: string; linkedUrl: string | null; hasLocalSkillMd: boolean }>;
+          items: Array<{
+            skillId: string;
+            linkedUrl: string | null;
+            linkLastFetchedAt: string | null;
+            hasLocalSkillMd: boolean;
+          }>;
         }>("/observability/company-skills", companyId);
         if (cancelled) {
           return;

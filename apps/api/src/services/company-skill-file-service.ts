@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import TurndownService from "turndown";
@@ -26,6 +26,7 @@ Add guidance for the agent here.
 export type CompanySkillPackageListItem = {
   skillId: string;
   linkedUrl: string | null;
+  linkLastFetchedAt: string | null;
 };
 
 export function assertCompanySkillId(skillId: string): string {
@@ -69,7 +70,12 @@ async function skillDirHasSkillMd(root: string): Promise<boolean> {
   }
 }
 
-export async function readOptionalSkillLinkUrl(root: string): Promise<string | null> {
+export type CompanySkillLinkRecord = {
+  url: string;
+  lastFetchedAt: string | null;
+};
+
+export async function readOptionalSkillLinkRecord(root: string): Promise<CompanySkillLinkRecord | null> {
   try {
     const raw = await readFile(join(root, SKILL_LINK_BASENAME), "utf8");
     const parsed: unknown = JSON.parse(raw);
@@ -80,10 +86,29 @@ export async function readOptionalSkillLinkUrl(root: string): Promise<string | n
     if (typeof urlRaw !== "string" || !urlRaw.trim()) {
       return null;
     }
-    return assertImportUrl(urlRaw.trim()).toString();
+    const url = assertImportUrl(urlRaw.trim()).toString();
+    const lastRaw = (parsed as { lastFetchedAt?: unknown }).lastFetchedAt;
+    const lastFetchedAt =
+      typeof lastRaw === "string" && lastRaw.trim() ? lastRaw.trim() : null;
+    return { url, lastFetchedAt };
   } catch {
     return null;
   }
+}
+
+export async function readOptionalSkillLinkUrl(root: string): Promise<string | null> {
+  const rec = await readOptionalSkillLinkRecord(root);
+  return rec?.url ?? null;
+}
+
+async function writeSkillLinkMetadata(root: string, url: string): Promise<{ lastFetchedAt: string }> {
+  const lastFetchedAt = new Date().toISOString();
+  await writeFile(
+    join(root, SKILL_LINK_BASENAME),
+    JSON.stringify({ url, lastFetchedAt }, null, 2),
+    "utf8"
+  );
+  return { lastFetchedAt };
 }
 
 export async function listCompanySkillPackages(input: { companyId: string; maxSkills?: number }) {
@@ -101,11 +126,16 @@ export async function listCompanySkillPackages(input: { companyId: string; maxSk
     }
     const skillDir = join(skillsRoot, ent.name);
     const hasMd = await skillDirHasSkillMd(skillDir);
-    const linkedUrl = await readOptionalSkillLinkUrl(skillDir);
+    const linkRec = await readOptionalSkillLinkRecord(skillDir);
+    const linkedUrl = linkRec?.url ?? null;
     if (!hasMd && !linkedUrl) {
       continue;
     }
-    items.push({ skillId: ent.name, linkedUrl });
+    items.push({
+      skillId: ent.name,
+      linkedUrl,
+      linkLastFetchedAt: linkRec?.lastFetchedAt ?? null
+    });
     if (items.length >= maxSkills) {
       break;
     }
@@ -378,28 +408,25 @@ function slugifyForCompanySkillId(raw: string): string {
   return s.length > 0 ? s : "linked-skill";
 }
 
-async function resolveSkillIdForUrlLink(input: { url: URL; explicitSkillId?: string }): Promise<string> {
+/** Single fetch; used when linking from URL so SKILL.md and link metadata stay in sync. */
+async function resolveIdAndMarkdownForUrlLink(input: {
+  url: URL;
+  explicitSkillId?: string;
+}): Promise<{ id: string; markdown: string }> {
+  const markdown = await fetchSkillMarkdownFromUrl(input.url);
   if (input.explicitSkillId !== undefined && input.explicitSkillId.trim()) {
-    return assertCompanySkillId(input.explicitSkillId);
-  }
-  let markdown: string;
-  try {
-    markdown = await fetchSkillMarkdownFromUrl(input.url);
-  } catch (error) {
-    const fromPath = slugifyForCompanySkillId(inferSkillIdFromUrlPath(input.url));
-    try {
-      return assertCompanySkillId(fromPath);
-    } catch {
-      throw error;
-    }
+    return { id: assertCompanySkillId(input.explicitSkillId), markdown };
   }
   const fromFrontmatter = parseYamlNameFromSkillFrontmatter(markdown);
   const candidate = fromFrontmatter ?? inferSkillIdFromUrlPath(input.url);
   const id = slugifyForCompanySkillId(candidate);
   try {
-    return assertCompanySkillId(id);
+    return { id: assertCompanySkillId(id), markdown };
   } catch {
-    return assertCompanySkillId(slugifyForCompanySkillId(inferSkillIdFromUrlPath(input.url)));
+    return {
+      id: assertCompanySkillId(slugifyForCompanySkillId(inferSkillIdFromUrlPath(input.url))),
+      markdown
+    };
   }
 }
 
@@ -448,7 +475,7 @@ export async function fetchSkillMarkdownFromUrl(url: URL): Promise<string> {
   }
 }
 
-/** Store only `.bopo-skill-link.json`; content is resolved from the URL when viewed or at heartbeat time. */
+/** Download SKILL.md, write `.bopo-skill-link.json` with url and lastFetchedAt (legacy link-only dirs still fetch on read until refreshed). */
 export async function linkCompanySkillFromUrl(input: {
   companyId: string;
   url: string;
@@ -456,14 +483,28 @@ export async function linkCompanySkillFromUrl(input: {
   skillId?: string;
 }) {
   const url = assertImportUrl(input.url);
-  const id = await resolveSkillIdForUrlLink({ url, explicitSkillId: input.skillId });
+  const { id, markdown } = await resolveIdAndMarkdownForUrlLink({
+    url,
+    explicitSkillId: input.skillId
+  });
   const { root } = await skillRoot(input.companyId, id);
   await mkdir(root, { recursive: true });
-  if (await skillDirHasSkillMd(root)) {
-    await unlink(join(root, SKILL_MD));
+  await writeFile(join(root, SKILL_MD), markdown, { encoding: "utf8" });
+  const { lastFetchedAt } = await writeSkillLinkMetadata(root, url.toString());
+  return { skillId: id, url: url.toString(), lastFetchedAt };
+}
+
+/** Re-fetch from the URL stored in `.bopo-skill-link.json` and overwrite local SKILL.md. */
+export async function refreshCompanySkillFromUrl(input: { companyId: string; skillId: string }) {
+  const { root, id } = await skillRoot(input.companyId, input.skillId);
+  const record = await readOptionalSkillLinkRecord(root);
+  if (!record?.url) {
+    throw new Error("Skill is not linked from a URL.");
   }
-  await writeFile(join(root, SKILL_LINK_BASENAME), JSON.stringify({ url: url.toString() }, null, 2), "utf8");
-  return { skillId: id, url: url.toString() };
+  const markdown = await fetchSkillMarkdownFromUrl(new URL(record.url));
+  await writeFile(join(root, SKILL_MD), markdown, { encoding: "utf8" });
+  const { lastFetchedAt } = await writeSkillLinkMetadata(root, record.url);
+  return { skillId: id, url: record.url, lastFetchedAt };
 }
 
 export async function materializeLinkedSkillsForRuntime(

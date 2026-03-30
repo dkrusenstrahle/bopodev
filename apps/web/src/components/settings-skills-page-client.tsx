@@ -35,6 +35,7 @@ interface CompanySkillsListResponse {
   items: Array<{
     skillId: string;
     linkedUrl: string | null;
+    linkLastFetchedAt: string | null;
     hasLocalSkillMd: boolean;
     files: Array<{ relativePath: string }>;
   }>;
@@ -114,6 +115,7 @@ export function SettingsSkillsPageClient({
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [forkBusy, setForkBusy] = useState(false);
+  const [refreshBusy, setRefreshBusy] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingDeleteSkillId, setPendingDeleteSkillId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -222,6 +224,7 @@ export function SettingsSkillsPageClient({
   const skillIsUrlLinkedOnly = Boolean(
     selectedCompanyPack?.linkedUrl && !selectedCompanyPack?.hasLocalSkillMd
   );
+  const skillHasLinkedUrl = Boolean(selectedCompanyPack?.linkedUrl);
 
   const syncDataRef = useRef({ builtinIds, companyItems });
   syncDataRef.current = { builtinIds, companyItems };
@@ -428,6 +431,42 @@ export function SettingsSkillsPageClient({
     }
   }
 
+  async function refreshLinkedSkillFromUrl() {
+    if (!companyId || !open || open.kind !== "company" || !skillHasLinkedUrl) {
+      return;
+    }
+    if (dirty) {
+      const ok = window.confirm(
+        "Discard unsaved edits and replace the open file from the linked URL?"
+      );
+      if (!ok) {
+        return;
+      }
+    }
+    setSaveError(null);
+    setRefreshBusy(true);
+    const keyAtStart = loadKeyRef.current;
+    try {
+      await apiPost("/observability/company-skills/refresh-from-url", companyId, {
+        skillId: open.skillId
+      });
+      await refreshCompanySkills();
+      const base = `/observability/company-skills/file?skillId=${encodeURIComponent(open.skillId)}&path=${encodeURIComponent(open.relativePath)}`;
+      const res = await apiGet<FileBodyResponse>(base, companyId);
+      if (loadKeyRef.current === keyAtStart) {
+        const text = res.data.content ?? "";
+        setBaselineContent(text);
+        setDraftContent(text);
+      }
+    } catch (error) {
+      if (loadKeyRef.current === keyAtStart) {
+        setSaveError(error instanceof ApiError ? error.message : "Refresh from URL failed.");
+      }
+    } finally {
+      setRefreshBusy(false);
+    }
+  }
+
   async function submitDeleteSkill() {
     if (!companyId || !pendingDeleteSkillId) {
       return;
@@ -505,8 +544,15 @@ export function SettingsSkillsPageClient({
                         <span className="run-sidebar-item-id" title={`${pack.skillId} · ${f.relativePath}`}>
                           {pack.skillId}
                         </span>
-                        {pack.linkedUrl && !pack.hasLocalSkillMd ? (
-                          <span className="ui-settings-skills-linked-pill" title="Linked skill (URL)">
+                        {pack.linkedUrl ? (
+                          <span
+                            className="ui-settings-skills-linked-pill"
+                            title={
+                              pack.linkLastFetchedAt
+                                ? `Linked · last fetched ${pack.linkLastFetchedAt}`
+                                : "Linked from URL"
+                            }
+                          >
                             Linked
                           </span>
                         ) : null}
@@ -548,7 +594,9 @@ export function SettingsSkillsPageClient({
         ? `Built-in · ${open.skillId}`
         : skillIsUrlLinkedOnly
           ? `Company · ${open.skillId} / ${open.relativePath} (live from URL)`
-          : `Company · ${open.skillId} / ${open.relativePath}`;
+          : skillHasLinkedUrl
+            ? `Company · ${open.skillId} / ${open.relativePath} · linked (local copy)`
+            : `Company · ${open.skillId} / ${open.relativePath}`;
 
   return (
     <>
@@ -573,6 +621,16 @@ export function SettingsSkillsPageClient({
                       disabled={forkBusy || !editorReady}
                     >
                       {forkBusy ? "Saving copy…" : "Save copy"}
+                    </Button>
+                  ) : null}
+                  {companyId && open?.kind === "company" && skillHasLinkedUrl ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void refreshLinkedSkillFromUrl()}
+                      disabled={refreshBusy || !editorReady}
+                    >
+                      {refreshBusy ? "Refreshing…" : "Refresh"}
                     </Button>
                   ) : null}
                   {companyId && open?.kind === "company" ? (
@@ -740,7 +798,7 @@ export function SettingsSkillsPageClient({
                 <FieldLabel htmlFor="settings-skills-link-url">URL</FieldLabel>
                 <Input
                   id="settings-skills-link-url"
-                  placeholder="https://skills.sh/… or https://raw.githubusercontent.com/…"
+                  placeholder="https://skills.sh"
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                 />

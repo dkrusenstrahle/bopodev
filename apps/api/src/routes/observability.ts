@@ -31,6 +31,7 @@ import {
   linkCompanySkillFromUrl,
   listCompanySkillFiles,
   listCompanySkillPackages,
+  refreshCompanySkillFromUrl,
   readCompanySkillFile,
   writeCompanySkillFile
 } from "../services/company-skill-file-service";
@@ -547,6 +548,7 @@ export function createObservabilityRouter(ctx: AppContext) {
           return {
             skillId: pack.skillId,
             linkedUrl: pack.linkedUrl,
+            linkLastFetchedAt: pack.linkLastFetchedAt,
             hasLocalSkillMd,
             files: relativePaths.map((relativePath) => ({ relativePath }))
           };
@@ -633,6 +635,26 @@ export function createObservabilityRouter(ctx: AppContext) {
         companyId,
         url: body.url,
         ...(optionalSkillId ? { skillId: optionalSkillId } : {})
+      });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.post("/company-skills/refresh-from-url", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const body = req.body as { skillId?: unknown };
+    if (typeof body?.skillId !== "string" || !body.skillId.trim()) {
+      return sendError(res, "Expected JSON body with string 'skillId'.", 422);
+    }
+    try {
+      const result = await refreshCompanySkillFromUrl({
+        companyId,
+        skillId: body.skillId.trim()
       });
       return sendOk(res, result);
     } catch (error) {

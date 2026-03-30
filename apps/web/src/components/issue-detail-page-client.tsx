@@ -1207,6 +1207,10 @@ export function IssueDetailPageClient({
                 </Card>
               </form>
               {commentsLoading ? <div className="ui-issue-muted-text">Loading comments...</div> : null}
+              <SectionHeading
+                title="Comments"
+                description="Comments on this issue."
+              />
               {visibleComments.map((comment) => (
                 <div key={comment.id} className="ui-issue-comment-card">
                   <div className="ui-issue-comment-row">
@@ -1329,12 +1333,18 @@ export function IssueDetailPageClient({
               {subIssues.length === 0 ? (
                 <EmptyState>No sub-issues linked yet.</EmptyState>
               ) : (
-                <DataTable
-                  columns={issueSubIssueColumns}
-                  data={subIssues}
-                  emptyMessage="No sub-issues linked yet."
-                  showViewOptions={false}
-                />
+                <>
+                  <SectionHeading
+                    title="Sub-issues"
+                    description="Sub-issues linked to this issue."
+                  />
+                  <DataTable
+                    columns={issueSubIssueColumns}
+                    data={subIssues}
+                    emptyMessage="No sub-issues linked yet."
+                    showViewOptions={false}
+                  />
+                </>
               )}
 
               <div className="ui-issue-subissue-actions">
@@ -1359,12 +1369,18 @@ export function IssueDetailPageClient({
                 </EmptyState>
               ) : null}
               {issueLoops.length > 0 ? (
-                <DataTable
-                  columns={issueLoopColumns}
-                  data={issueLoops}
-                  emptyMessage="No linked work loops yet."
-                  showViewOptions={false}
+                <>
+                  <SectionHeading
+                  title="Loops"
+                  description="Linked work loops for this issue."
                 />
+                  <DataTable
+                    columns={issueLoopColumns}
+                    data={issueLoops}
+                    emptyMessage="No linked work loops yet."
+                    showViewOptions={false}
+                  />
+                </>
               ) : null}
               <div className="ui-issue-subissue-actions">
                 <Button asChild variant="outline">
@@ -1376,12 +1392,18 @@ export function IssueDetailPageClient({
               {activityLoading ? <div className="ui-issue-muted-text">Loading activity...</div> : null}
               {!activityLoading && activityItems.length === 0 ? <EmptyState>No activity yet.</EmptyState> : null}
               {activityItems.length > 0 ? (
-                <DataTable
-                  columns={issueActivityColumns}
-                  data={activityItems}
-                  emptyMessage="No activity yet."
-                  showViewOptions={false}
-                />
+                <>
+                  <SectionHeading
+                    title="Activity"
+                    description="Activity log for this issue."
+                  />
+                  <DataTable
+                    columns={issueActivityColumns}
+                    data={activityItems}
+                    emptyMessage="No activity yet."
+                    showViewOptions={false}
+                  />
+                </>
               ) : null}
             </TabsContent>
           </Tabs>

@@ -1369,6 +1369,10 @@ export function LoopDetailPageClient(
                     </form>
                   </Card>
                   <div className="ui-loop-triggers-after-form">
+                    <SectionHeading
+                      title="Triggers"
+                      description="Triggers for this loop."
+                    />
                     {detail.triggers.length === 0 ? (
                       <p className="ui-issue-muted-text">No triggers yet.</p>
                     ) : (
@@ -1579,6 +1583,10 @@ export function LoopDetailPageClient(
                   </Dialog>
                 </TabsContent>
                 <TabsContent value="runs" className="ui-issue-tabs-content">
+                  <SectionHeading
+                    title="Runs"
+                    description="Heartbeat runs scoped to this loop."
+                  />
                   <DataTable
                     columns={loopRunColumns}
                     data={detail.recentRuns}
@@ -1588,6 +1596,10 @@ export function LoopDetailPageClient(
                   />
                 </TabsContent>
                 <TabsContent value="activity" className="ui-issue-tabs-content">
+                <SectionHeading
+                  title="Activity"
+                  description="Activity log for this loop."
+                />
                   <DataTable
                     columns={loopActivityColumns}
                     data={activity}

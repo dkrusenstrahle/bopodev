@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AppShell } from "@/components/app-shell";
 import { CollapsibleMarkdown } from "@/components/markdown-view";
+import { CreateGoalModal } from "@/components/modals/create-goal-modal";
 import { CreateIssueModal } from "@/components/modals/create-issue-modal";
 import { CreateProjectModal } from "@/components/modals/create-project-modal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -141,7 +142,7 @@ export function ProjectDetailPageClient({
   companyId: string;
   companies: Array<{ id: string; name: string }>;
   project: ProjectRow;
-  goals: Array<{ id: string; title: string; projectId: string | null }>;
+  goals: Array<{ id: string; title: string; level: string; projectId: string | null; parentGoalId: string | null }>;
   linkedGoals: Array<{ id: string; title: string }>;
   issues: IssueRow[];
   agents: AgentRow[];
@@ -300,6 +301,21 @@ export function ProjectDetailPageClient({
             goals={goals}
             defaultProjectId={project.id}
             triggerLabel="Create issue"
+            triggerVariant="outline"
+            triggerSize="sm"
+          />
+          <CreateGoalModal
+            companyId={companyId}
+            agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+            allGoals={goals.map((g) => ({
+              id: g.id,
+              title: g.title,
+              level: g.level,
+              projectId: g.projectId,
+              parentGoalId: g.parentGoalId
+            }))}
+            defaultProjectId={project.id}
+            triggerLabel="New goal"
             triggerVariant="outline"
             triggerSize="sm"
           />

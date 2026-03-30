@@ -29,11 +29,11 @@ import {
 } from "../schema";
 import {
   assertAgentBelongsToCompany,
-  assertGoalBelongsToCompany,
   assertIssueGoalsAssignable,
   assertIssueBelongsToCompany,
   assertProjectBelongsToCompany,
   assertTemplateBelongsToCompany,
+  assertValidGoalHierarchy,
   compactUpdate,
   RepositoryValidationError
 } from "./helpers";
@@ -946,11 +946,15 @@ export async function createGoal(
     description?: string;
   }
 ) {
-  if (input.projectId) {
-    await assertProjectBelongsToCompany(db, input.companyId, input.projectId);
-  }
-  if (input.parentGoalId) {
-    await assertGoalBelongsToCompany(db, input.companyId, input.parentGoalId);
+  const projectId = input.projectId?.trim() ? input.projectId.trim() : null;
+  const parentGoalId = input.parentGoalId?.trim() ? input.parentGoalId.trim() : null;
+  await assertValidGoalHierarchy(db, input.companyId, {
+    level: input.level,
+    projectId,
+    parentGoalId
+  });
+  if (projectId) {
+    await assertProjectBelongsToCompany(db, input.companyId, projectId);
   }
   if (input.ownerAgentId) {
     await assertAgentBelongsToCompany(db, input.companyId, input.ownerAgentId);
@@ -959,14 +963,14 @@ export async function createGoal(
   await db.insert(goals).values({
     id,
     companyId: input.companyId,
-    projectId: input.projectId ?? null,
-    parentGoalId: input.parentGoalId ?? null,
+    projectId,
+    parentGoalId,
     ownerAgentId: input.ownerAgentId?.trim() ? input.ownerAgentId.trim() : null,
     level: input.level,
     title: input.title,
     description: input.description ?? null
   });
-  return { id, ...input };
+  return { id, ...input, projectId, parentGoalId };
 }
 
 export async function listGoals(db: BopoDb, companyId: string) {
@@ -987,14 +991,37 @@ export async function updateGoal(
     status?: string;
   }
 ) {
-  if (input.projectId) {
-    await assertProjectBelongsToCompany(db, input.companyId, input.projectId);
+  const [existing] = await db
+    .select({
+      level: goals.level,
+      projectId: goals.projectId,
+      parentGoalId: goals.parentGoalId
+    })
+    .from(goals)
+    .where(and(eq(goals.companyId, input.companyId), eq(goals.id, input.id)))
+    .limit(1);
+  if (!existing) {
+    return null;
   }
-  if (input.parentGoalId) {
-    await assertGoalBelongsToCompany(db, input.companyId, input.parentGoalId);
+
+  const effectiveLevel = (input.level ?? existing.level) as "company" | "project" | "agent";
+  const effectiveProjectId = input.projectId !== undefined ? input.projectId : existing.projectId;
+  const effectiveProjectIdNorm = effectiveProjectId?.trim() ? effectiveProjectId.trim() : null;
+  const effectiveParent =
+    input.parentGoalId !== undefined ? input.parentGoalId : existing.parentGoalId;
+  const effectiveParentNorm = effectiveParent?.trim() ? effectiveParent.trim() : null;
+
+  await assertValidGoalHierarchy(db, input.companyId, {
+    id: input.id,
+    level: effectiveLevel,
+    projectId: effectiveProjectIdNorm,
+    parentGoalId: effectiveParentNorm
+  });
+  if (effectiveProjectIdNorm) {
+    await assertProjectBelongsToCompany(db, input.companyId, effectiveProjectIdNorm);
   }
-  if (input.ownerAgentId) {
-    await assertAgentBelongsToCompany(db, input.companyId, input.ownerAgentId);
+  if (input.ownerAgentId?.trim()) {
+    await assertAgentBelongsToCompany(db, input.companyId, input.ownerAgentId.trim());
   }
   const [goal] = await db
     .update(goals)

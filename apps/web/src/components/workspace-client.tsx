@@ -960,6 +960,7 @@ export function WorkspaceClient({
   const [governanceQuery, setGovernanceQuery] = useState("");
   const [goalsStatusFilter, setGoalsStatusFilter] = useState<string>("all");
   const [goalsLevelFilter, setGoalsLevelFilter] = useState<string>("all");
+  const [goalsParentFilter, setGoalsParentFilter] = useState<string>("all");
   const [goalsQuery, setGoalsQuery] = useState("");
   const [projectsQuery, setProjectsQuery] = useState("");
   const [projectsActivityFilter, setProjectsActivityFilter] = useState<"all" | "active" | "no_open_issues" | "no_issues">("all");
@@ -2450,6 +2451,24 @@ export function WorkspaceClient({
       isGoalsNav ? Array.from(new Set(goals.map((goal) => goal.level))).sort((a, b) => a.localeCompare(b)) : [],
     [goals, isGoalsNav]
   );
+  const goalsParentFilterOptions = useMemo(() => {
+    if (!isGoalsNav) {
+      return [] as Array<{ id: string; title: string }>;
+    }
+    const parentIds = new Set<string>();
+    for (const g of goals) {
+      const pid = g.parentGoalId?.trim();
+      if (pid) {
+        parentIds.add(pid);
+      }
+    }
+    return Array.from(parentIds)
+      .map((id) => {
+        const row = goals.find((x) => x.id === id);
+        return { id, title: row?.title?.trim() || id };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [goals, isGoalsNav]);
   const filteredGoals = useMemo(() => {
     if (!isGoalsNav) {
       return [];
@@ -2462,19 +2481,31 @@ export function WorkspaceClient({
       if (goalsLevelFilter !== "all" && goal.level !== goalsLevelFilter) {
         return false;
       }
+      if (goalsParentFilter === "no_parent") {
+        if (goal.parentGoalId?.trim()) {
+          return false;
+        }
+      } else if (goalsParentFilter !== "all") {
+        if (goal.parentGoalId?.trim() !== goalsParentFilter) {
+          return false;
+        }
+      }
       if (!normalizedQuery) {
         return true;
       }
       const projectName = goal.projectId ? (projects.find((project) => project.id === goal.projectId)?.name ?? "") : "";
+      const parentPid = goal.parentGoalId?.trim();
+      const parentTitle = parentPid ? (goals.find((g) => g.id === parentPid)?.title ?? "") : "";
       return (
         goal.title.toLowerCase().includes(normalizedQuery) ||
         (goal.description ?? "").toLowerCase().includes(normalizedQuery) ||
         goal.status.toLowerCase().includes(normalizedQuery) ||
         goal.level.toLowerCase().includes(normalizedQuery) ||
-        projectName.toLowerCase().includes(normalizedQuery)
+        projectName.toLowerCase().includes(normalizedQuery) ||
+        parentTitle.toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [goals, goalsLevelFilter, goalsQuery, goalsStatusFilter, isGoalsNav, projects]);
+  }, [goals, goalsLevelFilter, goalsParentFilter, goalsQuery, goalsStatusFilter, isGoalsNav, projects]);
   const projectIssueSummaryById = useMemo(() => {
     if (!isProjectsNav) {
       return new Map<string, { total: number; open: number }>();
@@ -3463,16 +3494,70 @@ export function WorkspaceClient({
       {
         accessorKey: "title",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Goal" />,
-        cell: ({ row }) => (
-          <div className={styles.formatDurationContainer4}>
-            <div className={styles.formatDurationContainer1}>{row.original.title}</div>
-          </div>
-        )
+        cell: ({ row }) => {
+          const goal = row.original;
+          return (
+            <div className={styles.formatDurationContainer4}>
+              <CreateGoalModal
+                companyId={companyId!}
+                agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+                allGoals={goals.map((g) => ({
+                  id: g.id,
+                  title: g.title,
+                  level: g.level,
+                  projectId: g.projectId,
+                  parentGoalId: g.parentGoalId
+                }))}
+                goal={{
+                  id: goal.id,
+                  level: goal.level as "company" | "project" | "agent",
+                  title: goal.title,
+                  description: goal.description ?? null,
+                  status: goal.status,
+                  ownerAgentId: goal.ownerAgentId ?? null,
+                  projectId: goal.projectId,
+                  parentGoalId: goal.parentGoalId
+                }}
+                trigger={
+                  <button type="button" className={cn("ui-link-medium text-left", styles.formatDurationContainer1)}>
+                    {goal.title}
+                  </button>
+                }
+              />
+            </div>
+          );
+        }
       },
       {
         accessorKey: "level",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Level" />,
         cell: ({ row }) => <Badge variant="outline">{row.original.level}</Badge>
+      },
+      {
+        id: "parentGoal",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Parent goal" />,
+        accessorFn: (row) => {
+          const pid = row.parentGoalId?.trim();
+          if (!pid) {
+            return "";
+          }
+          return goals.find((g) => g.id === pid)?.title ?? pid;
+        },
+        cell: ({ row }) => {
+          const pid = row.original.parentGoalId?.trim();
+          if (!pid) {
+            return (
+              <div className={cn(styles.formatDurationContainer1, "text-muted-foreground")}>No goal</div>
+            );
+          }
+          const parent = goals.find((g) => g.id === pid);
+          const label = parent?.title?.trim() || pid;
+          return (
+            <div className={styles.formatDurationContainer1} title={label}>
+              {label}
+            </div>
+          );
+        }
       },
       {
         accessorKey: "status",
@@ -3482,36 +3567,9 @@ export function WorkspaceClient({
             {row.original.status}
           </Badge>
         )
-      },
-      {
-        id: "actions",
-        header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
-        enableSorting: false,
-        cell: ({ row }) => {
-          const goal = row.original;
-          return (
-            <div className={styles.formatDurationContainer3}>
-              <CreateGoalModal
-                companyId={companyId!}
-                agents={agents.map((a) => ({ id: a.id, name: a.name }))}
-                goal={{
-                  id: goal.id,
-                  level: goal.level as "company" | "project" | "agent",
-                  title: goal.title,
-                  description: goal.description ?? null,
-                  status: goal.status,
-                  ownerAgentId: goal.ownerAgentId ?? null
-                }}
-                triggerLabel="Edit"
-                triggerVariant="outline"
-                triggerSize="sm"
-              />
-            </div>
-          );
-        }
       }
     ],
-    [agents, companyId]
+    [agents, companyId, goals]
   );
 
   const agentColumns = useMemo<ColumnDef<AgentRow>[]>(
@@ -4339,6 +4397,13 @@ export function WorkspaceClient({
             <CreateGoalModal
               companyId={scopedCompanyId}
               agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+              allGoals={goals.map((g) => ({
+                id: g.id,
+                title: g.title,
+                level: g.level,
+                projectId: g.projectId,
+                parentGoalId: g.parentGoalId
+              }))}
             />
           </div>
         );
@@ -4682,7 +4747,20 @@ export function WorkspaceClient({
             <SectionHeading
               title="Goals"
               description="Strategic goals stay attached to the selected company scope."
-              actions={<CreateGoalModal companyId={companyId} triggerSize="sm" />}
+              actions={
+                <CreateGoalModal
+                  companyId={companyId}
+                  triggerSize="sm"
+                  agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+                  allGoals={goals.map((g) => ({
+                    id: g.id,
+                    title: g.title,
+                    level: g.level,
+                    projectId: g.projectId,
+                    parentGoalId: g.parentGoalId
+                  }))}
+                />
+              }
             />
             <DataTable
               columns={goalColumns}
@@ -4693,7 +4771,7 @@ export function WorkspaceClient({
                   <Input
                     value={goalsQuery}
                     onChange={(event) => setGoalsQuery(event.target.value)}
-                    placeholder="Search title, description, status, level, or project..."
+                    placeholder="Search title, description, status, level, project, or parent goal..."
                     className="ui-toolbar-filter-input"
                   />
                   <Select value={goalsStatusFilter} onValueChange={setGoalsStatusFilter}>
@@ -4718,6 +4796,20 @@ export function WorkspaceClient({
                       {goalsLevelOptions.map((level) => (
                         <SelectItem key={level} value={level}>
                           {level}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={goalsParentFilter} onValueChange={setGoalsParentFilter}>
+                    <SelectTrigger className="ui-toolbar-filter-select">
+                      <SelectValue placeholder="Parent goal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All parent goals</SelectItem>
+                      <SelectItem value="no_parent">No parent goal</SelectItem>
+                      {goalsParentFilterOptions.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.title}
                         </SelectItem>
                       ))}
                     </SelectContent>

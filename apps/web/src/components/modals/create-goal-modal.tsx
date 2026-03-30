@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiDelete, apiPost, apiPut } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -27,16 +27,62 @@ import {
 } from "@/components/ui/select";
 import styles from "./create-goal-modal.module.scss";
 
+export type GoalModalGoalRef = {
+  id: string;
+  title: string;
+  level: string;
+  projectId: string | null;
+  parentGoalId?: string | null;
+};
+
+function collectDescendantGoalIds(selfId: string, goalList: GoalModalGoalRef[]): Set<string> {
+  const byParent = new Map<string, string[]>();
+  for (const g of goalList) {
+    const p = g.parentGoalId?.trim();
+    if (!p) {
+      continue;
+    }
+    const list = byParent.get(p) ?? [];
+    list.push(g.id);
+    byParent.set(p, list);
+  }
+  const out = new Set<string>();
+  const stack = [...(byParent.get(selfId) ?? [])];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (out.has(id)) {
+      continue;
+    }
+    out.add(id);
+    for (const c of byParent.get(id) ?? []) {
+      stack.push(c);
+    }
+  }
+  return out;
+}
+
+/** Parents are always optional company-level goals (project/agent goals roll up to company outcomes). */
+function parentOptionsForCompanyGoals(allGoals: GoalModalGoalRef[], excludeIds: Set<string>): GoalModalGoalRef[] {
+  return allGoals.filter((g) => !excludeIds.has(g.id) && g.level === "company");
+}
+
 export function CreateGoalModal({
   companyId,
   agents = [],
+  allGoals = [],
+  defaultProjectId = null,
   goal,
+  /** When set, used as the dialog trigger instead of the default button (e.g. title link in a table). */
+  trigger,
   triggerLabel = "New Goal",
   triggerVariant = "default",
   triggerSize
 }: {
   companyId: string;
   agents?: Array<{ id: string; name: string }>;
+  allGoals?: GoalModalGoalRef[];
+  defaultProjectId?: string | null;
+  trigger?: ReactNode;
   goal?: {
     id: string;
     level: "company" | "project" | "agent";
@@ -44,6 +90,8 @@ export function CreateGoalModal({
     description?: string | null;
     status: string;
     ownerAgentId?: string | null;
+    projectId?: string | null;
+    parentGoalId?: string | null;
   };
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "secondary" | "ghost" | "destructive";
@@ -57,11 +105,47 @@ export function CreateGoalModal({
   const [status, setStatus] = useState(goal?.status ?? "draft");
   const [activateNow, setActivateNow] = useState(false);
   const [ownerAgentId, setOwnerAgentId] = useState<string>(goal?.ownerAgentId ?? "__all__");
+  const [parentGoalId, setParentGoalId] = useState<string>("__none__");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailsMdxKey, setDetailsMdxKey] = useState(0);
   const isEditing = Boolean(goal);
+
+  const excludedParentIds = useMemo(() => {
+    if (!goal?.id) {
+      return new Set<string>();
+    }
+    const desc = collectDescendantGoalIds(goal.id, allGoals);
+    desc.add(goal.id);
+    return desc;
+  }, [allGoals, goal?.id]);
+
+  const parentCandidates = useMemo(
+    () => parentOptionsForCompanyGoals(allGoals, excludedParentIds),
+    [allGoals, excludedParentIds]
+  );
+
+  /** Project goals never use a project dropdown: scope comes from the project page or the goal you are editing. */
+  const resolvedProjectGoalProjectId = (): string | null => {
+    const fromPage = defaultProjectId?.trim() || null;
+    if (fromPage) {
+      return fromPage;
+    }
+    if (goal?.level === "project" && goal.projectId?.trim()) {
+      return goal.projectId.trim();
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    if (parentGoalId === "__none__") {
+      return;
+    }
+    if (!parentCandidates.some((p) => p.id === parentGoalId)) {
+      setParentGoalId("__none__");
+    }
+  }, [parentCandidates, parentGoalId]);
 
   function hydrateFormFromProps() {
     setLevel(goal?.level ?? "company");
@@ -70,6 +154,7 @@ export function CreateGoalModal({
     setStatus(goal?.status ?? "draft");
     setActivateNow(false);
     setOwnerAgentId(goal?.ownerAgentId ?? "__all__");
+    setParentGoalId(goal?.parentGoalId?.trim() ? goal.parentGoalId.trim() : "__none__");
     setError(null);
   }
 
@@ -78,12 +163,28 @@ export function CreateGoalModal({
     setIsSubmitting(true);
     setError(null);
     try {
+      const projectScopeId = resolvedProjectGoalProjectId();
+      if (level === "project" && !projectScopeId) {
+        setError(
+          "Project goals belong to a specific project. Open that project and use New goal there, or edit this goal from the Goals table."
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      const parentId = parentGoalId === "__none__" ? null : parentGoalId;
+
+      const nextProjectId =
+        level === "company" ? null : level === "project" ? projectScopeId! : null;
+
       if (isEditing && goal) {
         await apiPut(`/goals/${goal.id}`, companyId, {
           level,
           title,
           description: description || null,
           status,
+          projectId: nextProjectId,
+          parentGoalId: parentId,
           ownerAgentId: level === "agent" ? (ownerAgentId === "__all__" ? null : ownerAgentId) : null
         });
       } else {
@@ -92,6 +193,8 @@ export function CreateGoalModal({
           title,
           description: description || undefined,
           activateNow,
+          ...(level === "project" ? { projectId: projectScopeId! } : {}),
+          ...(parentId ? { parentGoalId: parentId } : {}),
           ...(level === "agent" && ownerAgentId !== "__all__" ? { ownerAgentId } : {})
         });
         setLevel("company");
@@ -99,6 +202,7 @@ export function CreateGoalModal({
         setDescription("");
         setActivateNow(false);
         setOwnerAgentId("__all__");
+        setParentGoalId("__none__");
       }
       setOpen(false);
       router.refresh();
@@ -146,9 +250,11 @@ export function CreateGoalModal({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant={triggerVariant} size={triggerSize}>
-          {triggerLabel}
-        </Button>
+        {trigger ?? (
+          <Button variant={triggerVariant} size={triggerSize}>
+            {triggerLabel}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -159,14 +265,15 @@ export function CreateGoalModal({
           <div className="ui-dialog-content-scrollable">
             <FieldGroup>
               <Field>
-                <FieldLabelWithHelp helpText="Who this goal applies to: whole company, a project, or a single agent. Scope affects where the goal appears in reporting.">
+                <FieldLabelWithHelp helpText="Company: everyone’s heartbeats. Project: for the project you’re viewing (no separate project field). Create new project goals from a project’s page. Agent: cadence charter for one or all agents.">
                   Goal scope
                 </FieldLabelWithHelp>
                 <Select
                   value={level}
                   onValueChange={(value) => {
-                    setLevel(value as "company" | "project" | "agent");
-                    if (value !== "agent") {
+                    const v = value as "company" | "project" | "agent";
+                    setLevel(v);
+                    if (v !== "agent") {
                       setOwnerAgentId("__all__");
                     }
                   }}>
@@ -177,6 +284,26 @@ export function CreateGoalModal({
                     <SelectItem value="company">Company goal</SelectItem>
                     <SelectItem value="project">Project goal</SelectItem>
                     <SelectItem value="agent">Agent goal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabelWithHelp helpText="Optional. Link this goal under a company-level outcome. Agent goals apply to agents as a whole (or one agent via Agent scope), not to a single project.">
+                  Parent goal
+                </FieldLabelWithHelp>
+                <Select
+                  value={parentGoalId}
+                  onValueChange={setParentGoalId}>
+                  <SelectTrigger className={styles.createGoalModalSelectTrigger}>
+                    <SelectValue placeholder="No parent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No parent</SelectItem>
+                    {parentCandidates.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        [{g.level}] {g.title}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>

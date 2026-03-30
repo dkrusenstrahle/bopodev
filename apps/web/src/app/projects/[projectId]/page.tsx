@@ -36,7 +36,13 @@ export default async function ProjectPage({
       companyId={workspaceData.companyId}
       companies={workspaceData.companies}
       project={project}
-      goals={workspaceData.goals.map((goal) => ({ id: goal.id, title: goal.title, projectId: goal.projectId }))}
+      goals={workspaceData.goals.map((goal) => ({
+        id: goal.id,
+        title: goal.title,
+        level: goal.level,
+        projectId: goal.projectId,
+        parentGoalId: goal.parentGoalId
+      }))}
       linkedGoals={workspaceData.goals.filter((goal) => goal.projectId === project.id)}
       issues={workspaceData.issues.filter((issue) => issue.projectId === project.id)}
       agents={workspaceData.agents}

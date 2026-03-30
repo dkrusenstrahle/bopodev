@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { boolean, integer, numeric, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 
 export const companies = pgTable("companies", {
@@ -52,7 +53,7 @@ export const goals = pgTable("goals", {
     .notNull()
     .references(() => companies.id, { onDelete: "cascade" }),
   projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
-  parentGoalId: text("parent_goal_id"),
+  parentGoalId: text("parent_goal_id").references((): AnyPgColumn => goals.id, { onDelete: "set null" }),
   /** When set, this agent-level goal is included only for that agent's heartbeats; null = all agents. */
   ownerAgentId: text("owner_agent_id"),
   level: text("level").notNull(),

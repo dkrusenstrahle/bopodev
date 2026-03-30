@@ -57,6 +57,13 @@
       "when": 1743200000000,
       "tag": "0007_cost_ledger_company_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1743300000000,
+      "tag": "0008_goals_parent_goal_fk",
+      "breakpoints": true
     }
   ]
 }

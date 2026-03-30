@@ -16,7 +16,8 @@ tmp
 .pnpm-store/*
 .cursor/
 
-# Local strategy / ICP notes (see AGENTS.md for tracked contributor guidance)
+# Local strategy / ICP and contributor notes for Cursor (not published).
+AGENTS.md
 agents.md
 
 # PGlite can create this literal directory name if :memory: is resolved as a relative path (e.g. wrong cwd).

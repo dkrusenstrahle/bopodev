@@ -102,7 +102,7 @@ Then open `http://localhost:4010`, create a project, assign an issue, and run yo
 ## Contributing / development
 
 - **[DEVELOPING.md](./DEVELOPING.md)** — install, dev servers, tests, DB, CLI, export API.
-- **[AGENTS.md](./AGENTS.md)** — pointers for AI-assisted contributors.
+- **AI / Cursor** — optional root `AGENTS.md` for local contributor context; the name is in `.gitignore` and is not shipped on GitHub.
 
 ## Documentation
 

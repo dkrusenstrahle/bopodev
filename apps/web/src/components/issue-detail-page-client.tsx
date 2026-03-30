@@ -1088,16 +1088,6 @@ export function IssueDetailPageClient({
         </div>
       </div>
 
-      <Card>
-        <CardContent className="ui-detail-sidebar-section">
-          {issue.body?.trim() ? (
-            <CollapsibleMarkdown content={issue.body} className="ui-markdown" maxHeightPx={COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX} />
-          ) : (
-            <span className="ui-issue-muted-text">No description provided.</span>
-          )}
-        </CardContent>
-      </Card>
-
       {issue.externalLink?.trim() ? (
         <Card>
           <CardContent className="ui-detail-sidebar-section">
@@ -1131,16 +1121,30 @@ export function IssueDetailPageClient({
           {attachmentError ? <div className="ui-issue-error-text">{attachmentError}</div> : null}
           {loopsError ? <div className="ui-issue-error-text">{loopsError}</div> : null}
 
-          <SectionHeading title="Details" description="Issue details and controls." />
-
-          <Tabs defaultValue="comments">
+          <Tabs defaultValue="comments" className="ui-tabs-gap-none">
             <TabsList className="ui-issue-tabs-list">
+              <TabsTrigger value="description">Description</TabsTrigger>
               <TabsTrigger value="comments">Comments ({visibleComments.length})</TabsTrigger>
               <TabsTrigger value="attachments">Attachments ({attachments.length})</TabsTrigger>
               <TabsTrigger value="subissues">Sub-issues ({subIssues.length})</TabsTrigger>
               <TabsTrigger value="loops">Loops ({issueLoops.length})</TabsTrigger>
               <TabsTrigger value="activity">Activity ({activityItems.length})</TabsTrigger>
             </TabsList>
+            <TabsContent value="description" className="ui-issue-tabs-content">
+              <Card>
+                <CardContent className="ui-detail-sidebar-section">
+                  {issue.body?.trim() ? (
+                    <CollapsibleMarkdown
+                      content={issue.body}
+                      className="ui-markdown"
+                      maxHeightPx={COLLAPSIBLE_MARKDOWN_BODY_MAX_HEIGHT_PX}
+                    />
+                  ) : (
+                    <span className="ui-issue-muted-text">No description provided.</span>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
             <TabsContent value="comments" className="ui-issue-tabs-content">
             <form onSubmit={submitComment}>
               <Card>

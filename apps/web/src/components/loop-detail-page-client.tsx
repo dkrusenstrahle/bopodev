@@ -1076,26 +1076,11 @@ export function LoopDetailPageClient(
                 </div>
               </div>
 
-              <Card>
-                <CardContent className="ui-detail-sidebar-section">
-                  {detail.description?.trim() ? (
-                    <CollapsibleMarkdown
-                      content={detail.description}
-                      className="ui-markdown"
-                      maxHeightPx={280}
-                    />
-                  ) : (
-                    <span className="ui-issue-muted-text">No instructions provided.</span>
-                  )}
-                </CardContent>
-              </Card>
-
-              <SectionHeading title="Details" description="Loop details and scheduling controls." />
-
               <Tabs defaultValue="dashboard" className="ui-tabs-gap-none">
                 <TabsList>
                   <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                   <TabsTrigger value="triggers">Triggers</TabsTrigger>
+                  <TabsTrigger value="instructions">Instructions</TabsTrigger>
                   <TabsTrigger value="runs">Runs</TabsTrigger>
                   <TabsTrigger value="activity">Activity</TabsTrigger>
                 </TabsList>
@@ -1217,6 +1202,21 @@ export function LoopDetailPageClient(
                       </CardContent>
                     </Card>
                   </div>
+                </TabsContent>
+                <TabsContent value="instructions" className="ui-issue-tabs-content">
+                  <Card>
+                    <CardContent className="ui-detail-sidebar-section">
+                      {detail.description?.trim() ? (
+                        <CollapsibleMarkdown
+                          content={detail.description}
+                          className="ui-markdown"
+                          maxHeightPx={280}
+                        />
+                      ) : (
+                        <span className="ui-issue-muted-text">No instructions provided.</span>
+                      )}
+                    </CardContent>
+                  </Card>
                 </TabsContent>
                 <TabsContent value="triggers">
                   <Card>

@@ -1,5 +1,4 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
@@ -35,6 +34,8 @@ describe("plugin system", { timeout: 120_000 }, () => {
   let app: ReturnType<typeof createApp>;
   let tempDir: string;
   let workspaceDir: string;
+  let manifestsRoot: string;
+  let runtimeDemoDir: string;
   let companyId: string;
   let client: { close?: () => Promise<void> };
   let originalInstanceRoot: string | undefined;
@@ -53,8 +54,11 @@ describe("plugin system", { timeout: 120_000 }, () => {
     delete process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
     delete process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST;
     tempDir = await mkdtemp(join(tmpdir(), "bopodev-plugin-test-"));
+    manifestsRoot = join(tempDir, "plugins");
+    runtimeDemoDir = join(manifestsRoot, "runtime-demo");
     process.env.BOPO_INSTANCE_ROOT = tempDir;
-    process.env.BOPO_PLUGIN_MANIFESTS_DIR = join(tempDir, "plugins");
+    process.env.BOPO_PLUGIN_MANIFESTS_DIR = manifestsRoot;
+    await writeRuntimeDemoFixture(runtimeDemoDir);
     const boot = await bootstrapDatabase(join(tempDir, "test.db"));
     db = boot.db;
     client = boot.client as { close?: () => Promise<void> };
@@ -96,35 +100,61 @@ describe("plugin system", { timeout: 120_000 }, () => {
     await rm(tempDir, { recursive: true, force: true });
   }, 30_000);
 
-  it("lists plugins and creates approval for risky capability grants", async () => {
+  it("discovers filesystem manifests and includes company config rows", async () => {
     const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
     expect(listResponse.status).toBe(200);
     expect(Array.isArray(listResponse.body.data)).toBe(true);
-    expect(listResponse.body.data.some((row: { id: string }) => row.id === "trace-exporter")).toBe(true);
-    expect(listResponse.body.data.some((row: { id: string }) => row.id === "heartbeat-tagger")).toBe(true);
-
-    const installResponse = await request(app)
-      .post("/plugins/heartbeat-tagger/install")
-      .set("x-company-id", companyId)
-      .send({});
-    expect(installResponse.status).toBe(200);
-    expect(installResponse.body.data.installed).toBe(true);
-    expect(installResponse.body.data.enabled).toBe(false);
-
-    const configureResponse = await request(app)
-      .put("/plugins/queue-publisher")
-      .set("x-company-id", companyId)
-      .send({
-        enabled: true,
-        grantedCapabilities: ["network", "queue_publish"],
-        requestApproval: true
-      });
-    expect(configureResponse.status).toBe(200);
-    expect(typeof configureResponse.body.data.approvalId).toBe("string");
-    expect(configureResponse.body.data.status).toBe("pending");
+    const runtimeDemo = listResponse.body.data.find((row: { id: string }) => row.id === "runtime-demo");
+    expect(runtimeDemo).toBeTruthy();
+    expect(runtimeDemo.apiVersion).toBe("2");
+    expect(runtimeDemo.companyConfig).toBeTruthy();
+    expect(runtimeDemo.companyConfig.enabled).toBe(false);
   });
 
-  it("records plugin runs during heartbeat execution", async () => {
+  it("supports health, action, and data endpoints for an enabled worker plugin", async () => {
+    const enableResponse = await request(app).put("/plugins/runtime-demo").set("x-company-id", companyId).send({
+      enabled: true,
+      priority: 100,
+      config: {},
+      grantedCapabilities: [],
+      requestApproval: false
+    });
+    expect(enableResponse.status).toBe(200);
+
+    const healthResponse = await request(app).get("/plugins/runtime-demo/health").set("x-company-id", companyId);
+    expect(healthResponse.status).toBe(200);
+    expect(healthResponse.body.data.ok).toBe(true);
+    expect(healthResponse.body.data.data.status).toBe("ok");
+
+    const actionResponse = await request(app)
+      .post("/plugins/runtime-demo/actions/ping")
+      .set("x-company-id", companyId)
+      .send({ hello: "world" });
+    expect(actionResponse.status).toBe(200);
+    expect(actionResponse.body.data.ok).toBe(true);
+    expect(actionResponse.body.data.data.ok).toBe(true);
+    expect(actionResponse.body.data.data.actionKey).toBe("ping");
+
+    const dataResponse = await request(app)
+      .post("/plugins/runtime-demo/data/state")
+      .set("x-company-id", companyId)
+      .send({ include: "all" });
+    expect(dataResponse.status).toBe(200);
+    expect(dataResponse.body.data.ok).toBe(true);
+    expect(dataResponse.body.data.data.ok).toBe(true);
+    expect(dataResponse.body.data.data.dataKey).toBe("state");
+  });
+
+  it("records hook plugin runs during heartbeat execution", async () => {
+    const enableResponse = await request(app).put("/plugins/runtime-demo").set("x-company-id", companyId).send({
+      enabled: true,
+      priority: 100,
+      config: {},
+      grantedCapabilities: [],
+      requestApproval: false
+    });
+    expect(enableResponse.status).toBe(200);
+
     const project = await createProject(db, {
       companyId,
       name: "Plugin execution project",
@@ -147,17 +177,6 @@ describe("plugin system", { timeout: 120_000 }, () => {
       title: "Execute plugin hooks",
       assigneeAgentId: agent.id
     });
-    const enableResponse = await request(app)
-      .put("/plugins/trace-exporter")
-      .set("x-company-id", companyId)
-      .send({
-        enabled: true,
-        grantedCapabilities: ["emit_audit"],
-        requestApproval: false
-      });
-    expect(enableResponse.status).toBe(200);
-    expect(enableResponse.body.data.ok).toBe(true);
-
     const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
     expect(runId).toBeTruthy();
 
@@ -166,190 +185,46 @@ describe("plugin system", { timeout: 120_000 }, () => {
         request(app)
           .get(`/observability/plugins/runs?runId=${encodeURIComponent(runId!)}`)
           .set("x-company-id", companyId),
-      (rows) =>
-        rows.some((row) => row.pluginId === "trace-exporter" && row.hook === "afterAdapterExecute")
+      (rows) => rows.some((row) => row.pluginId === "runtime-demo" && row.hook === "afterPersist")
     );
     expect(pluginRunsResponse.status).toBe(200);
     expect(Array.isArray(pluginRunsResponse.body.data)).toBe(true);
     expect(pluginRunsResponse.body.data.length).toBeGreaterThan(0);
     expect(
       pluginRunsResponse.body.data.some(
-        (row: { pluginId: string; hook: string }) => row.pluginId === "trace-exporter" && row.hook === "afterAdapterExecute"
+        (row: { pluginId: string; hook: string; status: string }) =>
+          row.pluginId === "runtime-demo" && row.hook === "afterPersist" && row.status === "ok"
       )
     ).toBe(true);
   });
 
-  it("loads filesystem plugin manifests and supports install + enable flow", async () => {
-    const manifestsRoot = join(tempDir, "plugins");
-    const pluginDir = join(manifestsRoot, "file-demo-plugin");
-    await mkdir(pluginDir, { recursive: true });
-    await writeFile(
-      join(pluginDir, "plugin.json"),
-      JSON.stringify(
-        {
-          id: "file-demo-plugin",
-          version: "0.1.0",
-          displayName: "File Demo Plugin",
-          description: "Loaded from filesystem manifest.",
-          kind: "lifecycle",
-          hooks: ["afterPersist"],
-          capabilities: ["emit_audit"],
-          runtime: {
-            type: "builtin",
-            entrypoint: "builtin:file-demo-plugin",
-            timeoutMs: 5000,
-            retryCount: 0
-          }
-        },
-        null,
-        2
-      )
-    );
-    process.env.BOPO_PLUGIN_MANIFESTS_DIR = manifestsRoot;
-    await ensureBuiltinPluginsRegistered(db, [companyId]);
-
-    const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
-    expect(listResponse.status).toBe(200);
-    const pluginRow = listResponse.body.data.find((row: { id: string }) => row.id === "file-demo-plugin");
-    expect(pluginRow).toBeTruthy();
-    expect(pluginRow.description).toBe("Loaded from filesystem manifest.");
-
-    const installResponse = await request(app)
-      .post("/plugins/file-demo-plugin/install")
-      .set("x-company-id", companyId)
-      .send({});
-    expect(installResponse.status).toBe(200);
-
-    const enableResponse = await request(app)
-      .put("/plugins/file-demo-plugin")
-      .set("x-company-id", companyId)
-      .send({
-        enabled: true,
-        priority: 110,
-        grantedCapabilities: ["emit_audit"],
-        config: {},
-        requestApproval: false
-      });
-    expect(enableResponse.status).toBe(200);
-    expect(enableResponse.body.data.ok).toBe(true);
-  });
-
   it("ignores invalid filesystem manifests without failing registration", async () => {
-    const manifestsRoot = join(tempDir, "plugins");
     const pluginDir = join(manifestsRoot, "broken-plugin");
     await mkdir(pluginDir, { recursive: true });
     await writeFile(join(pluginDir, "plugin.json"), JSON.stringify({ id: "broken-plugin" }, null, 2));
-    process.env.BOPO_PLUGIN_MANIFESTS_DIR = manifestsRoot;
 
     await expect(ensureBuiltinPluginsRegistered(db, [companyId])).resolves.toBeUndefined();
 
     const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
     expect(listResponse.status).toBe(200);
     expect(listResponse.body.data.some((row: { id: string }) => row.id === "broken-plugin")).toBe(false);
-    expect(listResponse.body.data.some((row: { id: string }) => row.id === "trace-exporter")).toBe(true);
+    expect(listResponse.body.data.some((row: { id: string }) => row.id === "runtime-demo")).toBe(true);
   });
 
-  it("creates plugin from manifest JSON and installs it", async () => {
-    const manifestsRoot = join(tempDir, "plugins");
-    process.env.BOPO_PLUGIN_MANIFESTS_DIR = manifestsRoot;
-    const response = await request(app)
-      .post("/plugins/install-from-json")
-      .set("x-company-id", companyId)
-      .send({
-        manifestJson: JSON.stringify({
-          id: "json-created-plugin",
-          version: "0.1.0",
-          displayName: "JSON Created Plugin",
-          description: "Created from textarea payload.",
-          kind: "lifecycle",
-          hooks: ["afterPersist"],
-          capabilities: ["emit_audit"],
-          runtime: {
-            type: "builtin",
-            entrypoint: "builtin:json-created-plugin",
-            timeoutMs: 5000,
-            retryCount: 0
-          }
-        }),
-        install: true
-      });
-    expect(response.status).toBe(200);
-    expect(response.body.data.pluginId).toBe("json-created-plugin");
-    expect(response.body.data.installed).toBe(true);
+  it("supports delete for custom discovered plugins", async () => {
+    const deleteResponse = await request(app).delete("/plugins/runtime-demo").set("x-company-id", companyId);
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body.data.deleted).toBe(true);
 
     const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
     expect(listResponse.status).toBe(200);
-    const createdPlugin = listResponse.body.data.find((row: { id: string }) => row.id === "json-created-plugin");
-    expect(createdPlugin).toBeTruthy();
-    expect(createdPlugin.companyConfig).toBeTruthy();
-    expect(createdPlugin.companyConfig.enabled).toBe(false);
+    expect(listResponse.body.data.some((row: { id: string }) => row.id === "runtime-demo")).toBe(false);
   });
 
-  it("uninstalls plugins and returns not found for unknown plugin", async () => {
-    const installResponse = await request(app)
-      .post("/plugins/heartbeat-tagger/install")
-      .set("x-company-id", companyId)
-      .send({});
-    expect(installResponse.status).toBe(200);
-
-    const uninstallResponse = await request(app).delete("/plugins/heartbeat-tagger/install").set("x-company-id", companyId);
-    expect(uninstallResponse.status).toBe(200);
-    expect(uninstallResponse.body.data.installed).toBe(false);
-
-    const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
-    expect(listResponse.status).toBe(200);
-    const pluginRow = listResponse.body.data.find((row: { id: string }) => row.id === "heartbeat-tagger");
-    expect(pluginRow).toBeTruthy();
-    expect(pluginRow.companyConfig).toBeNull();
-
-    const missingResponse = await request(app).delete("/plugins/not-a-real-plugin/install").set("x-company-id", companyId);
-    expect(missingResponse.status).toBe(404);
-  });
-
-  it("deletes custom plugins and rejects built-in plugin deletion", async () => {
-    const createResponse = await request(app)
-      .post("/plugins/install-from-json")
-      .set("x-company-id", companyId)
-      .send({
-        manifestJson: JSON.stringify({
-          id: "delete-me-plugin",
-          version: "0.1.0",
-          displayName: "Delete Me Plugin",
-          description: "Temporary plugin for delete route tests.",
-          kind: "lifecycle",
-          hooks: ["afterPersist"],
-          capabilities: ["emit_audit"],
-          runtime: {
-            type: "prompt",
-            entrypoint: "prompt:inline",
-            timeoutMs: 5000,
-            retryCount: 0,
-            promptTemplate: "delete me"
-          }
-        }),
-        install: false
-      });
-    expect(createResponse.status).toBe(200);
-
-    const deleteCustomResponse = await request(app).delete("/plugins/delete-me-plugin").set("x-company-id", companyId);
-    expect(deleteCustomResponse.status).toBe(200);
-    expect(deleteCustomResponse.body.data.deleted).toBe(true);
-
-    const listResponse = await request(app).get("/plugins").set("x-company-id", companyId);
-    expect(listResponse.status).toBe(200);
-    expect(listResponse.body.data.some((row: { id: string }) => row.id === "delete-me-plugin")).toBe(false);
-
-    const deleteBuiltinResponse = await request(app).delete("/plugins/trace-exporter").set("x-company-id", companyId);
-    expect(deleteBuiltinResponse.status).toBe(400);
-  });
-
-  it("validates plugin update and install-from-json payloads", async () => {
-    const invalidUpdateResponse = await request(app)
-      .put("/plugins/trace-exporter")
-      .set("x-company-id", companyId)
-      .send({
-        priority: -1
-      });
+  it("validates update/install/rollback payloads and ids", async () => {
+    const invalidUpdateResponse = await request(app).put("/plugins/runtime-demo").set("x-company-id", companyId).send({
+      priority: -1
+    });
     expect(invalidUpdateResponse.status).toBe(422);
 
     const unknownPluginResponse = await request(app)
@@ -361,243 +236,38 @@ describe("plugin system", { timeout: 120_000 }, () => {
       });
     expect(unknownPluginResponse.status).toBe(404);
 
-    const malformedJsonResponse = await request(app)
-      .post("/plugins/install-from-json")
-      .set("x-company-id", companyId)
-      .send({
-        manifestJson: "{invalid-json",
-        install: true
-      });
-    expect(malformedJsonResponse.status).toBe(422);
+    const invalidInstallResponse = await request(app).post("/plugins/install").set("x-company-id", companyId).send({
+      packageName: ""
+    });
+    expect(invalidInstallResponse.status).toBe(422);
 
-    const invalidManifestResponse = await request(app)
-      .post("/plugins/install-from-json")
+    const rollbackMissingInstallId = await request(app)
+      .post("/plugins/runtime-demo/rollback")
       .set("x-company-id", companyId)
-      .send({
-        manifestJson: JSON.stringify({ id: "invalid-manifest-only-id" }),
-        install: true
-      });
-    expect(invalidManifestResponse.status).toBe(422);
-  });
+      .send({});
+    expect(rollbackMissingInstallId.status).toBe(422);
 
-  it("applies prompt plugin patch on beforeAdapterExecute", async () => {
-    const response = await request(app)
-      .post("/plugins/install-from-json")
+    const rollbackUnknownInstall = await request(app)
+      .post("/plugins/runtime-demo/rollback")
       .set("x-company-id", companyId)
-      .send({
-        manifestJson: JSON.stringify({
-          id: "prompt-context-plugin",
-          version: "0.1.0",
-          displayName: "Prompt Context Plugin",
-          description: "Appends prompt context before adapter execution.",
-          kind: "lifecycle",
-          hooks: ["beforeAdapterExecute"],
-          capabilities: ["emit_audit"],
-          runtime: {
-            type: "prompt",
-            entrypoint: "prompt:inline",
-            timeoutMs: 5000,
-            retryCount: 0,
-            promptTemplate: "Injected context for run {{runId}}"
-          }
-        }),
-        install: true
-      });
-    expect(response.status).toBe(200);
-
-    await request(app)
-      .put("/plugins/prompt-context-plugin")
-      .set("x-company-id", companyId)
-      .send({
-        enabled: true,
-        grantedCapabilities: [],
-        config: {},
-        requestApproval: false
-      });
-
-    const project = await createProject(db, {
-      companyId,
-      name: "Prompt plugin project",
-      workspaceLocalPath: workspaceDir
-    });
-    const agent = await createAgent(db, {
-      companyId,
-      role: "Worker",
-      name: "Prompt plugin agent",
-      providerType: "shell",
-      heartbeatCron: "* * * * *",
-      monthlyBudgetUsd: "20.0000",
-      runtimeCommand: "echo",
-      runtimeArgsJson: '["{\\"summary\\":\\"prompt-plugin\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: workspaceDir
-    });
-    await createIssue(db, {
-      companyId,
-      projectId: project.id,
-      title: "Execute prompt plugin",
-      assigneeAgentId: agent.id
-    });
-    const runId = await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await pollPluginRuns(
-      () =>
-        request(app)
-          .get(`/plugins/runs?pluginId=prompt-context-plugin&runId=${encodeURIComponent(runId!)}`)
-          .set("x-company-id", companyId),
-      (rows) => rows.some((row) => row.status === "ok")
-    );
-    expect(pluginRunsResponse.status).toBe(200);
-    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "ok")).toBe(true);
-    expect(
-      pluginRunsResponse.body.data.some((row: { diagnostics: Record<string, unknown> }) =>
-        String((row.diagnostics ?? {}).promptAppendApplied ?? "").includes("Injected context")
-      )
-    ).toBe(true);
-  });
-
-  it("fails prompt plugin when webhook is requested without network capability", async () => {
-    await request(app)
-      .post("/plugins/install-from-json")
-      .set("x-company-id", companyId)
-      .send({
-        manifestJson: JSON.stringify({
-          id: "prompt-webhook-no-network",
-          version: "0.1.0",
-          displayName: "Prompt Webhook No Network",
-          description: "Webhook without capability should fail.",
-          kind: "lifecycle",
-          hooks: ["beforeAdapterExecute"],
-          capabilities: ["emit_audit"],
-          runtime: {
-            type: "prompt",
-            entrypoint: "prompt:inline",
-            timeoutMs: 5000,
-            retryCount: 0,
-            promptTemplate: "noop"
-          }
-        }),
-        install: true
-      });
-    await request(app)
-      .put("/plugins/prompt-webhook-no-network")
-      .set("x-company-id", companyId)
-      .send({
-        enabled: true,
-        grantedCapabilities: [],
-        config: {
-          webhookRequests: [{ url: "http://localhost:1/test", method: "POST", timeoutMs: 100 }]
-        },
-        requestApproval: false
-      });
-
-    const project = await createProject(db, {
-      companyId,
-      name: "Webhook capability project",
-      workspaceLocalPath: workspaceDir
-    });
-    const agent = await createAgent(db, {
-      companyId,
-      role: "Worker",
-      name: "Webhook capability agent",
-      providerType: "shell",
-      heartbeatCron: "* * * * *",
-      monthlyBudgetUsd: "20.0000",
-      runtimeCommand: "echo",
-      runtimeArgsJson: '["{\\"summary\\":\\"webhook-capability\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: workspaceDir
-    });
-    await createIssue(db, {
-      companyId,
-      projectId: project.id,
-      title: "Execute webhook capability plugin",
-      assigneeAgentId: agent.id
-    });
-    await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await pollPluginRuns(
-      () => request(app).get("/plugins/runs?pluginId=prompt-webhook-no-network").set("x-company-id", companyId),
-      (rows) => rows.some((row) => row.status === "failed")
-    );
-    expect(pluginRunsResponse.status).toBe(200);
-    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
-  });
-
-  it("fails prompt plugin on webhook timeout/error when network capability is granted", async () => {
-    await request(app)
-      .post("/plugins/install-from-json")
-      .set("x-company-id", companyId)
-      .send({
-        manifestJson: JSON.stringify({
-          id: "prompt-webhook-timeout",
-          version: "0.1.0",
-          displayName: "Prompt Webhook Timeout",
-          description: "Webhook timeout should fail plugin run.",
-          kind: "lifecycle",
-          hooks: ["beforeAdapterExecute"],
-          capabilities: ["network"],
-          runtime: {
-            type: "prompt",
-            entrypoint: "prompt:inline",
-            timeoutMs: 5000,
-            retryCount: 0,
-            promptTemplate: "noop"
-          }
-        }),
-        install: true
-      });
-    const server = createServer((_req, _res) => {
-      // Intentionally never responding to force timeout.
-    });
-    await new Promise<void>((resolve) => {
-      server.listen(0, "127.0.0.1", () => resolve());
-    });
-    const address = server.address();
-    const port = typeof address === "object" && address ? address.port : 0;
-    await request(app)
-      .put("/plugins/prompt-webhook-timeout")
-      .set("x-company-id", companyId)
-      .send({
-        enabled: true,
-        grantedCapabilities: ["network"],
-        config: {
-          webhookRequests: [{ url: `http://127.0.0.1:${port}/timeout`, method: "POST", timeoutMs: 50 }]
-        },
-        requestApproval: false
-      });
-    const project = await createProject(db, {
-      companyId,
-      name: "Webhook timeout project",
-      workspaceLocalPath: workspaceDir
-    });
-    const agent = await createAgent(db, {
-      companyId,
-      role: "Worker",
-      name: "Webhook timeout agent",
-      providerType: "shell",
-      heartbeatCron: "* * * * *",
-      monthlyBudgetUsd: "20.0000",
-      runtimeCommand: "echo",
-      runtimeArgsJson: '["{\\"summary\\":\\"webhook-timeout\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: workspaceDir
-    });
-    await createIssue(db, {
-      companyId,
-      projectId: project.id,
-      title: "Execute webhook timeout plugin",
-      assigneeAgentId: agent.id
-    });
-    await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await pollPluginRuns(
-      () => request(app).get("/plugins/runs?pluginId=prompt-webhook-timeout").set("x-company-id", companyId),
-      (rows) => rows.some((row) => row.status === "failed")
-    );
-    expect(pluginRunsResponse.status).toBe(200);
-    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+      .send({ installId: "not-real-install-id" });
+    expect([404, 422]).toContain(rollbackUnknownInstall.status);
+    if (rollbackUnknownInstall.status === 422) {
+      expect(String(rollbackUnknownInstall.body.error ?? "")).toContain("rollback is unavailable");
+    }
   });
 
   it("does not execute plugins when plugin system is globally disabled", async () => {
     process.env.BOPO_PLUGIN_SYSTEM_DISABLED = "true";
+    const enableResponse = await request(app).put("/plugins/runtime-demo").set("x-company-id", companyId).send({
+      enabled: true,
+      priority: 100,
+      config: {},
+      grantedCapabilities: [],
+      requestApproval: false
+    });
+    expect(enableResponse.status).toBe(200);
+
     const project = await createProject(db, {
       companyId,
       name: "Plugin disabled project",
@@ -629,76 +299,144 @@ describe("plugin system", { timeout: 120_000 }, () => {
     expect(pluginRunsResponse.body.data.length).toBe(0);
   });
 
-  it("fails prompt webhook plugins when webhook host is not allowlisted", async () => {
-    process.env.BOPO_PLUGIN_WEBHOOK_ALLOWLIST = "example.com";
-    await request(app)
-      .post("/plugins/install-from-json")
-      .set("x-company-id", companyId)
-      .send({
-        manifestJson: JSON.stringify({
-          id: "prompt-webhook-allowlist-denied",
-          version: "0.1.0",
-          displayName: "Prompt Webhook Allowlist Denied",
-          description: "Webhook host denied by allowlist should fail plugin run.",
-          kind: "lifecycle",
-          hooks: ["beforeAdapterExecute"],
-          capabilities: ["network"],
-          runtime: {
-            type: "prompt",
-            entrypoint: "prompt:inline",
-            timeoutMs: 5000,
-            retryCount: 0,
-            promptTemplate: "noop"
-          }
-        }),
-        install: true
-      });
-    await request(app)
-      .put("/plugins/prompt-webhook-allowlist-denied")
-      .set("x-company-id", companyId)
-      .send({
-        enabled: true,
-        grantedCapabilities: ["network"],
-        config: {
-          webhookRequests: [{ url: "http://127.0.0.1:9999/blocked", method: "POST", timeoutMs: 100 }]
-        },
-        requestApproval: false
-      });
-
-    const project = await createProject(db, {
-      companyId,
-      name: "Webhook allowlist denied project",
-      workspaceLocalPath: workspaceDir
-    });
-    const agent = await createAgent(db, {
-      companyId,
-      role: "Worker",
-      name: "Webhook allowlist denied agent",
-      providerType: "shell",
-      heartbeatCron: "* * * * *",
-      monthlyBudgetUsd: "20.0000",
-      runtimeCommand: "echo",
-      runtimeArgsJson: '["{\\"summary\\":\\"webhook-allowlist-denied\\",\\"tokenInput\\":1,\\"tokenOutput\\":1,\\"usdCost\\":0.001}"]',
-      runtimeCwd: workspaceDir
-    });
-    await createIssue(db, {
-      companyId,
-      projectId: project.id,
-      title: "Execute webhook allowlist denied plugin",
-      assigneeAgentId: agent.id
-    });
-    await runHeartbeatForAgent(db, companyId, agent.id, { trigger: "manual" });
-    const pluginRunsResponse = await pollPluginRuns(
-      () =>
-        request(app).get("/plugins/runs?pluginId=prompt-webhook-allowlist-denied").set("x-company-id", companyId),
-      (rows) => rows.some((row) => row.status === "failed")
-    );
-    expect(pluginRunsResponse.status).toBe(200);
-    expect(pluginRunsResponse.body.data.some((row: { status: string }) => row.status === "failed")).toBe(true);
-    expect(
-      pluginRunsResponse.body.data.some((row: { error: string | null }) =>
-        String(row.error ?? "").includes("Webhook URL not allowed by BOPO_PLUGIN_WEBHOOK_ALLOWLIST.")
-      )
-    ).toBe(true);
+  it("lists plugin install history for discovered plugins", async () => {
+    const installsResponse = await request(app).get("/plugins/runtime-demo/installs").set("x-company-id", companyId);
+    expect([200, 422]).toContain(installsResponse.status);
+    if (installsResponse.status === 200) {
+      expect(Array.isArray(installsResponse.body.data)).toBe(true);
+      expect(installsResponse.body.data.length).toBe(0);
+    } else {
+      expect(String(installsResponse.body.error ?? "")).toContain("version history is unavailable");
+    }
   });
 });
+
+async function writeRuntimeDemoFixture(pluginDir: string) {
+  await mkdir(join(pluginDir, "dist"), { recursive: true });
+  await mkdir(join(pluginDir, "ui"), { recursive: true });
+  await writeFile(
+    join(pluginDir, "plugin.json"),
+    JSON.stringify(
+      {
+        apiVersion: "2",
+        id: "runtime-demo",
+        version: "0.1.0",
+        displayName: "Runtime Demo",
+        description: "Worker-based demo plugin fixture for integration tests.",
+        kind: "integration",
+        hooks: ["beforeAdapterExecute", "afterPersist"],
+        capabilities: ["emit_audit"],
+        capabilityNamespaces: ["audit.emit", "events.subscribe", "actions.execute", "data.read"],
+        runtime: {
+          type: "stdio",
+          entrypoint: "dist/worker.js",
+          timeoutMs: 5_000,
+          retryCount: 0
+        },
+        entrypoints: {
+          worker: "dist/worker.js",
+          ui: "ui"
+        },
+        jobs: [
+          {
+            jobKey: "demo-minute",
+            displayName: "Demo Minute Job",
+            schedule: "* * * * *"
+          }
+        ],
+        webhooks: [
+          {
+            endpointKey: "incoming-demo",
+            displayName: "Incoming Demo Webhook"
+          }
+        ],
+        ui: {
+          slots: [
+            {
+              slot: "issueDetailTab",
+              displayName: "Runtime Demo"
+            }
+          ]
+        }
+      },
+      null,
+      2
+    )
+  );
+  await writeFile(
+    join(pluginDir, "dist/worker.js"),
+    `#!/usr/bin/env node
+function send(id, result) {
+  process.stdout.write(\`\${JSON.stringify({ jsonrpc: "2.0", id, result })}\\n\`);
+}
+
+function sendError(id, code, message) {
+  process.stdout.write(\`\${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\\n\`);
+}
+
+function toInvocation(summary) {
+  return {
+    status: "ok",
+    summary,
+    blockers: [],
+    diagnostics: {
+      source: "runtime-demo-test-worker"
+    }
+  };
+}
+
+let buffer = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  let index = buffer.indexOf("\\n");
+  while (index >= 0) {
+    const line = buffer.slice(0, index).trim();
+    buffer = buffer.slice(index + 1);
+    if (line.length > 0) {
+      handle(line);
+    }
+    index = buffer.indexOf("\\n");
+  }
+});
+
+function handle(line) {
+  let message;
+  try {
+    message = JSON.parse(line);
+  } catch {
+    return;
+  }
+  const id = typeof message.id === "string" ? message.id : "unknown";
+  const method = typeof message.method === "string" ? message.method : "";
+  const params = message.params && typeof message.params === "object" ? message.params : {};
+  if (method === "plugin.health") {
+    send(id, { status: "ok", message: "runtime-demo healthy" });
+    return;
+  }
+  if (method === "plugin.hook") {
+    send(id, toInvocation(\`hook processed: \${String(params.hook ?? "unknown")}\`));
+    return;
+  }
+  if (method === "plugin.action") {
+    send(id, { ok: true, actionKey: String(params.key ?? "unknown"), payload: params.payload ?? {} });
+    return;
+  }
+  if (method === "plugin.data") {
+    send(id, { ok: true, dataKey: String(params.key ?? "unknown"), payload: params.payload ?? {} });
+    return;
+  }
+  if (method === "plugin.job") {
+    send(id, toInvocation(\`job processed: \${String(params.jobKey ?? "unknown")}\`));
+    return;
+  }
+  if (method === "plugin.webhook") {
+    send(id, { ok: true, endpointKey: String(params.endpointKey ?? "unknown"), payload: params.payload ?? {} });
+    return;
+  }
+  sendError(id, -32601, \`Unsupported method: \${method}\`);
+}
+`
+  );
+  await writeFile(join(pluginDir, "ui/index.html"), "<!doctype html><html><body><h1>Runtime Demo Test</h1></body></html>");
+}

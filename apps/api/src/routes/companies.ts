@@ -37,7 +37,7 @@ import {
   seedOperationalDataFromPackage,
   summarizeCompanyPackageForPreview
 } from "../services/company-file-import-service";
-import { ensureBuiltinPluginsRegistered, ensureCompanyBuiltinPluginDefaults } from "../services/plugin-runtime";
+import { ensureBuiltinPluginsRegistered } from "../services/plugin-runtime";
 import { listStarterPackMetadata, readStarterPackZipBuffer, resolveStarterPackDefinition } from "../services/starter-pack-registry";
 import { TemplateApplyError, applyTemplateManifest } from "../services/template-apply-service";
 import {
@@ -418,7 +418,7 @@ export function createCompaniesRouter(ctx: AppContext) {
       ...runtimeConfigToDb(defaultRuntimeConfig),
       initialState: runtimeConfigToStateBlobPatch(defaultRuntimeConfig)
     });
-    await ensureCompanyBuiltinPluginDefaults(ctx.db, company.id);
+    await ensureBuiltinPluginsRegistered(ctx.db, [company.id]);
     await ensureCompanyBuiltinTemplateDefaults(ctx.db, company.id);
     return sendOk(res, company);
   });

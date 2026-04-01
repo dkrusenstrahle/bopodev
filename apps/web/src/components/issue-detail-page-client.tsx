@@ -39,6 +39,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, apiDelete, apiGet, apiPost, apiPostFormData, apiPut } from "@/lib/api";
 import { formatIssueActivityActorLabel, formatIssueActivityTitle } from "@/lib/event-display";
+import { PluginSlotRenderer } from "@/components/plugins/plugin-slot-renderer";
+import type { PluginRow } from "@/components/workspace/types";
+import { resolvePluginSlots } from "@/lib/plugins/slot-registry";
 import { formatSmartDateTime } from "@/lib/smart-date";
 import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { getStatusBadgeClassName } from "@/lib/status-presentation";
@@ -476,7 +479,9 @@ export function IssueDetailPageClient({
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const [loopsLoading, setLoopsLoading] = useState(false);
   const [loopsError, setLoopsError] = useState<string | null>(null);
+  const [pluginError, setPluginError] = useState<string | null>(null);
   const [loops, setLoops] = useState<IssueRoutineRow[]>([]);
+  const [plugins, setPlugins] = useState<PluginRow[]>([]);
   const [comments, setComments] = useState<IssueCommentRow[]>([]);
   const [activityItems, setActivityItems] = useState<IssueActivityRow[]>([]);
   const [attachments, setAttachments] = useState<IssueAttachmentRow[]>([]);
@@ -553,6 +558,7 @@ export function IssueDetailPageClient({
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
   }, [loops, issue.id, issue.routineId]);
+  const issueDetailPluginSlots = useMemo(() => resolvePluginSlots(plugins, "issueDetailTab"), [plugins]);
   useEffect(() => {
     let cancelled = false;
 
@@ -581,6 +587,27 @@ export function IssueDetailPageClient({
       cancelled = true;
     };
   }, [companyId, issue.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPlugins() {
+      setPluginError(null);
+      try {
+        const result = await apiGet<PluginRow[]>("/plugins", companyId);
+        if (!cancelled) {
+          setPlugins(result.data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPluginError(error instanceof ApiError ? error.message : "Failed to load plugins.");
+        }
+      }
+    }
+    void loadPlugins();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1121,6 +1148,7 @@ export function IssueDetailPageClient({
           {activityError ? <div className="ui-issue-error-text">{activityError}</div> : null}
           {attachmentError ? <div className="ui-issue-error-text">{attachmentError}</div> : null}
           {loopsError ? <div className="ui-issue-error-text">{loopsError}</div> : null}
+          {pluginError ? <div className="ui-issue-error-text">{pluginError}</div> : null}
 
           <Tabs defaultValue="comments" className="ui-tabs-gap-none">
             <TabsList className="ui-issue-tabs-list">
@@ -1130,6 +1158,7 @@ export function IssueDetailPageClient({
               <TabsTrigger value="subissues">Sub-issues ({subIssues.length})</TabsTrigger>
               <TabsTrigger value="routines">Routines ({issueLoops.length})</TabsTrigger>
               <TabsTrigger value="activity">Activity ({activityItems.length})</TabsTrigger>
+              {issueDetailPluginSlots.length > 0 ? <TabsTrigger value="plugins">Plugins ({issueDetailPluginSlots.length})</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="description" className="ui-issue-tabs-content">
               <Card>
@@ -1158,7 +1187,7 @@ export function IssueDetailPageClient({
                   >
                     <div
                       ref={setCommentMdxOverlayHost}
-                      className="mdxeditor-popup-mount pointer-events-none absolute left-0 right-0 top-0 z-[1] h-0 overflow-visible"
+                      className="mdxeditor-popup-mount pointer-events-none absolute left-0 right-0 top-0 z-1 h-0 overflow-visible"
                       aria-hidden
                     />
                     {commentMdxOverlayHost ? (
@@ -1412,6 +1441,9 @@ export function IssueDetailPageClient({
                   />
                 </>
               ) : null}
+            </TabsContent>
+            <TabsContent value="plugins" className="ui-issue-tabs-content">
+              <PluginSlotRenderer companyId={companyId} slot="issueDetailTab" plugins={plugins} issueId={issue.id} />
             </TabsContent>
           </Tabs>
     </div>

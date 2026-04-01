@@ -37,6 +37,18 @@ Current action types:
 - `grant_plugin_capabilities`
 - `apply_template`
 
+Plugin capability governance (v2 rollout):
+
+- Capability namespaces are evaluated at grant time (for example `issues.write`, `tools.register`, `network.http`).
+- Risk bands:
+  - `safe`: can be granted directly
+  - `elevated`: can require approval based on company policy
+  - `restricted`: always requires explicit approval in governed mode
+- Suggested trust tiers for package plugins:
+  - `dev_local`: local-only development installs, permissive defaults
+  - `verified`: reviewed package source/integrity, balanced defaults
+  - `restricted`: unverified sources, deny-by-default on elevated/restricted capabilities
+
 Delegated hiring traceability:
 
 - Delegated hiring requests can include typed intent and source issue linkage.

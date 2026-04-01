@@ -1,22 +1,39 @@
 import { Router } from "express";
+import { access } from "node:fs/promises";
+import { resolve } from "node:path";
 import { z } from "zod";
-import { PluginManifestSchema } from "bopodev-contracts";
+import { PluginManifestV2Schema } from "bopodev-contracts";
 import {
+  appendPluginInstall,
   createApprovalRequest,
   deletePluginById,
-  deletePluginConfig,
+  getPluginInstallById,
   listCompanyPluginConfigs,
   listCompanies,
+  listPluginInstalls,
   listPluginRuns,
   listPlugins,
+  markPluginInstallStatus,
+  markPluginInstallsSuperseded,
   updatePluginConfig
 } from "bopodev-db";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { enforcePermission, requireBoardRole } from "../middleware/request-actor";
-import { deletePluginManifestFromFilesystem, writePluginManifestToFilesystem } from "../services/plugin-manifest-loader";
-import { registerPluginManifest } from "../services/plugin-runtime";
+import {
+  deletePluginManifestFromFilesystem,
+  writePackagedPluginManifestToFilesystem
+} from "../services/plugin-manifest-loader";
+import {
+  invokePluginWorkerEndpoint,
+  invokePluginWorkerHealth,
+  invokePluginWorkerWebhook,
+  resolvePluginUiEntrypoint,
+  registerPluginManifest
+} from "../services/plugin-runtime";
+import { namespacedCapabilitiesRequireApproval } from "../services/plugin-capability-policy";
+import { installPluginArtifactFromNpm } from "../services/plugin-artifact-installer";
 
 const pluginConfigSchema = z.object({
   enabled: z.boolean().optional(),
@@ -25,12 +42,19 @@ const pluginConfigSchema = z.object({
   grantedCapabilities: z.array(z.string().min(1)).default([]),
   requestApproval: z.boolean().default(true)
 });
-const pluginManifestCreateSchema = z.object({
-  manifestJson: z.string().min(2),
-  install: z.boolean().default(true)
+const pluginRegistryInstallSchema = z.object({
+  packageName: z.string().min(1),
+  version: z.string().min(1).optional(),
+  install: z.boolean().default(true),
+  requestApproval: z.boolean().default(true)
 });
-
-const HIGH_RISK_CAPABILITIES = new Set(["network", "queue_publish", "issue_write", "write_memory"]);
+const pluginRollbackSchema = z.object({
+  installId: z.string().min(1)
+});
+const pluginUpgradeSchema = z.object({
+  packageName: z.string().min(1),
+  version: z.string().min(1).optional()
+});
 
 export function createPluginsRouter(ctx: AppContext) {
   const router = Router();
@@ -58,6 +82,21 @@ export function createPluginsRouter(ctx: AppContext) {
           kind: plugin.kind,
           runtimeType: plugin.runtimeType,
           runtimeEntrypoint: plugin.runtimeEntrypoint,
+          apiVersion: typeof manifest.apiVersion === "string" ? manifest.apiVersion : "2",
+          entrypoints:
+            typeof manifest.entrypoints === "object" && manifest.entrypoints !== null
+              ? manifest.entrypoints
+              : null,
+          uiSlots:
+            typeof manifest.ui === "object" &&
+            manifest.ui !== null &&
+            Array.isArray((manifest.ui as Record<string, unknown>).slots)
+              ? (manifest.ui as { slots: unknown[] }).slots
+              : [],
+          install:
+            typeof manifest.install === "object" && manifest.install !== null
+              ? (manifest.install as Record<string, unknown>)
+              : null,
           hooks: safeParseStringArray(plugin.hooksJson),
           capabilities: safeParseStringArray(plugin.capabilitiesJson),
           companyConfig: config
@@ -86,27 +125,11 @@ export function createPluginsRouter(ctx: AppContext) {
     const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
     const pluginExists = catalog.some((plugin) => plugin.id === pluginId);
     if (!pluginExists) {
-      return sendError(res, `Plugin '${pluginId}' was not found. Restart API to refresh built-in plugins.`, 404);
+      return sendError(res, `Plugin '${pluginId}' was not found.`, 404);
     }
     const companyExists = companies.some((company) => company.id === req.companyId);
     if (!companyExists) {
       return sendError(res, `Company '${req.companyId}' does not exist.`, 404);
-    }
-    const riskyCaps = parsed.data.grantedCapabilities.filter((cap) => HIGH_RISK_CAPABILITIES.has(cap));
-    if (riskyCaps.length > 0 && parsed.data.requestApproval) {
-      const approvalId = await createApprovalRequest(ctx.db, {
-        companyId: req.companyId!,
-        requestedByAgentId: req.actor?.type === "agent" ? req.actor.id : null,
-        action: "grant_plugin_capabilities",
-        payload: {
-          pluginId,
-          enabled: parsed.data.enabled,
-          priority: parsed.data.priority,
-          grantedCapabilities: parsed.data.grantedCapabilities,
-          config: parsed.data.config
-        }
-      });
-      return sendOk(res, { approvalId, status: "pending" });
     }
     await updatePluginConfig(ctx.db, {
       companyId: req.companyId!,
@@ -119,90 +142,86 @@ export function createPluginsRouter(ctx: AppContext) {
     return sendOk(res, { ok: true });
   });
 
-  router.post("/install-from-json", async (req, res) => {
+  router.post("/install", async (req, res) => {
     if (!enforcePermission(req, res, "plugins:write")) return;
-    const parsed = pluginManifestCreateSchema.safeParse(req.body);
+    const parsed = pluginRegistryInstallSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
-    let rawManifest: unknown;
-    try {
-      rawManifest = JSON.parse(parsed.data.manifestJson);
-    } catch {
-      return sendError(res, "manifestJson must be valid JSON.", 422);
-    }
-    const manifestParsed = PluginManifestSchema.safeParse(rawManifest);
-    if (!manifestParsed.success) {
-      return sendError(res, manifestParsed.error.message, 422);
-    }
-    const manifest = manifestParsed.data;
     const [companies] = await Promise.all([listCompanies(ctx.db)]);
     const companyExists = companies.some((company) => company.id === req.companyId);
     if (!companyExists) {
       return sendError(res, `Company '${req.companyId}' does not exist.`, 404);
     }
-
-    const manifestPath = await writePluginManifestToFilesystem(manifest);
-    await registerPluginManifest(ctx.db, manifest);
-    if (parsed.data.install) {
-      await updatePluginConfig(ctx.db, {
-        companyId: req.companyId!,
-        pluginId: manifest.id,
-        enabled: false,
-        priority: 100,
-        configJson: "{}",
-        grantedCapabilitiesJson: "[]"
+    try {
+      const installed = await installPluginArtifactFromNpm({
+        packageName: parsed.data.packageName,
+        version: parsed.data.version
       });
+      const requestedNamespaces = installed.manifest.capabilityNamespaces ?? [];
+      if (requestedNamespaces.length > 0 && namespacedCapabilitiesRequireApproval(requestedNamespaces) && parsed.data.requestApproval) {
+        const approvalId = await createApprovalRequest(ctx.db, {
+          companyId: req.companyId!,
+          requestedByAgentId: req.actor?.type === "agent" ? req.actor.id : null,
+          action: "grant_plugin_capabilities",
+          payload: {
+            pluginId: installed.manifest.id,
+            capabilityNamespaces: requestedNamespaces,
+            sourceType: "registry",
+            sourceRef: installed.packageRef,
+            integrity: installed.integrity ?? null,
+            buildHash: installed.buildHash,
+            manifestJson: JSON.stringify(installed.manifest),
+            install: parsed.data.install
+          }
+        });
+        return sendOk(res, { ok: true, pluginId: installed.manifest.id, approvalId, status: "pending" });
+      }
+      const manifestPath = await writePackagedPluginManifestToFilesystem(installed.manifest, {
+        sourceType: "registry",
+        sourceRef: installed.packageRef,
+        integrity: installed.integrity,
+        buildHash: installed.buildHash
+      });
+      await registerPluginManifest(ctx.db, installed.manifest);
+      await markPluginInstallsSuperseded(ctx.db, {
+        companyId: req.companyId!,
+        pluginId: installed.manifest.id
+      });
+      const installId = await appendPluginInstall(ctx.db, {
+        companyId: req.companyId!,
+        pluginId: installed.manifest.id,
+        pluginVersion: installed.manifest.version,
+        sourceType: "registry",
+        sourceRef: installed.packageRef,
+        integrity: installed.integrity ?? null,
+        buildHash: installed.buildHash,
+        artifactPath: installed.manifest.install?.artifactPath ?? null,
+        manifestJson: JSON.stringify(installed.manifest),
+        status: "active"
+      });
+      if (parsed.data.install) {
+        await updatePluginConfig(ctx.db, {
+          companyId: req.companyId!,
+          pluginId: installed.manifest.id,
+          enabled: false,
+          priority: 100,
+          configJson: "{}",
+          grantedCapabilitiesJson: "[]"
+        });
+      }
+      return sendOk(res, {
+        ok: true,
+        pluginId: installed.manifest.id,
+        installId,
+        installed: parsed.data.install,
+        manifestPath,
+        sourceType: "registry",
+        sourceRef: installed.packageRef
+      });
+    } catch (error) {
+      return sendError(res, `Failed to install package plugin: ${String(error)}`, 422);
     }
-    return sendOk(res, { ok: true, pluginId: manifest.id, manifestPath, installed: parsed.data.install });
-  });
-
-  router.post("/:pluginId/install", async (req, res) => {
-    if (!enforcePermission(req, res, "plugins:write")) return;
-    const pluginId = readPluginIdParam(req.params.pluginId);
-    if (!pluginId) {
-      return sendError(res, "Missing plugin id.", 422);
-    }
-    const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
-    const plugin = catalog.find((item) => item.id === pluginId);
-    if (!plugin) {
-      return sendError(res, `Plugin '${pluginId}' was not found. Restart API to refresh built-in plugins.`, 404);
-    }
-    const companyExists = companies.some((company) => company.id === req.companyId);
-    if (!companyExists) {
-      return sendError(res, `Company '${req.companyId}' does not exist.`, 404);
-    }
-    await updatePluginConfig(ctx.db, {
-      companyId: req.companyId!,
-      pluginId,
-      enabled: false,
-      priority: 100,
-      configJson: "{}",
-      grantedCapabilitiesJson: "[]"
-    });
-    return sendOk(res, { ok: true, pluginId, installed: true, enabled: false });
-  });
-
-  router.delete("/:pluginId/install", async (req, res) => {
-    if (!enforcePermission(req, res, "plugins:write")) return;
-    const pluginId = readPluginIdParam(req.params.pluginId);
-    if (!pluginId) {
-      return sendError(res, "Missing plugin id.", 422);
-    }
-    const [catalog, companies] = await Promise.all([listPlugins(ctx.db), listCompanies(ctx.db)]);
-    const plugin = catalog.find((item) => item.id === pluginId);
-    if (!plugin) {
-      return sendError(res, `Plugin '${pluginId}' was not found.`, 404);
-    }
-    const companyExists = companies.some((company) => company.id === req.companyId);
-    if (!companyExists) {
-      return sendError(res, `Company '${req.companyId}' does not exist.`, 404);
-    }
-    await deletePluginConfig(ctx.db, {
-      companyId: req.companyId!,
-      pluginId
-    });
-    return sendOk(res, { ok: true, pluginId, installed: false });
   });
 
   router.delete("/:pluginId", requireBoardRole, async (req, res) => {
@@ -214,9 +233,6 @@ export function createPluginsRouter(ctx: AppContext) {
     const plugin = catalog.find((item) => item.id === pluginId);
     if (!plugin) {
       return sendError(res, `Plugin '${pluginId}' was not found.`, 404);
-    }
-    if (plugin.runtimeEntrypoint.startsWith("builtin:")) {
-      return sendError(res, `Plugin '${pluginId}' is built-in and cannot be deleted.`, 400);
     }
     const companyExists = companies.some((company) => company.id === req.companyId);
     if (!companyExists) {
@@ -244,6 +260,248 @@ export function createPluginsRouter(ctx: AppContext) {
         diagnostics: safeParseJsonObject(row.diagnosticsJson)
       }))
     );
+  });
+
+  router.get("/:pluginId/installs", async (req, res) => {
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
+    let rows: Awaited<ReturnType<typeof listPluginInstalls>>;
+    try {
+      rows = await listPluginInstalls(ctx.db, {
+        companyId: req.companyId!,
+        pluginId,
+        limit: typeof req.query.limit === "string" ? Number(req.query.limit) : undefined
+      });
+    } catch (error) {
+      if (isMissingPluginInstallsTableError(error)) {
+        return sendError(res, "Plugin version history is unavailable. Run database migrations.", 422);
+      }
+      throw error;
+    }
+    return sendOk(
+      res,
+      rows.map((row) => ({
+        ...row,
+        manifest: safeParseJsonObject(row.manifestJson)
+      }))
+    );
+  });
+
+  router.post("/:pluginId/rollback", async (req, res) => {
+    if (!enforcePermission(req, res, "plugins:write")) return;
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
+    const parsed = pluginRollbackSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return sendError(res, parsed.error.message, 422);
+    }
+    let target: Awaited<ReturnType<typeof getPluginInstallById>>;
+    try {
+      target = await getPluginInstallById(ctx.db, {
+        companyId: req.companyId!,
+        pluginId,
+        installId: parsed.data.installId
+      });
+    } catch (error) {
+      if (isMissingPluginInstallsTableError(error)) {
+        return sendError(res, "Plugin rollback is unavailable. Run database migrations.", 422);
+      }
+      throw error;
+    }
+    if (!target) {
+      return sendError(res, `Plugin install '${parsed.data.installId}' was not found.`, 404);
+    }
+    const manifestParsed = PluginManifestV2Schema.safeParse(safeParseJsonObject(target.manifestJson));
+    if (!manifestParsed.success) {
+      return sendError(res, "Stored plugin install manifest is invalid.", 422);
+    }
+    await registerPluginManifest(ctx.db, manifestParsed.data);
+    try {
+      await markPluginInstallsSuperseded(ctx.db, { companyId: req.companyId!, pluginId });
+      await markPluginInstallStatus(ctx.db, {
+        companyId: req.companyId!,
+        pluginId,
+        installId: parsed.data.installId,
+        status: "active"
+      });
+    } catch (error) {
+      if (isMissingPluginInstallsTableError(error)) {
+        return sendError(res, "Plugin rollback is unavailable. Run database migrations.", 422);
+      }
+      throw error;
+    }
+    return sendOk(res, {
+      ok: true,
+      pluginId,
+      rollbackToInstallId: parsed.data.installId
+    });
+  });
+
+  router.post("/:pluginId/upgrade", async (req, res) => {
+    if (!enforcePermission(req, res, "plugins:write")) return;
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
+    const parsed = pluginUpgradeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return sendError(res, parsed.error.message, 422);
+    }
+    try {
+      const installed = await installPluginArtifactFromNpm({
+        packageName: parsed.data.packageName,
+        version: parsed.data.version
+      });
+      if (installed.manifest.id !== pluginId) {
+        return sendError(
+          res,
+          `Installed package manifest id '${installed.manifest.id}' does not match route plugin id '${pluginId}'.`,
+          422
+        );
+      }
+      await writePackagedPluginManifestToFilesystem(installed.manifest, {
+        sourceType: "registry",
+        sourceRef: installed.packageRef,
+        integrity: installed.integrity,
+        buildHash: installed.buildHash
+      });
+      await registerPluginManifest(ctx.db, installed.manifest);
+      await markPluginInstallsSuperseded(ctx.db, {
+        companyId: req.companyId!,
+        pluginId
+      });
+      const installId = await appendPluginInstall(ctx.db, {
+        companyId: req.companyId!,
+        pluginId,
+        pluginVersion: installed.manifest.version,
+        sourceType: "registry",
+        sourceRef: installed.packageRef,
+        integrity: installed.integrity ?? null,
+        buildHash: installed.buildHash,
+        artifactPath: installed.manifest.install?.artifactPath ?? null,
+        manifestJson: JSON.stringify(installed.manifest),
+        status: "active"
+      });
+      return sendOk(res, {
+        ok: true,
+        pluginId,
+        installId,
+        upgradedToVersion: installed.manifest.version
+      });
+    } catch (error) {
+      return sendError(res, `Failed to upgrade plugin: ${String(error)}`, 422);
+    }
+  });
+
+  router.post("/:pluginId/actions/:actionKey", async (req, res) => {
+    if (!enforcePermission(req, res, "plugins:write")) return;
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    const actionKey = readPluginIdParam(req.params.actionKey);
+    if (!pluginId || !actionKey) {
+      return sendError(res, "Missing plugin id or action key.", 422);
+    }
+    try {
+      const payload = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>) : {};
+      const result = await invokePluginWorkerEndpoint(ctx.db, {
+        companyId: req.companyId!,
+        pluginId,
+        endpointType: "action",
+        endpointKey: actionKey,
+        payload
+      });
+      return sendOk(res, { ok: true, data: result });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/:pluginId/health", async (req, res) => {
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
+    try {
+      const data = await invokePluginWorkerHealth(ctx.db, {
+        companyId: req.companyId!,
+        pluginId
+      });
+      return sendOk(res, { ok: true, data });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.post("/:pluginId/data/:dataKey", async (req, res) => {
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    const dataKey = readPluginIdParam(req.params.dataKey);
+    if (!pluginId || !dataKey) {
+      return sendError(res, "Missing plugin id or data key.", 422);
+    }
+    try {
+      const payload = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>) : {};
+      const result = await invokePluginWorkerEndpoint(ctx.db, {
+        companyId: req.companyId!,
+        pluginId,
+        endpointType: "data",
+        endpointKey: dataKey,
+        payload
+      });
+      return sendOk(res, { ok: true, data: result });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.post("/:pluginId/webhooks/:endpointKey", async (req, res) => {
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    const endpointKey = readPluginIdParam(req.params.endpointKey);
+    if (!pluginId || !endpointKey) {
+      return sendError(res, "Missing plugin id or endpoint key.", 422);
+    }
+    try {
+      const payload = typeof req.body === "object" && req.body !== null ? (req.body as Record<string, unknown>) : {};
+      const headers: Record<string, string> = {};
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (typeof value === "string") {
+          headers[key] = value;
+        }
+      }
+      const data = await invokePluginWorkerWebhook(ctx.db, {
+        companyId: req.companyId!,
+        pluginId,
+        endpointKey,
+        payload,
+        headers
+      });
+      return sendOk(res, { ok: true, data });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/:pluginId/ui", async (req, res) => {
+    const pluginId = readPluginIdParam(req.params.pluginId);
+    if (!pluginId) {
+      return sendError(res, "Missing plugin id.", 422);
+    }
+    try {
+      const uiEntrypoint = await resolvePluginUiEntrypoint(ctx.db, {
+        companyId: req.companyId!,
+        pluginId
+      });
+      if (!uiEntrypoint) {
+        return sendError(res, `Plugin '${pluginId}' does not declare a UI entrypoint.`, 404);
+      }
+      const indexPath = uiEntrypoint.endsWith(".html") ? uiEntrypoint : resolve(uiEntrypoint, "index.html");
+      await access(indexPath);
+      return res.sendFile(indexPath);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
   });
 
   return router;
@@ -275,4 +533,30 @@ function safeParseJsonObject(value: string | null | undefined) {
   } catch {
     return {};
   }
+}
+
+function isMissingPluginInstallsTableError(error: unknown) {
+  const visited = new Set<unknown>();
+  const queue: unknown[] = [error];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined || current === null || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    const message = String(current);
+    if (message.includes('relation "plugin_installs" does not exist')) {
+      return true;
+    }
+    if (typeof current === "object") {
+      const record = current as Record<string, unknown>;
+      if ("cause" in record) {
+        queue.push(record.cause);
+      }
+      if ("message" in record) {
+        queue.push(record.message);
+      }
+    }
+  }
+  return false;
 }

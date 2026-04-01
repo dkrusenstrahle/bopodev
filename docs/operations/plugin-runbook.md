@@ -13,33 +13,37 @@ Reduce time to isolate and remediate plugin failures, policy blocks, and rollout
 ## First Response Checklist
 
 1. Capture identifiers: `x-request-id`, `runId`, `pluginId`, `companyId`.
-2. Confirm plugin system is enabled (`BOPO_PLUGIN_SYSTEM_DISABLED` and legacy enabled flag).
+2. Confirm plugin system is enabled (`BOPO_PLUGIN_SYSTEM_DISABLED`).
 3. Inspect plugin runs:
    - `GET /observability/plugins/runs?runId=<run-id>`
    - `GET /plugins/runs?pluginId=<plugin-id>&limit=50`
 4. Verify plugin company config:
-   - installed/enabled state
-   - granted capabilities
+   - enabled state
+   - granted capability namespaces
    - plugin config JSON
-5. Check governance inbox for pending capability approvals.
+5. Check plugin health endpoint:
+   - `GET /plugins/<plugin-id>/health`
+6. Check governance inbox for pending capability approvals.
 
 ## Symptom -> Likely Cause
 
 - **`blocked` plugin runs**
-  - Missing granted high-risk capability (`network`, `queue_publish`, `issue_write`, `write_memory`).
-- **`failed` runs on prompt webhook plugins**
-  - webhook timeout, DNS/connectivity failure, or allowlist rejection.
+  - Missing granted capability namespace for the invoked surface.
+- **Health check fails with worker exit**
+  - bad worker path, worker startup crash, or incompatible worker output.
+- **Webhook endpoint fails**
+  - missing webhook namespace grant, allowlist rejection, or upstream timeout.
 - **Plugin not visible in catalog**
   - invalid manifest schema, duplicate plugin ID, or manifests directory mismatch.
 - **Plugin appears installed but does not run**
   - plugin disabled for company or hook mismatch.
-- **Cannot delete plugin**
-  - plugin is built-in (`runtimeEntrypoint` starts with `builtin:`).
+- **Rollback unavailable**
+  - `plugin_installs` table missing in active DB or no prior install revision exists.
 
 ## Capability And Governance Triage
 
-1. Compare plugin manifest `capabilities` vs config `grantedCapabilities`.
-2. If high-risk capability missing:
+1. Compare plugin manifest `capabilityNamespaces` vs granted namespaces in config.
+2. If required namespace grant missing:
    - submit update with `requestApproval: true`
    - resolve approval in governance
 3. Re-run heartbeat and confirm status transitions from `blocked` to expected status.
@@ -48,7 +52,7 @@ Reduce time to isolate and remediate plugin failures, policy blocks, and rollout
 
 Checks:
 
-- Confirm plugin has capability/grant for `network` or `queue_publish`.
+- Confirm plugin has required webhook namespace grants.
 - Validate `BOPO_PLUGIN_WEBHOOK_ALLOWLIST` host list.
 - Validate webhook URL hostname exactly matches allowlist entry.
 - Check timeout (`timeoutMs`) and destination service health.
@@ -62,14 +66,16 @@ Typical failure string:
 Filesystem manifests:
 
 1. Confirm file location: `plugins/<plugin-id>/plugin.json` (or custom `BOPO_PLUGIN_MANIFESTS_DIR`).
-2. Validate required fields and runtime schema.
+2. Validate required v2 fields and runtime schema.
 3. Restart API to reload manifests.
 4. Check startup warnings for invalid manifest parsing.
+5. Verify worker/ui entrypoints are plugin-relative paths.
 
 ## Recovery Actions
 
 - Disable plugin quickly with `PUT /plugins/:pluginId` and `"enabled": false`.
-- Uninstall company plugin: `DELETE /plugins/:pluginId/install`.
+- Run health check + action/data smoke test after each fix.
+- Rollback plugin revision: `POST /plugins/:pluginId/rollback`.
 - Delete custom plugin definition: `DELETE /plugins/:pluginId`.
 - Roll forward with corrected manifest/config and re-enable in stages.
 

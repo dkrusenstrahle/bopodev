@@ -13,6 +13,7 @@ import {
   resolvePublicBaseUrl
 } from "./security/deployment-mode";
 import { ensureBuiltinPluginsRegistered } from "./services/plugin-runtime";
+import { pluginWorkerHost } from "./services/plugin-worker-host";
 import { ensureBuiltinTemplatesRegistered } from "./services/template-catalog";
 import { createHeartbeatScheduler } from "./worker/scheduler";
 import { bootstrapDatabaseWithStartupLogging } from "./startup/database";
@@ -102,7 +103,8 @@ async function main() {
     server,
     realtimeHub,
     dbClient,
-    scheduler
+    scheduler,
+    pluginWorkers: pluginWorkerHost
   });
 }
 

@@ -1,5 +1,6 @@
 import type {
   PluginHook,
+  PluginCapabilityNamespace,
   PluginInvocationResult,
   PluginManifest,
   PluginPromptExecutionResult,
@@ -10,6 +11,8 @@ import {
   PluginHookSchema,
   PluginInvocationResultSchema,
   PluginManifestSchema,
+  PluginManifestV2Schema,
+  PLUGIN_CAPABILITY_RISK,
   PluginPromptExecutionResultSchema,
   PluginTraceEventSchema,
   PluginWebhookRequestSchema
@@ -17,13 +20,16 @@ import {
 import type { BopoDb } from "bopodev-db";
 import {
   appendAuditEvent,
+  deletePluginById,
   appendPluginRun,
   listCompanyPluginConfigs,
+  listPlugins,
   upsertPlugin,
   updatePluginConfig
 } from "bopodev-db";
 import { loadFilesystemPluginManifests } from "./plugin-manifest-loader";
 import { executePluginWebhooks } from "./plugin-webhook-executor";
+import { pluginWorkerHost } from "./plugin-worker-host";
 
 type HookContext = {
   companyId: string;
@@ -49,146 +55,7 @@ export type PluginHookResult = {
   promptAppend: string | null;
 };
 
-type BuiltinPluginExecutor = (context: HookContext) => Promise<PluginInvocationResult> | PluginInvocationResult;
-
 const HIGH_RISK_CAPABILITIES = new Set(["network", "queue_publish", "issue_write", "write_memory"]);
-
-const builtinPluginDefinitions = [
-  {
-    id: "trace-exporter",
-    version: "0.1.0",
-    displayName: "Trace Exporter",
-    description: "Emit normalized heartbeat trace events for downstream observability sinks.",
-    kind: "lifecycle",
-    hooks: ["afterAdapterExecute", "onError", "afterPersist"],
-    capabilities: ["emit_audit"],
-    runtime: {
-      type: "builtin",
-      entrypoint: "builtin:trace-exporter",
-      timeoutMs: 5000,
-      retryCount: 0
-    }
-  },
-  {
-    id: "memory-enricher",
-    version: "0.1.0",
-    displayName: "Memory Enricher",
-    description: "Derive and dedupe memory candidate facts from heartbeat outcomes.",
-    kind: "lifecycle",
-    hooks: ["afterAdapterExecute", "afterPersist"],
-    capabilities: ["read_memory", "emit_audit"],
-    runtime: {
-      type: "builtin",
-      entrypoint: "builtin:memory-enricher",
-      timeoutMs: 5000,
-      retryCount: 0
-    }
-  },
-  {
-    id: "queue-publisher",
-    version: "0.1.0",
-    displayName: "Queue Publisher",
-    description: "Publish heartbeat completion/failure payloads to queue integrations.",
-    kind: "integration",
-    hooks: ["afterPersist", "onError"],
-    capabilities: ["queue_publish", "network", "emit_audit"],
-    runtime: {
-      type: "builtin",
-      entrypoint: "builtin:queue-publisher",
-      timeoutMs: 5000,
-      retryCount: 0
-    }
-  },
-  {
-    id: "heartbeat-tagger",
-    version: "0.1.0",
-    displayName: "Heartbeat Tagger",
-    description: "Attach a simple diagnostic tag to heartbeat plugin runs.",
-    kind: "lifecycle",
-    hooks: ["afterAdapterExecute"],
-    capabilities: ["emit_audit"],
-    runtime: {
-      type: "builtin",
-      entrypoint: "builtin:heartbeat-tagger",
-      timeoutMs: 3000,
-      retryCount: 0
-    }
-  }
-] as const;
-
-const builtinExecutors: Record<string, BuiltinPluginExecutor> = {
-  "trace-exporter": async (context) => ({
-    status: "ok",
-    summary: "trace-exporter emitted heartbeat trace metadata",
-    blockers: [],
-    diagnostics: {
-      runId: context.runId,
-      providerType: context.providerType ?? null,
-      status: context.status ?? null
-    }
-  }),
-  "memory-enricher": async (context) => ({
-    status: "ok",
-    summary: "memory-enricher evaluated summary for memory candidates",
-    blockers: [],
-    diagnostics: {
-      runId: context.runId,
-      summaryPresent: typeof context.summary === "string" && context.summary.trim().length > 0,
-      usefulnessScore: scoreMemorySummaryUsefulness(context.summary ?? ""),
-      outcomeKind:
-        context.outcome && typeof context.outcome === "object" && "kind" in context.outcome
-          ? String((context.outcome as Record<string, unknown>).kind ?? "")
-          : ""
-    }
-  }),
-  "queue-publisher": async (context) => ({
-    status: "ok",
-    summary: "queue-publisher prepared outbound heartbeat event",
-    blockers: [],
-    diagnostics: {
-      runId: context.runId,
-      status: context.status ?? null,
-      eventType: context.error ? "heartbeat.failed" : "heartbeat.completed"
-    }
-  }),
-  "heartbeat-tagger": async (context) => ({
-    status: "ok",
-    summary: "heartbeat-tagger attached diagnostic tag",
-    blockers: [],
-    diagnostics: {
-      tag: "hello-plugin",
-      runId: context.runId,
-      providerType: context.providerType ?? null
-    }
-  })
-};
-
-function scoreMemorySummaryUsefulness(summary: string) {
-  const normalized = summary.trim();
-  if (!normalized) {
-    return 0;
-  }
-  const tokenCount = normalized
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((entry) => entry.length >= 3).length;
-  const evidenceTerms = /\b(test|validated|verified|implemented|deployed|fixed|refactor|migration|metric)\b/i.test(normalized);
-  const blockersTerms = /\b(blocked|failed|unknown|maybe)\b/i.test(normalized);
-  let score = 0.3;
-  if (tokenCount >= 20) {
-    score += 0.3;
-  } else if (tokenCount >= 8) {
-    score += 0.15;
-  }
-  if (evidenceTerms) {
-    score += 0.25;
-  }
-  if (!blockersTerms) {
-    score += 0.15;
-  }
-  return Number(Math.min(1, Math.max(0, score)).toFixed(3));
-}
 
 export function pluginSystemEnabled() {
   const disabled = process.env.BOPO_PLUGIN_SYSTEM_DISABLED;
@@ -202,9 +69,15 @@ export function pluginSystemEnabled() {
   return true;
 }
 
-export async function ensureBuiltinPluginsRegistered(db: BopoDb, companyIds: string[] = []) {
-  const manifests = builtinPluginDefinitions.map((definition) => PluginManifestSchema.parse(definition));
-  const manifestIds = new Set(manifests.map((manifest) => manifest.id));
+export async function ensureBuiltinPluginsRegistered(db: BopoDb, _companyIds: string[] = []) {
+  const existing = await listPlugins(db);
+  for (const plugin of existing) {
+    if (plugin.runtimeEntrypoint.startsWith("builtin:")) {
+      await deletePluginById(db, plugin.id);
+    }
+  }
+  const manifests: PluginManifest[] = [];
+  const manifestIds = new Set<string>();
   const fileManifestResult = await loadFilesystemPluginManifests();
   for (const warning of fileManifestResult.warnings) {
     // eslint-disable-next-line no-console
@@ -223,8 +96,22 @@ export async function ensureBuiltinPluginsRegistered(db: BopoDb, companyIds: str
   for (const manifest of manifests) {
     await registerPluginManifest(db, manifest);
   }
-  for (const companyId of companyIds) {
-    await ensureCompanyBuiltinPluginDefaults(db, companyId);
+  for (const companyId of _companyIds) {
+    const existingConfigs = await listCompanyPluginConfigs(db, companyId);
+    const installedIds = new Set(existingConfigs.map((row) => row.pluginId));
+    for (const manifest of manifests) {
+      if (installedIds.has(manifest.id)) {
+        continue;
+      }
+      await updatePluginConfig(db, {
+        companyId,
+        pluginId: manifest.id,
+        enabled: false,
+        priority: 100,
+        configJson: "{}",
+        grantedCapabilitiesJson: "[]"
+      });
+    }
   }
 }
 
@@ -240,30 +127,6 @@ export async function registerPluginManifest(db: BopoDb, manifest: PluginManifes
     capabilitiesJson: JSON.stringify(manifest.capabilities),
     manifestJson: JSON.stringify(manifest)
   });
-}
-
-export async function ensureCompanyBuiltinPluginDefaults(db: BopoDb, companyId: string) {
-  const existing = await listCompanyPluginConfigs(db, companyId);
-  const existingIds = new Set(existing.map((row) => row.pluginId));
-  const defaults = [
-    { pluginId: "trace-exporter", enabled: false, priority: 40 },
-    { pluginId: "memory-enricher", enabled: false, priority: 60 },
-    { pluginId: "queue-publisher", enabled: false, priority: 80 },
-    { pluginId: "heartbeat-tagger", enabled: false, priority: 90 }
-  ];
-  for (const entry of defaults) {
-    if (existingIds.has(entry.pluginId)) {
-      continue;
-    }
-    await updatePluginConfig(db, {
-      companyId,
-      pluginId: entry.pluginId,
-      enabled: entry.enabled,
-      priority: entry.priority,
-      configJson: "{}",
-      grantedCapabilitiesJson: "[]"
-    });
-  }
 }
 
 export async function runPluginHook(
@@ -297,7 +160,6 @@ export async function runPluginHook(
     .filter((row) => row.hooks.includes(parsedHook));
 
   const failures: string[] = [];
-  const promptAppends: string[] = [];
   let applied = 0;
   for (const plugin of candidates) {
     const startedAt = Date.now();
@@ -319,34 +181,29 @@ export async function runPluginHook(
         });
         continue;
       }
-      const promptResult = await executePromptPlugin(plugin.manifest, plugin.pluginId, input.context, {
-        hook: parsedHook,
-        pluginConfig: safeParseJsonRecord(plugin.configJson)
-      });
-      if (promptResult) {
-        const processed = await processPromptPluginResult(db, {
-          pluginId: plugin.pluginId,
+      const namespaceViolation = resolveMissingCapabilityNamespace(
+        plugin.manifest,
+        safeParseJsonRecord(plugin.configJson),
+        ["events.subscribe"]
+      );
+      if (namespaceViolation) {
+        const msg = `plugin '${plugin.pluginId}' requires granted capability namespace '${namespaceViolation}'`;
+        failures.push(msg);
+        await appendPluginRun(db, {
           companyId: input.context.companyId,
           runId: input.context.runId,
-          requestId: input.context.requestId,
-          pluginCapabilities: plugin.caps,
-          promptResult
+          pluginId: plugin.pluginId,
+          hook: parsedHook,
+          status: "blocked",
+          durationMs: Date.now() - startedAt,
+          error: msg
         });
-        if (processed.promptAppend) {
-          promptAppends.push(processed.promptAppend);
-        }
+        continue;
       }
-      const result =
-        promptResult && plugin.manifest?.runtime.type === "prompt"
-          ? ({
-              status: "ok",
-              summary: "prompt plugin applied runtime patches",
-              blockers: [],
-              diagnostics: {
-                source: "prompt-runtime"
-              }
-            } as PluginInvocationResult)
-          : await executePlugin(plugin.pluginId, input.context);
+      if (plugin.manifest?.runtime.type === "prompt") {
+        throw new Error(`plugin '${plugin.pluginId}' uses removed prompt runtime; install a worker package plugin`);
+      }
+      const result = await executePluginWithRuntime(plugin.pluginId, plugin.manifest, parsedHook, input.context);
       const validated = PluginInvocationResultSchema.parse(result);
       await appendPluginRun(db, {
         companyId: input.context.companyId,
@@ -355,10 +212,7 @@ export async function runPluginHook(
         hook: parsedHook,
         status: validated.status,
         durationMs: Date.now() - startedAt,
-        diagnosticsJson: JSON.stringify({
-          ...(validated.diagnostics ?? {}),
-          promptAppendApplied: promptResult?.promptAppend ?? null
-        }),
+        diagnosticsJson: JSON.stringify(validated.diagnostics ?? {}),
         error: validated.status === "failed" || validated.status === "blocked" ? validated.summary : null
       });
       if (validated.status === "failed" || validated.status === "blocked") {
@@ -400,7 +254,7 @@ export async function runPluginHook(
     blocked,
     applied,
     failures,
-    promptAppend: promptAppends.length > 0 ? promptAppends.join("\n\n") : null
+    promptAppend: null
   };
 }
 
@@ -439,6 +293,145 @@ function safeParseManifest(value: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+export function isLegacyPluginManifest(manifest: PluginManifest | null) {
+  return !manifest || !("apiVersion" in manifest) || manifest.apiVersion !== "2";
+}
+
+export async function invokePluginWorkerEndpoint(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+    endpointType: "action" | "data";
+    endpointKey: string;
+    payload?: Record<string, unknown>;
+  }
+) {
+  const rows = await listCompanyPluginConfigs(db, input.companyId);
+  const row = rows.find((entry) => entry.pluginId === input.pluginId);
+  if (!row || !row.enabled) {
+    throw new Error(`plugin '${input.pluginId}' is not installed or enabled for this company`);
+  }
+  const manifest = safeParseManifest(row.manifestJson);
+  if (!manifest) {
+    throw new Error(`plugin '${input.pluginId}' manifest is invalid`);
+  }
+  const parsedV2 = PluginManifestV2Schema.safeParse(manifest);
+  if (!parsedV2.success) {
+    throw new Error(`plugin '${input.pluginId}' does not support worker endpoints`);
+  }
+  const requiredNamespace = input.endpointType === "action" ? "actions.execute" : "data.read";
+  const namespaceViolation = resolveMissingCapabilityNamespace(parsedV2.data, safeParseJsonRecord(row.configJson), [
+    requiredNamespace
+  ]);
+  if (namespaceViolation) {
+    throw new Error(`plugin '${input.pluginId}' requires granted capability namespace '${namespaceViolation}'`);
+  }
+  const result = await pluginWorkerHost.invoke(parsedV2.data, {
+    method: input.endpointType === "action" ? "plugin.action" : "plugin.data",
+    params: {
+      key: input.endpointKey,
+      companyId: input.companyId,
+      payload: input.payload ?? {}
+    }
+  });
+  return result;
+}
+
+export async function invokePluginWorkerHealth(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+  }
+) {
+  const rows = await listCompanyPluginConfigs(db, input.companyId);
+  const row = rows.find((entry) => entry.pluginId === input.pluginId);
+  if (!row || !row.enabled) {
+    throw new Error(`plugin '${input.pluginId}' is not installed or enabled for this company`);
+  }
+  const manifest = safeParseManifest(row.manifestJson);
+  if (!manifest) {
+    throw new Error(`plugin '${input.pluginId}' manifest is invalid`);
+  }
+  return await pluginWorkerHost.invoke(manifest, {
+    method: "plugin.health",
+    params: {
+      companyId: input.companyId
+    }
+  });
+}
+
+export async function invokePluginWorkerWebhook(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+    endpointKey: string;
+    payload?: Record<string, unknown>;
+    headers?: Record<string, string>;
+  }
+) {
+  const rows = await listCompanyPluginConfigs(db, input.companyId);
+  const row = rows.find((entry) => entry.pluginId === input.pluginId);
+  if (!row || !row.enabled) {
+    throw new Error(`plugin '${input.pluginId}' is not installed or enabled for this company`);
+  }
+  const manifest = safeParseManifest(row.manifestJson);
+  if (!manifest) {
+    throw new Error(`plugin '${input.pluginId}' manifest is invalid`);
+  }
+  const config = safeParseJsonRecord(row.configJson);
+  const webhook = manifest.webhooks.find((entry) => entry.endpointKey === input.endpointKey);
+  if (!webhook) {
+    throw new Error(`plugin '${input.pluginId}' does not declare webhook '${input.endpointKey}'`);
+  }
+  const secretHeader = webhook.secretHeader?.toLowerCase();
+  if (secretHeader) {
+    const secretsMap =
+      typeof config._webhookSecrets === "object" && config._webhookSecrets !== null
+        ? (config._webhookSecrets as Record<string, unknown>)
+        : {};
+    const expected = secretsMap[input.endpointKey];
+    const actual = input.headers?.[secretHeader];
+    if (typeof expected === "string" && expected.length > 0 && actual !== expected) {
+      throw new Error(`webhook signature check failed for endpoint '${input.endpointKey}'`);
+    }
+  }
+  const namespaceViolation = resolveMissingCapabilityNamespace(manifest, config, ["webhooks.handle"]);
+  if (namespaceViolation) {
+    throw new Error(`plugin '${input.pluginId}' requires granted capability namespace '${namespaceViolation}'`);
+  }
+  return await pluginWorkerHost.invoke(manifest, {
+    method: "plugin.webhook",
+    params: {
+      companyId: input.companyId,
+      endpointKey: input.endpointKey,
+      payload: input.payload ?? {},
+      headers: input.headers ?? {}
+    }
+  });
+}
+
+export async function resolvePluginUiEntrypoint(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+  }
+) {
+  const rows = await listCompanyPluginConfigs(db, input.companyId);
+  const row = rows.find((entry) => entry.pluginId === input.pluginId);
+  if (!row || !row.enabled) {
+    throw new Error(`plugin '${input.pluginId}' is not installed or enabled for this company`);
+  }
+  const manifest = safeParseManifest(row.manifestJson);
+  if (!manifest) {
+    throw new Error(`plugin '${input.pluginId}' manifest is invalid`);
+  }
+  return manifest.entrypoints.ui ?? null;
 }
 
 async function executePromptPlugin(
@@ -598,15 +591,53 @@ function renderPromptTemplate(
     .replaceAll("{{traceEvents}}", JSON.stringify(input.traceEvents));
 }
 
-async function executePlugin(pluginId: string, context: HookContext): Promise<PluginInvocationResult> {
-  const executor = builtinExecutors[pluginId];
-  if (!executor) {
-    return {
-      status: "skipped",
-      summary: `No executor is registered for plugin '${pluginId}'.`,
-      blockers: [],
-      diagnostics: { pluginId }
-    };
+async function executePluginWithRuntime(
+  pluginId: string,
+  manifest: PluginManifest | null,
+  hook: PluginHook,
+  context: HookContext
+): Promise<PluginInvocationResult> {
+  if (!manifest) {
+    throw new Error(`plugin '${pluginId}' manifest is missing`);
   }
-  return executor(context);
+  if (manifest.runtime.type === "builtin") {
+    throw new Error(`plugin '${pluginId}' uses removed builtin runtime; install a package plugin`);
+  }
+  const workerResult = await pluginWorkerHost.invoke(manifest, {
+    method: "plugin.hook",
+    params: {
+      hook,
+      context
+    }
+  });
+  return PluginInvocationResultSchema.parse(workerResult);
+}
+
+function resolveMissingCapabilityNamespace(
+  manifest: PluginManifest | null,
+  config: Record<string, unknown>,
+  requiredNamespaces: PluginCapabilityNamespace[]
+) {
+  if (!manifest || !("capabilityNamespaces" in manifest)) {
+    return null;
+  }
+  if (requiredNamespaces.length === 0) {
+    return null;
+  }
+  const requested = manifest.capabilityNamespaces ?? [];
+  if (requested.length === 0) {
+    return null;
+  }
+  const grantedRaw = config._grantedCapabilityNamespaces;
+  const granted = Array.isArray(grantedRaw) ? grantedRaw.map((value) => String(value)) : [];
+  for (const namespace of requiredNamespaces) {
+    if (!requested.includes(namespace)) {
+      continue;
+    }
+    const risk = PLUGIN_CAPABILITY_RISK[namespace];
+    if ((risk === "elevated" || risk === "restricted") && !granted.includes(namespace)) {
+      return namespace;
+    }
+  }
+  return null;
 }

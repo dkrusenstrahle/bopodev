@@ -248,10 +248,14 @@ export interface PluginRow {
   name: string;
   description?: string | null;
   promptTemplate?: string | null;
+  apiVersion?: string;
   version: string;
   kind: string;
   runtimeType: string;
   runtimeEntrypoint: string;
+  entrypoints?: Record<string, unknown> | null;
+  uiSlots?: Array<Record<string, unknown>>;
+  install?: Record<string, unknown> | null;
   hooks: string[];
   capabilities: string[];
   companyConfig: {

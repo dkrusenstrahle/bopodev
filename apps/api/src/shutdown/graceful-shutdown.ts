@@ -19,8 +19,9 @@ export function attachGracefulShutdownHandlers(options: {
   realtimeHub: RealtimeHub;
   dbClient: unknown;
   scheduler?: { stop: () => Promise<void> };
+  pluginWorkers?: { shutdown: () => Promise<void> };
 }) {
-  const { server, realtimeHub, dbClient, scheduler } = options;
+  const { server, realtimeHub, dbClient, scheduler, pluginWorkers } = options;
   let shutdownInFlight: Promise<void> | null = null;
 
   function shutdown(signal: string) {
@@ -38,6 +39,7 @@ export function attachGracefulShutdownHandlers(options: {
       beginIssueCommentDispatchShutdown();
       await Promise.allSettled([
         scheduler?.stop() ?? Promise.resolve(),
+        pluginWorkers?.shutdown() ?? Promise.resolve(),
         new Promise<void>((resolve, reject) => {
           server.close((err) => {
             if (err) {

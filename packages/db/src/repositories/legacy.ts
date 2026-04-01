@@ -18,6 +18,7 @@ import {
   issueGoals,
   issues,
   pluginConfigs,
+  pluginInstalls,
   pluginRuns,
   plugins,
   projectWorkspaces,
@@ -2323,6 +2324,109 @@ export async function appendPluginRun(
     diagnosticsJson: input.diagnosticsJson ?? "{}"
   });
   return id;
+}
+
+export async function appendPluginInstall(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+    pluginVersion: string;
+    sourceType: string;
+    sourceRef?: string | null;
+    integrity?: string | null;
+    buildHash?: string | null;
+    artifactPath?: string | null;
+    manifestJson: string;
+    status?: "active" | "superseded" | "rolled_back";
+  }
+) {
+  const id = nanoid(14);
+  await db.insert(pluginInstalls).values({
+    id,
+    companyId: input.companyId,
+    pluginId: input.pluginId,
+    pluginVersion: input.pluginVersion,
+    sourceType: input.sourceType,
+    sourceRef: input.sourceRef ?? null,
+    integrity: input.integrity ?? null,
+    buildHash: input.buildHash ?? null,
+    artifactPath: input.artifactPath ?? null,
+    manifestJson: input.manifestJson,
+    status: input.status ?? "active"
+  });
+  return id;
+}
+
+export async function listPluginInstalls(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+    limit?: number;
+  }
+) {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  return db
+    .select()
+    .from(pluginInstalls)
+    .where(and(eq(pluginInstalls.companyId, input.companyId), eq(pluginInstalls.pluginId, input.pluginId)))
+    .orderBy(desc(pluginInstalls.createdAt))
+    .limit(limit);
+}
+
+export async function getPluginInstallById(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+    installId: string;
+  }
+) {
+  const [row] = await db
+    .select()
+    .from(pluginInstalls)
+    .where(
+      and(
+        eq(pluginInstalls.companyId, input.companyId),
+        eq(pluginInstalls.pluginId, input.pluginId),
+        eq(pluginInstalls.id, input.installId)
+      )
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function markPluginInstallsSuperseded(db: BopoDb, input: { companyId: string; pluginId: string }) {
+  await db
+    .update(pluginInstalls)
+    .set({
+      status: "superseded"
+    })
+    .where(and(eq(pluginInstalls.companyId, input.companyId), eq(pluginInstalls.pluginId, input.pluginId), eq(pluginInstalls.status, "active")));
+}
+
+export async function markPluginInstallStatus(
+  db: BopoDb,
+  input: {
+    companyId: string;
+    pluginId: string;
+    installId: string;
+    status: "active" | "superseded" | "rolled_back";
+  }
+) {
+  await db
+    .update(pluginInstalls)
+    .set({
+      status: input.status
+    })
+    .where(
+      and(
+        eq(pluginInstalls.companyId, input.companyId),
+        eq(pluginInstalls.pluginId, input.pluginId),
+        eq(pluginInstalls.id, input.installId)
+      )
+    );
 }
 
 export async function listPluginRuns(

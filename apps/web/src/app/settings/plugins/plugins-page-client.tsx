@@ -18,10 +18,13 @@ import { SectionHeading, formatDateTime } from "@/components/workspace/shared";
 type PluginRow = {
   id: string;
   name: string;
+  apiVersion?: string;
   version: string;
   kind: string;
   runtimeType: string;
   runtimeEntrypoint: string;
+  uiSlots?: Array<Record<string, unknown>>;
+  install?: Record<string, unknown> | null;
   hooks: string[];
   capabilities: string[];
   companyConfig: {
@@ -48,6 +51,8 @@ export function PluginsPageClient(props: { companyId: string; initialPlugins: Pl
   const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
   const [previewRuns, setPreviewRuns] = useState<PluginRunRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [packageName, setPackageName] = useState("");
+  const [packageVersion, setPackageVersion] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const selectedPlugin = useMemo(
@@ -113,6 +118,23 @@ export function PluginsPageClient(props: { companyId: string; initialPlugins: Pl
       }
     });
 
+  const installPackagePlugin = () =>
+    startTransition(async () => {
+      try {
+        await apiPost("/plugins/install", companyId, {
+          packageName: packageName.trim(),
+          version: packageVersion.trim() || undefined,
+          install: true
+        });
+        setPackageName("");
+        setPackageVersion("");
+        await fetchPlugins();
+        setError(null);
+      } catch (nextError) {
+        setError(String(nextError));
+      }
+    });
+
   return (
     <div className="ui-stack-lg">
       <SectionHeading
@@ -126,6 +148,37 @@ export function PluginsPageClient(props: { companyId: string; initialPlugins: Pl
           </CardContent>
         </Card>
       ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>Install package plugin</CardTitle>
+          <CardDescription>Install a plugin by npm package name and optional version.</CardDescription>
+        </CardHeader>
+        <CardContent className="ui-stack-sm">
+          <label className="ui-stack-xs">
+            <span className="ui-text-sm ui-text-muted">Package name</span>
+            <input
+              value={packageName}
+              onChange={(event) => setPackageName(event.target.value)}
+              className="ui-input"
+              placeholder="@scope/plugin-name"
+            />
+          </label>
+          <label className="ui-stack-xs">
+            <span className="ui-text-sm ui-text-muted">Version (optional)</span>
+            <input
+              value={packageVersion}
+              onChange={(event) => setPackageVersion(event.target.value)}
+              className="ui-input"
+              placeholder="latest"
+            />
+          </label>
+          <div>
+            <Button variant="outline" size="sm" disabled={isPending || packageName.trim().length < 1} onClick={installPackagePlugin}>
+              Install package plugin
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Plugin Catalog</CardTitle>
@@ -151,8 +204,11 @@ export function PluginsPageClient(props: { companyId: string; initialPlugins: Pl
                       <div className="ui-stack-xs">
                         <div className="ui-font-medium">{plugin.name}</div>
                         <div className="ui-text-xs ui-text-muted">
-                          {plugin.id} · {plugin.version} · {plugin.kind}
+                          {plugin.id} · {plugin.version} · {plugin.kind} · api v{plugin.apiVersion ?? "1"}
                         </div>
+                        {(plugin.uiSlots ?? []).length > 0 ? (
+                          <div className="ui-text-xs ui-text-muted">slots: {(plugin.uiSlots ?? []).length}</div>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell>

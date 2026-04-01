@@ -224,14 +224,22 @@ For artifact storage/path guardrails, see [`../operations/workspace-path-surface
 ## Plugins
 
 - `GET /plugins`
-- `POST /plugins/:pluginId/install`
-- `POST /plugins/install-from-json`
 - `PUT /plugins/:pluginId`
+- `POST /plugins/install`
 - `GET /plugins/runs`
+- `GET /plugins/:pluginId/health`
+- `GET /plugins/:pluginId/installs`
+- `POST /plugins/:pluginId/upgrade`
+- `POST /plugins/:pluginId/rollback`
+- `POST /plugins/:pluginId/actions/:actionKey`
+- `POST /plugins/:pluginId/data/:dataKey`
+- `POST /plugins/:pluginId/webhooks/:endpointKey`
+- `GET /plugins/:pluginId/ui`
+- `DELETE /plugins/:pluginId`
 
 Mutation permission:
 
-- Plugin install/config mutation routes require `plugins:write`.
+- Plugin install/config/action/data/webhook mutation routes require `plugins:write`.
 
 ## Templates
 

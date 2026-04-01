@@ -525,6 +525,25 @@ export const pluginRuns = pgTable("plugin_runs", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
 });
 
+export const pluginInstalls = pgTable("plugin_installs", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  pluginId: text("plugin_id")
+    .notNull()
+    .references(() => plugins.id, { onDelete: "cascade" }),
+  pluginVersion: text("plugin_version").notNull(),
+  sourceType: text("source_type").notNull().default("registry"),
+  sourceRef: text("source_ref"),
+  integrity: text("integrity"),
+  buildHash: text("build_hash"),
+  artifactPath: text("artifact_path"),
+  manifestJson: text("manifest_json").notNull().default("{}"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull()
+});
+
 export const agentIssueLabels = pgTable(
   "agent_issue_labels",
   {
@@ -563,6 +582,7 @@ export const schema = {
   plugins,
   pluginConfigs,
   pluginRuns,
+  pluginInstalls,
   templates,
   templateVersions,
   templateInstalls,

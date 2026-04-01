@@ -1,252 +1,161 @@
 # Plugin System
 
-This page documents Bopo's plugin system for extending heartbeat execution with
-governed, observable hooks.
+This is the canonical, current-state reference for Bopo plugins.
 
-## Purpose
+## Current Architecture (Hard Cut)
 
-Enable teams to add integrations and runtime extensions (memory enrichment,
-tracing, queue publishing, etc.) without editing core heartbeat orchestration.
+The plugin system is now **v2-only** and **worker-first**:
 
-## Intended Audience
+- No legacy built-in plugin runtime path.
+- No legacy JSON-install API path.
+- No prompt-runtime compatibility mode.
+- Plugins are loaded from:
+  - package installs (`POST /plugins/install`), or
+  - filesystem manifests (`plugins/*/plugin.json`), then executed as worker plugins.
 
-- Engineers building plugin-backed features in `apps/api` and `apps/web`.
-- Operators enabling or governing plugin capabilities per company.
+## What A Plugin Can Do
 
-## Current Model (MVP)
+A plugin can expose one or more of the following:
 
-- Plugins are cataloged with a manifest and runtime metadata.
-- Companies install/configure plugins independently.
-- Heartbeat lifecycle points call plugin hooks.
-- Plugin runs are persisted and exposed in observability APIs/UI.
-- High-risk capabilities are approval-gated.
+- **Hook execution** during heartbeat lifecycle (`plugin.hook`)
+- **Actions** (`plugin.action`)
+- **Data providers** (`plugin.data`)
+- **Jobs** (`plugin.job`)
+- **Webhooks** (`plugin.webhook`)
+- **Health checks** (`plugin.health`)
+- **UI slots** rendered from plugin UI entrypoints
 
-## Where Plugins Live
+## Manifest Contract
 
-- Built-ins are defined in `apps/api/src/services/plugin-runtime.ts`.
-- Filesystem plugins are discovered from `plugins/*/plugin.json` by default.
-- Set `BOPO_PLUGIN_MANIFESTS_DIR` to override the scan root.
-- Discovered manifests are synced into the `plugins` DB catalog at API startup.
+Plugin manifests are validated by `PluginManifestV2Schema` in `packages/contracts/src/index.ts`.
 
-## Core Contracts
+Required/important fields:
 
-Shared schemas live in `packages/contracts/src/index.ts`.
+- `apiVersion: "2"`
+- `id`, `version`, `displayName`, `kind`
+- `hooks`
+- `runtime` (for worker plugins, typically `type: "stdio"`)
+- `entrypoints.worker` (required)
 
-- `PluginManifestSchema`
-  - identity: `id`, `version`, `displayName`
-  - classification: `kind` (`lifecycle` | `tool` | `integration`)
-  - routing: `hooks` (heartbeat hook list)
-  - security: `capabilities`
-  - runtime: `runtime.type` (`builtin` | `stdio` | `http` | `prompt`), `entrypoint`, `timeoutMs`, `retryCount`
-- `PluginInvocationResultSchema`
-  - `status`: `ok` | `skipped` | `failed` | `blocked`
-  - `summary`
-  - `diagnostics`
-  - `blockers` (structured blocker metadata)
-  - optional `metadataPatch`
+Optional but common:
 
-## Lifecycle Hook Points
+- `entrypoints.ui`
+- `jobs[]`
+- `webhooks[]`
+- `ui.slots[]`
+- `capabilityNamespaces[]`
+- `install` metadata (`sourceType`, `sourceRef`, `integrity`, `buildHash`, `artifactPath`, `installedAt`)
 
-Heartbeats invoke plugin hooks from `apps/api/src/services/heartbeat-service/heartbeat-run.ts`:
+## Capability Model
 
-- `beforeClaim`
-- `afterClaim`
-- `beforeAdapterExecute`
-- `afterAdapterExecute`
-- `beforePersist`
-- `afterPersist`
-- `onError`
+Permissions are namespace-based (`capabilityNamespaces`), with risk levels:
 
-Each invocation calls `runPluginHook(...)` in `apps/api/src/services/plugin-runtime.ts`.
+- **safe**
+- **elevated**
+- **restricted**
 
-## Runtime and Safety
+Execution checks are now surface-specific:
 
-`pluginSystemEnabled()` is default-on and can be disabled via env:
+- Hooks require relevant hook/event namespaces.
+- Actions require action namespaces.
+- Data endpoints require data namespaces.
+- Webhooks require webhook namespace grants.
+- Health checks do not require unrelated namespaces.
 
-- `BOPO_PLUGIN_SYSTEM_DISABLED=true` or `1` disables plugin execution globally.
-- Legacy override is still honored: `BOPO_PLUGIN_SYSTEM_ENABLED=false` or `0` disables execution.
+If required elevated/restricted namespaces are not granted, execution is blocked with a clear error.
 
-When enabled:
+## Storage Model
 
-1. Company plugin configs are loaded and filtered by hook + enabled state.
-2. High-risk capabilities are checked against granted capabilities.
-3. Plugin executes (built-in executors and prompt-runtime plugins).
-4. Result is validated against `PluginInvocationResultSchema`.
-5. A plugin run row is written (`ok`, `skipped`, `failed`, or `blocked`).
-6. Failures are aggregated into audit events (`plugin.hook.failures`).
+Plugin state is persisted in DB tables:
 
-`runPluginHook` supports `failClosed`; if true, failures can block the calling flow.
+- `plugins` – catalog and manifest JSON
+- `plugin_configs` – company-level enabled/config/grants
+- `plugin_runs` – runtime records and diagnostics
+- `plugin_installs` – revision history (used by rollback/version lifecycle)
 
-## Capability Governance
+## Runtime Flow
 
-High-risk capabilities:
+At API startup:
 
-- `network`
-- `queue_publish`
-- `issue_write`
-- `write_memory`
+1. Filesystem manifests are discovered and validated.
+2. Legacy builtin catalog rows are purged.
+3. Valid plugin manifests are upserted into catalog.
+4. Company plugin config defaults are ensured for discovered manifests.
 
-`PUT /plugins/:pluginId` can request approval when risky capabilities are granted:
+During execution:
 
-- action: `grant_plugin_capabilities`
-- payload includes plugin config + requested grants
-- approval resolution applies config via governance service
+1. Plugin is selected by enabled state and hook/surface.
+2. Capability namespace checks are applied for that specific surface.
+3. Request is dispatched to worker host via JSON-RPC.
+4. Response is validated and plugin run diagnostics are persisted.
 
-See also: `docs/product/governance-and-approvals.md`.
+## API Surface (Current)
 
-## Built-in Plugins (Reference)
-
-MVP built-ins are registered on API startup:
-
-- `trace-exporter` (installed, disabled by default)
-- `memory-enricher` (installed, disabled by default)
-- `queue-publisher` (installed, disabled by default)
-- `heartbeat-tagger` (installed, disabled by default)
-
-Defaults are ensured per company at creation/startup.
-
-## File-Based Install (Low Friction)
-
-Drop a manifest JSON in a plugin folder and restart API:
-
-`plugins/my-plugin/plugin.json`
-
-Example:
-
-```json
-{
-  "id": "my-plugin",
-  "version": "0.1.0",
-  "displayName": "My Plugin",
-  "description": "Example file-based plugin manifest.",
-  "kind": "lifecycle",
-  "hooks": ["afterPersist"],
-  "capabilities": ["emit_audit"],
-  "runtime": {
-    "type": "builtin",
-    "entrypoint": "builtin:my-plugin",
-    "timeoutMs": 5000,
-    "retryCount": 0
-  }
-}
-```
-
-Notes:
-
-- Manifests are validated with `PluginManifestSchema`.
-- Invalid files are skipped (startup continues, warning logged).
-- File-based manifest registration does not bypass company install/enable/governance controls.
-
-## Prompt Runtime Plugins (V1)
-
-Prompt plugins are defined with `runtime.type: "prompt"` and optional `runtime.promptTemplate`.
-
-- Hook execution can append prompt context before adapter execution.
-- Plugin config can include:
-  - `webhookRequests`: host-executed webhook calls (requires network/queue capabilities + grants)
-  - `traceEvents`: custom audit events (requires `emit_audit`)
-- Prompt template variables supported:
-  - `{{pluginId}}`, `{{companyId}}`, `{{agentId}}`, `{{runId}}`, `{{hook}}`, `{{summary}}`, `{{providerType}}`, `{{pluginConfig}}`
-
-Example prompt plugin manifest:
-
-```json
-{
-  "id": "knowledge-context-plugin",
-  "version": "0.1.0",
-  "displayName": "Knowledge Context Plugin",
-  "description": "Inject external knowledge summary before adapter execution.",
-  "kind": "lifecycle",
-  "hooks": ["beforeAdapterExecute"],
-  "capabilities": ["emit_audit", "network"],
-  "runtime": {
-    "type": "prompt",
-    "entrypoint": "prompt:inline",
-    "timeoutMs": 5000,
-    "retryCount": 0,
-    "promptTemplate": "Knowledge context for this run: company={{companyId}} agent={{agentId}}"
-  }
-}
-```
-
-## Data Model
-
-Plugin state is stored in `packages/db`:
-
-- `plugins`: catalog + manifest metadata
-- `plugin_configs`: company-scoped install/config + granted capabilities
-- `plugin_runs`: per-hook execution records and diagnostics
-
-## API Surface
-
-Company-scoped plugin routes (`x-company-id` required):
+All routes are company-scoped (`x-company-id`).
 
 - `GET /plugins`
-  - list catalog rows plus `companyConfig` state
-- `POST /plugins/:pluginId/install`
-  - install plugin for company with default disabled config
 - `PUT /plugins/:pluginId`
-  - update enabled/priority/config/grants
-  - may return pending approval for risky grants
+- `POST /plugins/install` (install by package name/version)
 - `GET /plugins/runs`
-  - list plugin runs (`pluginId`, `runId`, `limit` supported)
+- `GET /plugins/:pluginId/health`
+- `GET /plugins/:pluginId/installs`
+- `POST /plugins/:pluginId/upgrade`
+- `POST /plugins/:pluginId/rollback`
+- `POST /plugins/:pluginId/actions/:actionKey`
+- `POST /plugins/:pluginId/data/:dataKey`
+- `POST /plugins/:pluginId/webhooks/:endpointKey`
+- `GET /plugins/:pluginId/ui`
+- `DELETE /plugins/:pluginId`
 
-Observability alias:
+Removed legacy routes:
 
-- `GET /observability/plugins/runs`
+- `POST /plugins/install-package`
+- `POST /plugins/install-from-json`
+- `POST /plugins/:pluginId/install`
+- `DELETE /plugins/:pluginId/install`
 
-## Quick Start (curl)
+## Filesystem Discovery Rules
 
-Install plugin:
+Default scan path behavior:
 
-```bash
-curl -X POST "http://localhost:4020/plugins/heartbeat-tagger/install" \
-  -H "x-company-id: <company-id>"
-```
+1. `BOPO_PLUGIN_MANIFESTS_DIR` (if set)
+2. `./plugins` if it contains plugin manifests
+3. `../../plugins` if it contains plugin manifests
+4. fallback to `./plugins`
 
-Enable plugin with safe capability:
+Manifests must be at:
 
-```bash
-curl -X PUT "http://localhost:4020/plugins/heartbeat-tagger" \
-  -H "content-type: application/json" \
-  -H "x-company-id: <company-id>" \
-  -d '{
-    "enabled": true,
-    "priority": 90,
-    "grantedCapabilities": ["emit_audit"],
-    "config": {},
-    "requestApproval": false
-  }'
-```
+- `plugins/<plugin-id>/plugin.json`
 
-Read recent runs:
+Entrypoints in filesystem manifests should be relative to the plugin directory, for example:
 
-```bash
-curl "http://localhost:4020/observability/plugins/runs?pluginId=heartbeat-tagger&limit=50" \
-  -H "x-company-id: <company-id>"
-```
+- `runtime.entrypoint: "dist/worker.js"`
+- `entrypoints.worker: "dist/worker.js"`
+- `entrypoints.ui: "ui"`
 
-## UI
+## Quick Start
 
-The first-class Plugins workspace page lives in `apps/web` and supports:
+1. Put a valid v2 manifest in `plugins/<id>/plugin.json` (or install by package name).
+2. Restart API.
+3. Open Plugins page and activate plugin for company.
+4. Run health/action/data tests.
+5. Verify runs via `GET /plugins/runs`.
 
-- install/activate/deactivate actions
-- plugin catalog filtering
-- plugin run preview for selected plugin
+## Troubleshooting
 
-## Known Limits (Current Implementation)
+- Plugin missing from UI:
+  - invalid manifest, wrong manifests directory, or stale API process.
+- Health/action/data fails with capability error:
+  - required namespace not granted for that surface.
+- Rollback/internal error:
+  - `plugin_installs` table missing in active DB; run migrations against the DB your API process actually uses.
+- Worker exited:
+  - wrong worker entrypoint path or runtime error in worker process.
 
-- Runtime execution is built-in only in MVP (manifest allows `stdio`/`http` for future expansion).
-- Timeout/retry fields are declared in manifests; extended runtime isolation is roadmap work.
-- Capability model is deny-by-default for high-risk grants.
+## Related
 
-## Related Pages
-
-- Architecture: [`architecture.md`](./architecture.md)
-- API reference: [`api-reference.md`](./api-reference.md)
-- Configuration: [`configuration-reference.md`](./configuration-reference.md)
 - Authoring guide: [`plugin-authoring.md`](./plugin-authoring.md)
 - Hook reference: [`plugin-hook-reference.md`](./plugin-hook-reference.md)
-- Operator workflow: [`../product/plugins-and-integrations.md`](../product/plugins-and-integrations.md)
-- Plugin runbook: [`../operations/plugin-runbook.md`](../operations/plugin-runbook.md)
-- Governance workflows: [`../product/governance-and-approvals.md`](../product/governance-and-approvals.md)
+- Samples: [`plugin-samples.md`](./plugin-samples.md)
+- Operator guide: [`../product/plugins-and-integrations.md`](../product/plugins-and-integrations.md)
+- Incident runbook: [`../operations/plugin-runbook.md`](../operations/plugin-runbook.md)

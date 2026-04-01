@@ -10,7 +10,7 @@ Clarify when each hook runs, what context is available, and how failures are han
 
 - Hooks execute through `runPluginHook(...)` in `apps/api/src/services/plugin-runtime.ts`.
 - Enabled company plugins matching the requested hook are evaluated.
-- High-risk capabilities are enforced before plugin execution.
+- Capability namespace requirements are enforced before plugin execution.
 - Each execution attempt records a `plugin_runs` row.
 - Hook-level failures are aggregated into `plugin.hook.failures` audit events.
 
@@ -85,7 +85,7 @@ Plugin run status values:
 - `ok`: plugin completed successfully.
 - `skipped`: no executable handler was found.
 - `failed`: plugin execution attempted and failed.
-- `blocked`: policy block (typically missing granted high-risk capability).
+- `blocked`: policy block (typically missing required namespace grant).
 
 Behavior notes:
 
@@ -93,18 +93,13 @@ Behavior notes:
 - Blocking behavior is controlled by `failClosed` when calling `runPluginHook(...)`.
 - When `failClosed` is true, any hook failure can block caller flow.
 
-## Prompt Runtime Hook Behavior
+## Worker Runtime Hook Behavior
 
-For `runtime.type: "prompt"`:
+For worker plugins (`runtime.type: "stdio"`):
 
-- Prompt template is rendered with hook context variables.
-- `promptAppend` can be returned to augment adapter input.
-- Optional `traceEvents` and `webhookRequests` are evaluated.
-
-Capability requirements:
-
-- `traceEvents` require `emit_audit`.
-- `webhookRequests` require `network` or `queue_publish` and corresponding granted capability.
+- Hook invocations are dispatched over JSON-RPC as `plugin.hook`.
+- Plugin worker returns invocation results with status/summary/diagnostics.
+- Hook diagnostics are persisted in `plugin_runs` for observability and debugging.
 
 ## Ordering And Priority
 

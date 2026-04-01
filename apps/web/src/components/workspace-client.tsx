@@ -108,16 +108,6 @@ const AgentRuntimeDefaultsCard = dynamic(
 const OrgChart = dynamic(() => import("@/components/org-chart").then((module) => module.OrgChart), {
   loading: () => <div>Loading org chart...</div>
 });
-const pluginBuilderHooks = [
-  "beforeClaim",
-  "afterClaim",
-  "beforeAdapterExecute",
-  "afterAdapterExecute",
-  "beforePersist",
-  "afterPersist",
-  "onError"
-] as const;
-
 interface IssueRow {
   id: string;
   companyId: string;
@@ -443,10 +433,13 @@ interface PluginRow {
   name: string;
   description?: string | null;
   promptTemplate?: string | null;
+  apiVersion?: string;
   version: string;
   kind: string;
   runtimeType: string;
   runtimeEntrypoint: string;
+  entrypoints?: Record<string, unknown> | null;
+  uiSlots?: Array<Record<string, unknown>>;
   hooks: string[];
   capabilities: string[];
   companyConfig: {
@@ -947,6 +940,7 @@ export function WorkspaceClient({
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pluginActionNotice, setPluginActionNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [pendingActionKeys, setPendingActionKeys] = useState<Record<string, boolean>>({});
   const [runsStatusFilter, setRunsStatusFilter] = useState<string>("all");
   const [runsAgentFilter, setRunsAgentFilter] = useState<string>("all");
@@ -997,13 +991,8 @@ export function WorkspaceClient({
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRow | null>(null);
   const [templateDetailsOpen, setTemplateDetailsOpen] = useState(false);
   const [installPluginDialogOpen, setInstallPluginDialogOpen] = useState(false);
-  const [pluginBuilderMode, setPluginBuilderMode] = useState<"create" | "edit">("create");
-  const [pluginBuilderId, setPluginBuilderId] = useState("");
-  const [pluginBuilderName, setPluginBuilderName] = useState("");
-  const [pluginBuilderDescription, setPluginBuilderDescription] = useState("");
-  const [pluginBuilderHook, setPluginBuilderHook] = useState<(typeof pluginBuilderHooks)[number]>("beforeAdapterExecute");
-  const [pluginBuilderCapabilities, setPluginBuilderCapabilities] = useState("emit_audit");
-  const [pluginBuilderPromptTemplate, setPluginBuilderPromptTemplate] = useState("");
+  const [pluginPackageName, setPluginPackageName] = useState("");
+  const [pluginPackageVersion, setPluginPackageVersion] = useState("");
   const [modelPricing, setModelPricing] = useState<ModelPricingRow[]>([]);
   const [modelProviderFilter, setModelProviderFilter] = useState<string>("all");
   const [modelQuery, setModelQuery] = useState("");
@@ -1026,6 +1015,17 @@ export function WorkspaceClient({
     role: string;
     roleKey?: AgentRoleKey | null;
   } | null>(null);
+  useEffect(() => {
+    if (!pluginActionNotice) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setPluginActionNotice(null);
+    }, 2000);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [pluginActionNotice]);
   useEffect(() => {
     if (!companyId) {
       setHiringDelegate(null);
@@ -1284,12 +1284,6 @@ export function WorkspaceClient({
     }, "Failed to dismiss attention item.", `attention:${itemKey}:dismiss`);
   }
 
-  async function installPlugin(pluginId: string) {
-    await runCrudAction(async () => {
-      await apiPost(`/plugins/${pluginId}/install`, companyId!, {});
-    }, "Failed to install plugin.", `plugin:${pluginId}:install`);
-  }
-
   async function deletePlugin(pluginId: string) {
     await runCrudAction(async () => {
       await apiDelete(`/plugins/${pluginId}`, companyId!);
@@ -1308,6 +1302,86 @@ export function WorkspaceClient({
     }, `Failed to ${enabled ? "activate" : "deactivate"} plugin.`, `plugin:${plugin.id}:${enabled ? "activate" : "deactivate"}`);
   }
 
+  async function checkPluginHealth(pluginId: string) {
+    setActionError(null);
+    setPluginActionNotice(null);
+    if (!companyId) {
+      setPluginActionNotice({ kind: "error", message: "Create or select a company first." });
+      return;
+    }
+    const actionKey = `plugin:${pluginId}:health`;
+    if (isActionPending(actionKey)) {
+      return;
+    }
+    setPendingActionKeys((prev) => ({ ...prev, [actionKey]: true }));
+    try {
+      const response = await apiGet<{ ok: boolean; data: unknown }>(`/plugins/${pluginId}/health`, companyId);
+      const payload = response.data.data ?? response.data;
+      const message =
+        typeof payload === "object" &&
+        payload !== null &&
+        "status" in (payload as Record<string, unknown>) &&
+        String((payload as Record<string, unknown>).status) === "ok"
+          ? "Plugin is healthy."
+          : "Health check completed.";
+      setPluginActionNotice({ kind: "success", message });
+    } catch (error) {
+      setPluginActionNotice({
+        kind: "error",
+        message: error instanceof ApiError ? error.message : "Failed to fetch plugin health."
+      });
+    } finally {
+      setPendingActionKeys((prev) => {
+        if (!prev[actionKey]) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[actionKey];
+        return next;
+      });
+    }
+  }
+
+  async function rollbackPlugin(pluginId: string) {
+    setActionError(null);
+    setPluginActionNotice(null);
+    if (!companyId) {
+      setPluginActionNotice({ kind: "error", message: "Create or select a company first." });
+      return;
+    }
+    const actionKey = `plugin:${pluginId}:rollback`;
+    if (isActionPending(actionKey)) {
+      return;
+    }
+    setPendingActionKeys((prev) => ({ ...prev, [actionKey]: true }));
+    try {
+      const installs = await apiGet<Array<{ id: string }>>(`/plugins/${pluginId}/installs?limit=2`, companyId);
+      const rows = installs.data ?? [];
+      if (rows.length < 2) {
+        throw new Error("No prior install revision found.");
+      }
+      await apiPost(`/plugins/${pluginId}/rollback`, companyId, {
+        installId: rows[1]?.id
+      });
+      setPluginActionNotice({ kind: "success", message: "Plugin rolled back." });
+      router.refresh();
+    } catch (error) {
+      setPluginActionNotice({
+        kind: "error",
+        message: error instanceof ApiError ? error.message : "Failed to rollback plugin."
+      });
+    } finally {
+      setPendingActionKeys((prev) => {
+        if (!prev[actionKey]) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[actionKey];
+        return next;
+      });
+    }
+  }
+
   async function applyTemplate(templateId: string) {
     await runCrudAction(async () => {
       await apiPost(`/templates/${templateId}/apply`, companyId!, {
@@ -1323,29 +1397,8 @@ export function WorkspaceClient({
   }
 
   function openCreatePluginDialog() {
-    setPluginBuilderMode("create");
-    setPluginBuilderId("");
-    setPluginBuilderName("");
-    setPluginBuilderDescription("");
-    setPluginBuilderHook("beforeAdapterExecute");
-    setPluginBuilderCapabilities("emit_audit");
-    setPluginBuilderPromptTemplate("");
-    setInstallPluginDialogOpen(true);
-  }
-
-  function openEditPluginDialog(plugin: PluginRow) {
-    const primaryHook = plugin.hooks[0];
-    setPluginBuilderMode("edit");
-    setPluginBuilderId(plugin.id);
-    setPluginBuilderName(plugin.name);
-    setPluginBuilderDescription(plugin.description ?? "");
-    setPluginBuilderHook(
-      pluginBuilderHooks.includes(primaryHook as (typeof pluginBuilderHooks)[number])
-        ? (primaryHook as (typeof pluginBuilderHooks)[number])
-        : "beforeAdapterExecute"
-    );
-    setPluginBuilderCapabilities(plugin.capabilities.join(","));
-    setPluginBuilderPromptTemplate(plugin.promptTemplate ?? "");
+    setPluginPackageName("");
+    setPluginPackageVersion("");
     setInstallPluginDialogOpen(true);
   }
 
@@ -2859,51 +2912,12 @@ export function WorkspaceClient({
     const variables = templates.reduce((sum, template) => sum + template.variables.length, 0);
     return { total, published, draft, archived, companyVisible, privateVisible, variables };
   }, [templates]);
-  const pluginBuilderManifestJson = useMemo(() => {
-    const capabilities = pluginBuilderCapabilities
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
-    return JSON.stringify(
-      {
-        id: pluginBuilderId.trim(),
-        version: "0.1.0",
-        displayName: pluginBuilderName.trim(),
-        description: pluginBuilderDescription.trim(),
-        kind: "lifecycle",
-        hooks: [pluginBuilderHook],
-        capabilities,
-        runtime: {
-          type: "prompt",
-          entrypoint: "prompt:inline",
-          timeoutMs: 5000,
-          retryCount: 0,
-          promptTemplate: pluginBuilderPromptTemplate.trim()
-        }
-      },
-      null,
-      2
-    );
-  }, [
-    pluginBuilderCapabilities,
-    pluginBuilderDescription,
-    pluginBuilderHook,
-    pluginBuilderId,
-    pluginBuilderName,
-    pluginBuilderPromptTemplate
-  ]);
   const pluginBuilderValidationError = useMemo(() => {
-    if (!pluginBuilderId.trim()) {
-      return "Plugin id is required.";
-    }
-    if (!pluginBuilderName.trim()) {
-      return "Plugin title is required.";
-    }
-    if (!pluginBuilderPromptTemplate.trim()) {
-      return "Prompt template is required.";
+    if (!pluginPackageName.trim()) {
+      return "npm package name is required.";
     }
     return null;
-  }, [pluginBuilderId, pluginBuilderName, pluginBuilderPromptTemplate]);
+  }, [pluginPackageName]);
   const agentModelPairs = useMemo(() => {
     const pairs: Array<{ providerType: string; modelId: string }> = [];
     for (const agent of agents) {
@@ -3751,7 +3765,7 @@ export function WorkspaceClient({
           )
       }
     ],
-    [isActionPending, openEditPluginDialog]
+    [isActionPending]
   );
 
   const inboxColumns = useMemo<ColumnDef<GovernanceInboxRow>[]>(
@@ -4268,65 +4282,67 @@ export function WorkspaceClient({
         header: () => <div className={styles.tableHeaderAlignRight}>Actions</div>,
         cell: ({ row }) => {
           const plugin = row.original;
-          const canDeletePlugin = !plugin.runtimeEntrypoint.startsWith("builtin:");
-          const installActionKey = `plugin:${plugin.id}:install`;
           const activateActionKey = `plugin:${plugin.id}:activate`;
           const deactivateActionKey = `plugin:${plugin.id}:deactivate`;
           return (
             <div className={styles.formatDurationContainer3}>
-              {!plugin.companyConfig ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isActionPending(installActionKey)}
-                  onClick={() => installPlugin(plugin.id)}
-                >
-                  Install
-                </Button>
-              ) : plugin.companyConfig.enabled ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isActionPending(deactivateActionKey)}
-                  onClick={() => setPluginEnabled(plugin, false)}
-                >
-                  Deactivate
-                </Button>
-              ) : (
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={isActionPending(activateActionKey)}
-                  onClick={() => setPluginEnabled(plugin, true)}
-                >
-                  Activate
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openEditPluginDialog(plugin)}
-              >
-                Edit
-              </Button>
-              {canDeletePlugin ? (
-                <ConfirmActionModal
-                  triggerLabel="Delete"
-                  triggerVariant="outline"
-                  triggerSize="sm"
-                  title="Delete plugin?"
-                  description={`Delete "${plugin.name}" from catalog and remove its plugin folder/file from disk.`}
-                  confirmLabel="Delete"
-                  onConfirm={() => deletePlugin(plugin.id)}
-                  triggerDisabled={isActionPending(`plugin:${plugin.id}:delete`)}
-                />
+              {plugin.companyConfig ? (
+                plugin.companyConfig.enabled ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isActionPending(deactivateActionKey)}
+                    onClick={() => setPluginEnabled(plugin, false)}
+                  >
+                    Deactivate
+                  </Button>
+                ) : (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={isActionPending(activateActionKey)}
+                    onClick={() => setPluginEnabled(plugin, true)}
+                  >
+                    Activate
+                  </Button>
+                )
               ) : null}
+              {plugin.companyConfig?.enabled ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isActionPending(`plugin:${plugin.id}:health`)}
+                  onClick={() => checkPluginHealth(plugin.id)}
+                >
+                  Health
+                </Button>
+              ) : null}
+              {plugin.companyConfig?.enabled ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isActionPending(`plugin:${plugin.id}:rollback`)}
+                  onClick={() => rollbackPlugin(plugin.id)}
+                >
+                  Rollback
+                </Button>
+              ) : null}
+              <ConfirmActionModal
+                triggerLabel="Delete"
+                triggerVariant="outline"
+                triggerSize="sm"
+                title="Delete plugin?"
+                description={`Delete "${plugin.name}" from catalog and remove its plugin folder/file from disk.`}
+                confirmLabel="Delete"
+                onConfirm={() => deletePlugin(plugin.id)}
+                triggerDisabled={isActionPending(`plugin:${plugin.id}:delete`)}
+              />
             </div>
           );
         }
       }
     ],
-    [deletePlugin, isActionPending]
+    [checkPluginHealth, deletePlugin, isActionPending, rollbackPlugin, setPluginEnabled]
   );
   const templateColumns = useMemo<ColumnDef<TemplateRow>[]>(
     () => [
@@ -6017,7 +6033,7 @@ export function WorkspaceClient({
           <>
             <SectionHeading
               title="Plugins"
-              description="Install plugins, activate or deactivate them, and manage installed plugin entries."
+              description="Install v2 package plugins, activate/deactivate, and manage catalog entries."
               actions={
                 <Button
                   variant="default"
@@ -6028,12 +6044,12 @@ export function WorkspaceClient({
                 </Button>
               }
             />
-            <div className="ui-stats">
-              <MetricCard label="Plugins in scope" value={pluginsSummary.total} />
-              <MetricCard label="Active" value={pluginsSummary.active} />
-              <MetricCard label="Installed" value={pluginsSummary.installed} />
-              <MetricCard label="Kinds / Granted caps" value={`${pluginsSummary.kinds} / ${pluginsSummary.grantedCapabilities}`} />
-            </div>
+            {pluginActionNotice ? (
+              <Alert variant={pluginActionNotice.kind === "error" ? "destructive" : "default"} className="mb-4">
+                <AlertTitle>{pluginActionNotice.kind === "error" ? "Plugin action failed" : "Plugin health"}</AlertTitle>
+                <AlertDescription className="whitespace-pre-wrap break-words">{pluginActionNotice.message}</AlertDescription>
+              </Alert>
+            ) : null}
             <DataTable
               columns={pluginColumns}
               data={filteredPlugins}
@@ -6079,12 +6095,8 @@ export function WorkspaceClient({
             >
               <DialogContent size="2xl">
                 <DialogHeader>
-                  <DialogTitle>{pluginBuilderMode === "edit" ? "Edit plugin" : "Install plugin"}</DialogTitle>
-                  <DialogDescription>
-                    {pluginBuilderMode === "edit"
-                      ? "Update plugin metadata and runtime prompt."
-                      : "Create a prompt plugin."}
-                  </DialogDescription>
+                  <DialogTitle>Install plugin package</DialogTitle>
+                  <DialogDescription>Install a plugin by npm package name.</DialogDescription>
                 </DialogHeader>
                 <form
                   className="space-y-4"
@@ -6092,14 +6104,15 @@ export function WorkspaceClient({
                     event.preventDefault();
                     void runCrudAction(
                       async () => {
-                        await apiPost("/plugins/install-from-json", companyId!, {
-                          manifestJson: pluginBuilderManifestJson,
-                          install: pluginBuilderMode === "create"
+                        await apiPost("/plugins/install", companyId!, {
+                          packageName: pluginPackageName.trim(),
+                          version: pluginPackageVersion.trim() || undefined,
+                          install: true
                         });
                         setInstallPluginDialogOpen(false);
                       },
-                      "Failed to save plugin manifest JSON.",
-                      "plugin:install-from-json"
+                      "Failed to install plugin package.",
+                      "plugin:install"
                     );
                   }}
                 >
@@ -6107,101 +6120,38 @@ export function WorkspaceClient({
                     <FieldGroup>
                       <Field>
                         <FieldLabelWithHelp
-                          htmlFor="plugin-builder-id"
-                          helpText="Stable slug for registration and on-disk layout (often lowercase, no spaces). Treat as permanent—changing it later usually means reinstalling.">
-                          Plugin ID
+                          htmlFor="plugin-package-name"
+                          helpText="Registry package reference for the plugin. Example: @scope/my-bopo-plugin">
+                          npm package name
                         </FieldLabelWithHelp>
                         <Input
-                          id="plugin-builder-id"
-                          value={pluginBuilderId}
-                          onChange={(event) => setPluginBuilderId(event.target.value)}
-                          placeholder="plugin-id"
+                          id="plugin-package-name"
+                          value={pluginPackageName}
+                          onChange={(event) => setPluginPackageName(event.target.value)}
+                          placeholder="@scope/plugin-name"
                         />
-                        <FieldDescription>Stable identifier used for file path and plugin registration.</FieldDescription>
                       </Field>
                       <Field>
                         <FieldLabelWithHelp
-                          htmlFor="plugin-builder-title"
-                          helpText="Human-readable name in the plugin list, approvals, and admin surfaces. Can differ from the plugin ID.">
-                          Title
+                          htmlFor="plugin-package-version"
+                          helpText="Optional semver or dist-tag. Leave empty for latest.">
+                          Version (optional)
                         </FieldLabelWithHelp>
                         <Input
-                          id="plugin-builder-title"
-                          value={pluginBuilderName}
-                          onChange={(event) => setPluginBuilderName(event.target.value)}
-                          placeholder="Plugin title"
+                          id="plugin-package-version"
+                          value={pluginPackageVersion}
+                          onChange={(event) => setPluginPackageVersion(event.target.value)}
+                          placeholder="latest"
                         />
-                      </Field>
-                      <Field>
-                        <FieldLabelWithHelp
-                          htmlFor="plugin-builder-description"
-                          helpText="What the plugin does and when it should run. Helps reviewers and operators judge risk and fit.">
-                          Description
-                        </FieldLabelWithHelp>
-                        <Textarea
-                          id="plugin-builder-description"
-                          value={pluginBuilderDescription}
-                          onChange={(event) => setPluginBuilderDescription(event.target.value)}
-                          className="min-h-[96px]"
-                          placeholder="What this plugin does"
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabelWithHelp helpText="Pipeline stage where this plugin’s prompt is evaluated (e.g. before or after the adapter runs, around persistence, or on errors).">
-                          Run hook
-                        </FieldLabelWithHelp>
-                        <Select value={pluginBuilderHook} onValueChange={(value) => setPluginBuilderHook(value as (typeof pluginBuilderHooks)[number])}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Hook" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {pluginBuilderHooks.map((hook) => (
-                              <SelectItem key={hook} value={hook}>
-                                {hook}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      <Field>
-                        <FieldLabelWithHelp
-                          htmlFor="plugin-builder-capabilities"
-                          helpText="Comma-separated powers this plugin declares (e.g. emit audit events, network). Install-time grants must cover what you list here.">
-                          Capabilities
-                        </FieldLabelWithHelp>
-                        <Input
-                          id="plugin-builder-capabilities"
-                          value={pluginBuilderCapabilities}
-                          onChange={(event) => setPluginBuilderCapabilities(event.target.value)}
-                          placeholder="emit_audit,network"
-                        />
-                        <FieldDescription>Comma-separated capabilities the plugin declares.</FieldDescription>
-                      </Field>
-                      <Field>
-                        <FieldLabelWithHelp
-                          htmlFor="plugin-builder-template"
-                          helpText="Prompt text merged at the chosen hook. Use placeholders for runtime context; trim secrets—this ships in the manifest.">
-                          Prompt template
-                        </FieldLabelWithHelp>
-                        <Textarea
-                          id="plugin-builder-template"
-                          value={pluginBuilderPromptTemplate}
-                          onChange={(event) => setPluginBuilderPromptTemplate(event.target.value)}
-                          className="min-h-[140px] font-mono text-base"
-                          placeholder="Example: Inject relevant knowledge for this run. Company={{companyId}} Agent={{agentId}}"
-                        />
-                        <FieldDescription>
-                          Supports placeholders like {"{{companyId}}"}, {"{{agentId}}"}, {"{{runId}}"}, and {"{{pluginConfig}}"}.
-                        </FieldDescription>
                       </Field>
                     </FieldGroup>
                   </div>
                   <DialogFooter showCloseButton>
                     <Button
                       type="submit"
-                      disabled={Boolean(pluginBuilderValidationError) || isActionPending("plugin:install-from-json")}
+                      disabled={Boolean(pluginBuilderValidationError) || isActionPending("plugin:install")}
                     >
-                      {pluginBuilderMode === "edit" ? "Save changes" : "Save"}
+                      Install
                     </Button>
                   </DialogFooter>
                 </form>

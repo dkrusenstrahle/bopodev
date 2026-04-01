@@ -14,12 +14,13 @@ Help operators safely extend heartbeat behavior without editing core API code.
 ## Plugin Lifecycle
 
 1. Discover plugins in the catalog (`/plugins`).
-2. Install a plugin for your company.
+2. Install plugin package (or use discovered filesystem plugin).
 3. Configure enabled state, priority, and config payload.
 4. Request approvals for risky capability grants when needed.
-5. Monitor plugin runs and diagnose blocked/failed outcomes.
-6. Disable or uninstall if behavior is not desired.
-7. Delete custom plugins when they are no longer needed.
+5. Validate health/action/data/webhook behavior.
+6. Monitor plugin runs and diagnose blocked/failed outcomes.
+7. Rollback to prior install revision if a release regresses.
+8. Disable or delete plugin definition when it is no longer needed.
 
 ## Where Operators Work
 
@@ -34,17 +35,22 @@ Help operators safely extend heartbeat behavior without editing core API code.
 
 ## Install And Enable
 
-Install a plugin:
+Install by npm package:
 
 ```bash
-curl -X POST "http://localhost:4020/plugins/heartbeat-tagger/install" \
-  -H "x-company-id: <company-id>"
+curl -X POST "http://localhost:4020/plugins/install" \
+  -H "content-type: application/json" \
+  -H "x-company-id: <company-id>" \
+  -d '{
+    "packageName": "@your-scope/your-plugin",
+    "version": "0.1.0"
+  }'
 ```
 
 Enable/configure plugin:
 
 ```bash
-curl -X PUT "http://localhost:4020/plugins/heartbeat-tagger" \
+curl -X PUT "http://localhost:4020/plugins/<plugin-id>" \
   -H "content-type: application/json" \
   -H "x-company-id: <company-id>" \
   -d '{
@@ -56,30 +62,38 @@ curl -X PUT "http://localhost:4020/plugins/heartbeat-tagger" \
   }'
 ```
 
+Validate plugin behavior:
+
+```bash
+curl "http://localhost:4020/plugins/<plugin-id>/health" \
+  -H "x-company-id: <company-id>"
+```
+
 ## Capability Governance
 
-The following capabilities are treated as high risk:
+Plugin permissions are namespace-based and risk-scored by policy.
 
-- `network`
-- `queue_publish`
-- `issue_write`
-- `write_memory`
+When requesting elevated/restricted capability grants, use `requestApproval: true` so governance creates an approval record before applying.
 
-If you include any high-risk capability in `grantedCapabilities` with `requestApproval: true`, Bopo creates a governance approval (`grant_plugin_capabilities`) instead of applying immediately.
+Approval action type:
 
-Recommended rollout pattern:
+- `grant_plugin_capabilities`
+
+Recommended rollout sequence:
 
 1. Install plugin with `enabled: false`.
-2. Request capability grants.
+2. Request capability grants (approval-backed where required).
 3. Resolve governance approval.
-4. Enable plugin and monitor first runs.
+4. Enable plugin for a small cohort.
+5. Run health checks and action/data smoke tests.
+6. Monitor first runs before wider rollout.
 
 ## Monitor Plugin Runs
 
 Read recent runs:
 
 ```bash
-curl "http://localhost:4020/observability/plugins/runs?pluginId=heartbeat-tagger&limit=50" \
+curl "http://localhost:4020/observability/plugins/runs?pluginId=<plugin-id>&limit=50" \
   -H "x-company-id: <company-id>"
 ```
 
@@ -90,20 +104,37 @@ Interpretation:
 - `failed`: plugin execution attempted but failed.
 - `blocked`: capability policy blocked execution.
 
-## Disable, Uninstall, And Delete
+## Upgrade And Rollback
 
-- Disable plugin via `PUT /plugins/:pluginId` with `"enabled": false`.
-- Uninstall for company via `DELETE /plugins/:pluginId/install`.
-- Delete plugin definition via `DELETE /plugins/:pluginId` (custom plugins only; built-ins cannot be deleted).
+List install revisions:
+
+```bash
+curl "http://localhost:4020/plugins/<plugin-id>/installs" \
+  -H "x-company-id: <company-id>"
+```
+
+Rollback:
+
+```bash
+curl -X POST "http://localhost:4020/plugins/<plugin-id>/rollback" \
+  -H "content-type: application/json" \
+  -H "x-company-id: <company-id>" \
+  -d '{"installId":"<prior-install-id>"}'
+```
+
+## Disable And Delete
+
+- Disable plugin with `PUT /plugins/:pluginId` and `"enabled": false`.
+- Delete plugin definition with `DELETE /plugins/:pluginId` (custom/discovered entries).
 
 ## Common Operator Decisions
 
-- **Should we approve network access?**
-  - Approve only for plugins that need external webhooks/integrations.
-- **Should this plugin fail closed?**
-  - For critical compliance or policy workflows, fail-closed behavior can be appropriate.
-- **Can we remove a built-in plugin?**
-  - Built-ins can be disabled/uninstalled per company but not deleted globally.
+- **Should we approve this namespace grant?**
+  - Approve only if the plugin's declared behavior actually requires it.
+- **When should we rollback?**
+  - Rollback after new version regressions (health, action/data, or run errors).
+- **How do we verify post-rollout safety?**
+  - Check health + action/data smoke + run stream for `failed/blocked` spikes.
 
 ## Related Pages
 

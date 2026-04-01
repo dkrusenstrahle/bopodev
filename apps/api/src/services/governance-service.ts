@@ -4,6 +4,8 @@ import {
   AGENT_ROLE_LABELS,
   AgentCreateRequestSchema,
   AgentRoleKeySchema,
+  PluginInstallSourceTypeSchema,
+  PluginManifestV2Schema,
   TemplateManifestDefault,
   TemplateManifestSchema
 } from "bopodev-contracts";
@@ -13,6 +15,7 @@ import {
   approvalRequests,
   agents,
   appendAuditEvent,
+  appendPluginInstall,
   createAgent,
   createGoal,
   createIssue,
@@ -28,6 +31,7 @@ import {
   projects,
   eq,
   updateProjectWorkspace,
+  markPluginInstallsSuperseded,
   updatePluginConfig
 } from "bopodev-db";
 import {
@@ -44,6 +48,8 @@ import {
 } from "../lib/instance-paths";
 import { assertRuntimeCwdForCompany, hasText, resolveDefaultRuntimeCwdForCompany } from "../lib/workspace-policy";
 import { appendDurableFact } from "./memory-file-service";
+import { writePackagedPluginManifestToFilesystem } from "./plugin-manifest-loader";
+import { registerPluginManifest } from "./plugin-runtime";
 import { applyTemplateManifest } from "./template-apply-service";
 
 const approvalGatedActions = new Set([
@@ -97,7 +103,14 @@ const grantPluginCapabilitiesPayloadSchema = z.object({
   enabled: z.boolean().optional(),
   priority: z.number().int().min(0).max(1000).optional(),
   grantedCapabilities: z.array(z.string().min(1)).default([]),
-  config: z.record(z.string(), z.unknown()).default({})
+  capabilityNamespaces: z.array(z.string().min(1)).default([]),
+  config: z.record(z.string(), z.unknown()).default({}),
+  sourceType: PluginInstallSourceTypeSchema.optional(),
+  sourceRef: z.string().optional(),
+  integrity: z.string().optional(),
+  buildHash: z.string().optional(),
+  manifestJson: z.string().optional(),
+  install: z.boolean().default(true)
 });
 const applyTemplatePayloadSchema = z.object({
   templateId: z.string().min(1),
@@ -558,13 +571,52 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
     if (!parsed.success) {
       throw new GovernanceError("Approval payload for plugin capability grant is invalid.");
     }
+    if (parsed.data.manifestJson) {
+      let rawManifest: unknown;
+      try {
+        rawManifest = JSON.parse(parsed.data.manifestJson);
+      } catch {
+        throw new GovernanceError("Plugin install manifest JSON is invalid.");
+      }
+      const manifestParsed = PluginManifestV2Schema.safeParse(rawManifest);
+      if (!manifestParsed.success) {
+        throw new GovernanceError("Plugin install manifest payload failed validation.");
+      }
+      await writePackagedPluginManifestToFilesystem(manifestParsed.data, {
+        sourceType: parsed.data.sourceType ?? "registry",
+        sourceRef: parsed.data.sourceRef,
+        integrity: parsed.data.integrity,
+        buildHash: parsed.data.buildHash
+      });
+      await registerPluginManifest(db, manifestParsed.data);
+      await markPluginInstallsSuperseded(db, {
+        companyId,
+        pluginId: parsed.data.pluginId
+      });
+      await appendPluginInstall(db, {
+        companyId,
+        pluginId: parsed.data.pluginId,
+        pluginVersion: manifestParsed.data.version,
+        sourceType: parsed.data.sourceType ?? "registry",
+        sourceRef: parsed.data.sourceRef ?? null,
+        integrity: parsed.data.integrity ?? null,
+        buildHash: parsed.data.buildHash ?? null,
+        artifactPath: manifestParsed.data.install?.artifactPath ?? null,
+        manifestJson: JSON.stringify(manifestParsed.data),
+        status: "active"
+      });
+    }
+    const configWithNamespaces = {
+      ...parsed.data.config,
+      _grantedCapabilityNamespaces: parsed.data.capabilityNamespaces
+    };
     await updatePluginConfig(db, {
       companyId,
       pluginId: parsed.data.pluginId,
       enabled: parsed.data.enabled,
       priority: parsed.data.priority,
       grantedCapabilitiesJson: JSON.stringify(parsed.data.grantedCapabilities),
-      configJson: JSON.stringify(parsed.data.config)
+      configJson: JSON.stringify(configWithNamespaces)
     });
     return {
       applied: true,
@@ -574,7 +626,8 @@ async function applyApprovalAction(db: BopoDb, companyId: string, action: string
         pluginId: parsed.data.pluginId,
         enabled: parsed.data.enabled ?? null,
         priority: parsed.data.priority ?? null,
-        grantedCapabilities: parsed.data.grantedCapabilities
+        grantedCapabilities: parsed.data.grantedCapabilities,
+        capabilityNamespaces: parsed.data.capabilityNamespaces
       }
     };
   }

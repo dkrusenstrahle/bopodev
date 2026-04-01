@@ -817,6 +817,8 @@ export type AgentRuntimeConfig = z.infer<typeof AgentRuntimeConfigSchema>;
 
 export const PluginKindSchema = z.enum(["lifecycle", "tool", "integration"]);
 export type PluginKind = z.infer<typeof PluginKindSchema>;
+export const PluginManifestApiVersionSchema = z.enum(["2"]);
+export type PluginManifestApiVersion = z.infer<typeof PluginManifestApiVersionSchema>;
 export const PluginHookSchema = z.enum([
   "beforeClaim",
   "afterClaim",
@@ -837,8 +839,67 @@ export const PluginCapabilitySchema = z.enum([
   "issue_write"
 ]);
 export type PluginCapability = z.infer<typeof PluginCapabilitySchema>;
+export const PluginCapabilityNamespaceSchema = z.enum([
+  "issues.read",
+  "issues.write",
+  "comments.read",
+  "comments.write",
+  "events.subscribe",
+  "events.emit",
+  "jobs.schedule",
+  "webhooks.handle",
+  "tools.register",
+  "actions.execute",
+  "data.read",
+  "network.http",
+  "audit.emit",
+  "memory.read",
+  "memory.write"
+]);
+export type PluginCapabilityNamespace = z.infer<typeof PluginCapabilityNamespaceSchema>;
 export const PluginRuntimeTypeSchema = z.enum(["builtin", "stdio", "http", "prompt"]);
 export type PluginRuntimeType = z.infer<typeof PluginRuntimeTypeSchema>;
+export const PluginInstallSourceTypeSchema = z.enum(["builtin", "registry", "local_path", "archive_url"]);
+export type PluginInstallSourceType = z.infer<typeof PluginInstallSourceTypeSchema>;
+export const PluginInstallMetadataSchema = z.object({
+  sourceType: PluginInstallSourceTypeSchema.default("builtin"),
+  sourceRef: z.string().optional(),
+  integrity: z.string().optional(),
+  buildHash: z.string().optional(),
+  installedAt: z.string().optional(),
+  artifactPath: z.string().optional(),
+  packageName: z.string().optional()
+});
+export type PluginInstallMetadata = z.infer<typeof PluginInstallMetadataSchema>;
+export const PluginUiSlotSchema = z.object({
+  slot: z.string().min(1),
+  routePath: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
+  featureFlag: z.string().optional(),
+  displayName: z.string().optional()
+});
+export type PluginUiSlot = z.infer<typeof PluginUiSlotSchema>;
+export const PluginEntrypointsSchema = z.object({
+  worker: z.string().min(1),
+  ui: z.string().min(1).optional()
+});
+export type PluginEntrypoints = z.infer<typeof PluginEntrypointsSchema>;
+export const PluginJobDeclarationSchema = z.object({
+  jobKey: z.string().min(1),
+  displayName: z.string().min(1),
+  schedule: z.string().min(1),
+  description: z.string().optional()
+});
+export type PluginJobDeclaration = z.infer<typeof PluginJobDeclarationSchema>;
+export const PluginWebhookDeclarationSchema = z.object({
+  endpointKey: z.string().min(1),
+  displayName: z.string().optional(),
+  secretHeader: z.string().optional()
+});
+export type PluginWebhookDeclaration = z.infer<typeof PluginWebhookDeclarationSchema>;
 export const PluginWebhookRequestSchema = z.object({
   url: z.string().url(),
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("POST"),
@@ -852,14 +913,16 @@ export const PluginTraceEventSchema = z.object({
   payload: z.record(z.string(), z.unknown()).default({})
 });
 export type PluginTraceEvent = z.infer<typeof PluginTraceEventSchema>;
-export const PluginManifestSchema = z.object({
+export const PluginManifestV2Schema = z.object({
+  apiVersion: z.literal("2").default("2"),
   id: z.string().min(1),
   version: z.string().min(1),
   displayName: z.string().min(1),
   description: z.string().optional(),
-  kind: PluginKindSchema,
+  kind: PluginKindSchema.default("integration"),
   hooks: z.array(PluginHookSchema).default([]),
   capabilities: z.array(PluginCapabilitySchema).default([]),
+  capabilityNamespaces: z.array(PluginCapabilityNamespaceSchema).default([]),
   runtime: z.object({
     type: PluginRuntimeTypeSchema,
     entrypoint: z.string().min(1),
@@ -867,10 +930,38 @@ export const PluginManifestSchema = z.object({
     retryCount: z.number().int().nonnegative().max(2).default(0),
     promptTemplate: z.string().optional()
   }),
+  entrypoints: PluginEntrypointsSchema,
+  jobs: z.array(PluginJobDeclarationSchema).default([]),
+  webhooks: z.array(PluginWebhookDeclarationSchema).default([]),
+  ui: z
+    .object({
+      slots: z.array(PluginUiSlotSchema).default([])
+    })
+    .optional(),
+  install: PluginInstallMetadataSchema.optional(),
   configSchema: z.record(z.string(), z.unknown()).optional(),
   minimumBopoVersion: z.string().optional()
 });
+export type PluginManifestV2 = z.infer<typeof PluginManifestV2Schema>;
+export const PluginManifestSchema = PluginManifestV2Schema;
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;
+export const PLUGIN_CAPABILITY_RISK: Record<PluginCapabilityNamespace, "safe" | "elevated" | "restricted"> = {
+  "issues.read": "safe",
+  "issues.write": "elevated",
+  "comments.read": "safe",
+  "comments.write": "elevated",
+  "events.subscribe": "safe",
+  "events.emit": "elevated",
+  "jobs.schedule": "elevated",
+  "webhooks.handle": "elevated",
+  "tools.register": "elevated",
+  "actions.execute": "safe",
+  "data.read": "safe",
+  "network.http": "restricted",
+  "audit.emit": "safe",
+  "memory.read": "safe",
+  "memory.write": "restricted"
+};
 export const PluginPromptExecutionResultSchema = z.object({
   promptAppend: z.string().max(20000).optional(),
   traceEvents: z.array(PluginTraceEventSchema).max(20).default([]),

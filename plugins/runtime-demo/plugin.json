@@ -1,0 +1,42 @@
+{
+  "apiVersion": "2",
+  "id": "runtime-demo",
+  "version": "0.1.0",
+  "displayName": "Runtime Demo",
+  "description": "Worker-based demo plugin that exercises hook/action/data/job/webhook and UI entrypoints.",
+  "kind": "integration",
+  "hooks": ["beforeAdapterExecute", "afterPersist"],
+  "capabilities": ["emit_audit"],
+  "capabilityNamespaces": ["audit.emit", "events.subscribe", "actions.execute", "data.read"],
+  "runtime": {
+    "type": "stdio",
+    "entrypoint": "dist/worker.js",
+    "timeoutMs": 5000,
+    "retryCount": 0
+  },
+  "entrypoints": {
+    "worker": "dist/worker.js",
+    "ui": "ui"
+  },
+  "jobs": [
+    {
+      "jobKey": "demo-minute",
+      "displayName": "Demo Minute Job",
+      "schedule": "* * * * *"
+    }
+  ],
+  "webhooks": [
+    {
+      "endpointKey": "incoming-demo",
+      "displayName": "Incoming Demo Webhook"
+    }
+  ],
+  "ui": {
+    "slots": [
+      {
+        "slot": "issueDetailTab",
+        "displayName": "Runtime Demo"
+      }
+    ]
+  }
+}

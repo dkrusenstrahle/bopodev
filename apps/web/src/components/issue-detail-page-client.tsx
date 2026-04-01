@@ -49,8 +49,8 @@ interface IssueRow {
   id: string;
   projectId: string;
   parentIssueId?: string | null;
-  /** Set when this issue was opened by a work loop run. */
-  loopId?: string | null;
+  /** Set when this issue was opened by a routine run. */
+  routineId?: string | null;
   goalIds?: string[];
   assigneeAgentId: string | null;
   title: string;
@@ -140,7 +140,7 @@ interface IssueAttachmentRow {
   downloadPath: string;
 }
 
-interface IssueWorkLoopRow {
+interface IssueRoutineRow {
   id: string;
   title: string;
   projectId: string;
@@ -476,7 +476,7 @@ export function IssueDetailPageClient({
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const [loopsLoading, setLoopsLoading] = useState(false);
   const [loopsError, setLoopsError] = useState<string | null>(null);
-  const [loops, setLoops] = useState<IssueWorkLoopRow[]>([]);
+  const [loops, setLoops] = useState<IssueRoutineRow[]>([]);
   const [comments, setComments] = useState<IssueCommentRow[]>([]);
   const [activityItems, setActivityItems] = useState<IssueActivityRow[]>([]);
   const [attachments, setAttachments] = useState<IssueAttachmentRow[]>([]);
@@ -546,13 +546,13 @@ export function IssueDetailPageClient({
 
   const issueLoops = useMemo(() => {
     const linked = loops.filter(
-      (loop) => loop.parentIssueId === issue.id || (issue.loopId != null && issue.loopId === loop.id)
+      (loop) => loop.parentIssueId === issue.id || (issue.routineId != null && issue.routineId === loop.id)
     );
     const byId = new Map(linked.map((loop) => [loop.id, loop]));
     return [...byId.values()].sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
-  }, [loops, issue.id, issue.loopId]);
+  }, [loops, issue.id, issue.routineId]);
   useEffect(() => {
     let cancelled = false;
 
@@ -644,13 +644,13 @@ export function IssueDetailPageClient({
       setLoopsLoading(true);
       setLoopsError(null);
       try {
-        const result = await apiGet<{ data: IssueWorkLoopRow[] }>("/loops", companyId);
+        const result = await apiGet<{ data: IssueRoutineRow[] }>("/routines", companyId);
         if (!cancelled) {
           setLoops(result.data.data ?? []);
         }
       } catch (error) {
         if (!cancelled) {
-          setLoopsError(error instanceof ApiError ? error.message : "Failed to load work loops.");
+          setLoopsError(error instanceof ApiError ? error.message : "Failed to load routines.");
           setLoops([]);
         }
       } finally {
@@ -964,13 +964,13 @@ export function IssueDetailPageClient({
     }
   ];
 
-  const issueLoopColumns: ColumnDef<IssueWorkLoopRow>[] = [
+  const issueLoopColumns: ColumnDef<IssueRoutineRow>[] = [
     {
       accessorKey: "title",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Loop" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Routine" />,
       cell: ({ row }) => (
         <Link
-          href={{ pathname: `/loops/${row.original.id}`, query: { companyId } }}
+          href={{ pathname: `/routines/${row.original.id}`, query: { companyId } }}
           className="ui-link-sidebar-nested"
         >
           {row.original.title}
@@ -1128,7 +1128,7 @@ export function IssueDetailPageClient({
               <TabsTrigger value="comments">Comments ({visibleComments.length})</TabsTrigger>
               <TabsTrigger value="attachments">Attachments ({attachments.length})</TabsTrigger>
               <TabsTrigger value="subissues">Sub-issues ({subIssues.length})</TabsTrigger>
-              <TabsTrigger value="loops">Loops ({issueLoops.length})</TabsTrigger>
+              <TabsTrigger value="routines">Routines ({issueLoops.length})</TabsTrigger>
               <TabsTrigger value="activity">Activity ({activityItems.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="description" className="ui-issue-tabs-content">
@@ -1366,31 +1366,31 @@ export function IssueDetailPageClient({
                 />
               </div>
             </TabsContent>
-            <TabsContent value="loops" className="ui-issue-tabs-content">
-              {loopsLoading ? <div className="ui-issue-muted-text">Loading loops...</div> : null}
+            <TabsContent value="routines" className="ui-issue-tabs-content">
+              {loopsLoading ? <div className="ui-issue-muted-text">Loading routines...</div> : null}
               {!loopsLoading && issueLoops.length === 0 ? (
                 <EmptyState>
-                  No linked work loops yet. Loops appear here when this issue is the loop&apos;s parent issue, or when
-                  this issue was opened by a loop run.
+                  No linked routines yet. Routines appear here when this issue is the routine&apos;s parent issue, or when
+                  this issue was opened by a routine run.
                 </EmptyState>
               ) : null}
               {issueLoops.length > 0 ? (
                 <>
                   <SectionHeading
-                  title="Loops"
-                  description="Linked work loops for this issue."
+                  title="Routines"
+                  description="Linked routines for this issue."
                 />
                   <DataTable
                     columns={issueLoopColumns}
                     data={issueLoops}
-                    emptyMessage="No linked work loops yet."
+                    emptyMessage="No linked routines yet."
                     showViewOptions={false}
                   />
                 </>
               ) : null}
               <div className="ui-issue-subissue-actions">
                 <Button asChild variant="outline">
-                  <Link href={{ pathname: "/loops", query: { companyId } }}>Open Loops</Link>
+                  <Link href={{ pathname: "/routines", query: { companyId } }}>Open Routines</Link>
                 </Button>
               </div>
             </TabsContent>

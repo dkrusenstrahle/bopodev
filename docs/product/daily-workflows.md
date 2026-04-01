@@ -24,10 +24,10 @@ Provide an end-to-end operating sequence for projects, issues, and goals.
    - Review `issues` view by status and priority.
    - Ensure each issue is linked to the right project and has clear acceptance criteria.
    - Optionally link issues to one or more **planning goals** so heartbeats include a goal chain (root → leaf) per linked goal.
-   - On an issue’s **Loops** tab, see work loops tied to that issue (parent or opened-by-loop) and jump to the full **Loops** section when needed.
-3. **Work loops** (when you use recurring automation)
-   - In `loops`, confirm triggers are **Active**, review **Runs** and **Activity**, and use **Run now** for a one-off test when appropriate.
-   - See [`loops.md`](./loops.md) for how loops differ from an agent’s heartbeat schedule.
+   - On an issue’s **Routines** tab, see routines tied to that issue (parent or opened-by-routine) and jump to the full **Routines** section when needed.
+3. **Routines** (when you use recurring automation)
+   - In `routines`, confirm triggers are **Active**, review **Runs** and **Activity**, and use **Run now** for a one-off test when appropriate.
+   - See [`routines.md`](./routines.md) for how routines differ from an agent’s heartbeat schedule.
 4. **Align goals**
    - Check active company/project goals in `goals`.
    - For agent-level goals, set **owner agent** when a goal applies to one worker only.
@@ -75,6 +75,6 @@ Provide an end-to-end operating sequence for projects, issues, and goals.
 - Product overview: [`overview.md`](./overview.md)
 - Owner assistant **Chat**: [`owner-assistant.md`](./owner-assistant.md)
 - Agents, runs, and **Documents**: [`agents-and-runs.md`](./agents-and-runs.md)
-- Work loops: [`loops.md`](./loops.md)
+- Routines: [`routines.md`](./routines.md)
 - Governance: [`governance-and-approvals.md`](./governance-and-approvals.md)
 

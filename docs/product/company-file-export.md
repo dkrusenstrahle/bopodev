@@ -4,7 +4,7 @@ Operators can treat a company as a **folder of files**: export a `.zip`, edit ma
 
 ## Layout inside the zip
 
-- **`.bopo.yaml`** — Machine-readable manifest (`schema: bopo/company-export/v1`): company, projects, agents (with slugs), optional **goals** (stable slugs, hierarchy via `parentGoalSlug`), scheduled work loops (`routines`).
+- **`.bopo.yaml`** — Machine-readable manifest (`schema: bopo/company-export/v1`): company, projects, agents (with slugs), optional **goals** (stable slugs, hierarchy via `parentGoalSlug`), scheduled routines (`routines` in the export manifest).
 - **`COMPANY.md`**, **`README.md`** — Human-oriented summary and mission.
 - **`projects/<slug>/PROJECT.md`** — Project front matter + description.
 - **`agents/<slug>/...`** — Operating docs from the instance workspace (e.g. `AGENTS.md`, `HEARTBEAT.md`). **`agents/<slug>/memory/...`** is included in exports from the UI when present.

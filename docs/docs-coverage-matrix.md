@@ -13,10 +13,10 @@ Status values:
 
 | Functional area | Primary UI sections | Current docs | Coverage status | Notes |
 | --- | --- | --- | --- | --- |
-| Company, project, and issue planning | `dashboard`, `projects`, `issues` | `README.md`, `docs/product/overview.md`, `docs/product/daily-workflows.md` | covered | Keep route map aligned with app sections; issue **Loops** tab ties issues to work loops. |
+| Company, project, and issue planning | `dashboard`, `projects`, `issues` | `README.md`, `docs/product/overview.md`, `docs/product/daily-workflows.md` | covered | Keep route map aligned with app sections; issue **Routines** tab ties issues to routines. |
 | Goal alignment | `goals` | `docs/product/daily-workflows.md`, `docs/developer/domain-model.md` | covered | Product + data model coverage exists. |
 | Agent lifecycle, documents, and runs | `agents`, `/agents/:id/docs`, `runs`, `settings` | `docs/product/agents-and-runs.md`, `docs/guides/agent-heartbeat-protocol.md`, `docs/developer/configuration-reference.md` | covered | **Documents** = operating + memory markdown editor; runtime/provider details; lean prompt + hydration guide. |
-| Work loops (scheduled recurring issues) | `loops` | `docs/product/loops.md`, `docs/developer/api-reference.md` | covered | Distinct from per-agent heartbeat cron; `/loops` permissions in API reference. |
+| Routines (scheduled recurring issues) | `routines` | `docs/product/routines.md`, `docs/developer/api-reference.md` | covered | Distinct from per-agent heartbeat cron; `/routines` permissions in API reference. |
 | Governance and inbox operations | `governance`, `inbox` | `docs/product/governance-and-approvals.md`, `docs/developer/api-reference.md` | covered | Includes approval action catalog and outcomes. |
 | Office-space and realtime behavior | `office-space`, `inbox` | `docs/product/office-space-and-realtime.md` | needs-refresh | Realtime channel list changed recently; keep synced with server bootstrap channels. |
 | Observability, logs, costs, and artifacts | `runs`, `trace-logs`, `costs` | `docs/product/agents-and-runs.md`, `docs/developer/api-reference.md`, `docs/operations/troubleshooting.md` | needs-refresh | Ensure artifact download and memory endpoints stay current. |

@@ -391,7 +391,7 @@ export function CompanyFileImportCard() {
                 <>
                   <p className="ui-company-file-import-preview-summary">
                     <strong>{preview.companyName}</strong> — {preview.counts.projects} projects, {preview.counts.agents}{" "}
-                    agents, {preview.counts.goals} goals, {preview.counts.routines} scheduled loops, {preview.counts.skillFiles}{" "}
+                    agents, {preview.counts.goals} goals, {preview.counts.routines} scheduled routines, {preview.counts.skillFiles}{" "}
                     skill files.
                   </p>
                   {!preview.hasCeo ? (

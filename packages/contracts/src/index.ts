@@ -122,18 +122,18 @@ export const IssueSchema = z.object({
   assigneeAgentId: EntityIdSchema.nullable(),
   labels: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
-  /** Present when the issue was created from a work loop run. */
-  loopId: EntityIdSchema.nullable().optional(),
-  loopRunId: EntityIdSchema.nullable().optional(),
+  /** Present when the issue was created from a routine run. */
+  routineId: EntityIdSchema.nullable().optional(),
+  routineRunId: EntityIdSchema.nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string()
 });
 
-export const WorkLoopConcurrencyPolicySchema = z.enum(["coalesce_if_active", "skip_if_active", "always_enqueue"]);
-export const WorkLoopCatchUpPolicySchema = z.enum(["skip_missed", "enqueue_missed_with_cap"]);
-export const WorkLoopStatusSchema = z.enum(["active", "paused", "archived"]);
+export const WorkRoutineConcurrencyPolicySchema = z.enum(["coalesce_if_active", "skip_if_active", "always_enqueue"]);
+export const WorkRoutineCatchUpPolicySchema = z.enum(["skip_missed", "enqueue_missed_with_cap"]);
+export const WorkRoutineStatusSchema = z.enum(["active", "paused", "archived"]);
 
-export const WorkLoopSchema = z.object({
+export const WorkRoutineSchema = z.object({
   id: EntityIdSchema,
   companyId: EntityIdSchema,
   projectId: EntityIdSchema,
@@ -143,18 +143,18 @@ export const WorkLoopSchema = z.object({
   description: z.string().nullable().optional(),
   assigneeAgentId: EntityIdSchema,
   priority: z.string(),
-  status: WorkLoopStatusSchema,
-  concurrencyPolicy: WorkLoopConcurrencyPolicySchema,
-  catchUpPolicy: WorkLoopCatchUpPolicySchema,
+  status: WorkRoutineStatusSchema,
+  concurrencyPolicy: WorkRoutineConcurrencyPolicySchema,
+  catchUpPolicy: WorkRoutineCatchUpPolicySchema,
   lastTriggeredAt: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string()
 });
 
-export const WorkLoopTriggerSchema = z.object({
+export const WorkRoutineTriggerSchema = z.object({
   id: EntityIdSchema,
   companyId: EntityIdSchema,
-  workLoopId: EntityIdSchema,
+  routineId: EntityIdSchema,
   kind: z.string(),
   label: z.string().nullable().optional(),
   enabled: z.boolean(),
@@ -167,10 +167,10 @@ export const WorkLoopTriggerSchema = z.object({
   updatedAt: z.string()
 });
 
-export const WorkLoopRunSchema = z.object({
+export const WorkRoutineRunSchema = z.object({
   id: EntityIdSchema,
   companyId: EntityIdSchema,
-  workLoopId: EntityIdSchema,
+  routineId: EntityIdSchema,
   triggerId: EntityIdSchema.nullable().optional(),
   source: z.enum(["schedule", "manual"]),
   status: z.string(),
@@ -184,7 +184,7 @@ export const WorkLoopRunSchema = z.object({
   updatedAt: z.string()
 });
 
-export const WorkLoopCreateRequestSchema = z.object({
+export const WorkRoutineCreateRequestSchema = z.object({
   projectId: EntityIdSchema,
   parentIssueId: EntityIdSchema.nullable().optional(),
   goalIds: z.array(EntityIdSchema).optional(),
@@ -192,27 +192,27 @@ export const WorkLoopCreateRequestSchema = z.object({
   description: z.string().nullable().optional(),
   assigneeAgentId: EntityIdSchema,
   priority: IssuePrioritySchema.optional(),
-  status: WorkLoopStatusSchema.optional(),
-  concurrencyPolicy: WorkLoopConcurrencyPolicySchema.optional(),
-  catchUpPolicy: WorkLoopCatchUpPolicySchema.optional()
+  status: WorkRoutineStatusSchema.optional(),
+  concurrencyPolicy: WorkRoutineConcurrencyPolicySchema.optional(),
+  catchUpPolicy: WorkRoutineCatchUpPolicySchema.optional()
 });
 
-export const WorkLoopUpdateRequestSchema = z
+export const WorkRoutineUpdateRequestSchema = z
   .object({
     title: z.string().min(1).optional(),
     description: z.string().nullable().optional(),
     assigneeAgentId: EntityIdSchema.optional(),
     priority: IssuePrioritySchema.optional(),
-    status: WorkLoopStatusSchema.optional(),
-    concurrencyPolicy: WorkLoopConcurrencyPolicySchema.optional(),
-    catchUpPolicy: WorkLoopCatchUpPolicySchema.optional(),
+    status: WorkRoutineStatusSchema.optional(),
+    concurrencyPolicy: WorkRoutineConcurrencyPolicySchema.optional(),
+    catchUpPolicy: WorkRoutineCatchUpPolicySchema.optional(),
     parentIssueId: EntityIdSchema.nullable().optional(),
     goalIds: z.array(EntityIdSchema).optional(),
     projectId: EntityIdSchema.optional()
   })
   .refine((p) => Object.keys(p).length > 0, "At least one field must be provided.");
 
-export const WorkLoopTriggerCronCreateSchema = z.object({
+export const WorkRoutineTriggerCronCreateSchema = z.object({
   mode: z.literal("cron"),
   cronExpression: z.string().min(1),
   timezone: z.string().min(1).optional(),
@@ -220,7 +220,7 @@ export const WorkLoopTriggerCronCreateSchema = z.object({
   enabled: z.boolean().optional()
 });
 
-export const WorkLoopTriggerPresetCreateSchema = z.object({
+export const WorkRoutineTriggerPresetCreateSchema = z.object({
   mode: z.literal("preset"),
   preset: z.enum(["daily", "weekly"]),
   hour24: z.number().int().min(0).max(23),
@@ -232,12 +232,12 @@ export const WorkLoopTriggerPresetCreateSchema = z.object({
   enabled: z.boolean().optional()
 });
 
-export const WorkLoopTriggerCreateRequestSchema = z.discriminatedUnion("mode", [
-  WorkLoopTriggerCronCreateSchema,
-  WorkLoopTriggerPresetCreateSchema
+export const WorkRoutineTriggerCreateRequestSchema = z.discriminatedUnion("mode", [
+  WorkRoutineTriggerCronCreateSchema,
+  WorkRoutineTriggerPresetCreateSchema
 ]);
 
-export const WorkLoopTriggerUpdateRequestSchema = z
+export const WorkRoutineTriggerUpdateRequestSchema = z
   .object({
     cronExpression: z.string().min(1).optional(),
     timezone: z.string().min(1).optional(),

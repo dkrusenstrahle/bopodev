@@ -3,7 +3,7 @@ export const sectionItems = [
   { slug: "chat", label: "Chat" },
   { slug: "projects", label: "Projects" },
   { slug: "issues", label: "Issues" },
-  { slug: "loops", label: "Loops" },
+  { slug: "routines", label: "Routines" },
   { slug: "goals", label: "Goals" },
   { slug: "agents", label: "Agents" },
   { slug: "org-chart", label: "Organization" },

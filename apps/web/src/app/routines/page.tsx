@@ -1,19 +1,11 @@
-import { notFound } from "next/navigation";
-import { LoopDetailPageClient } from "@/components/loop-detail-page-client";
+import { RoutinesPageClient } from "@/components/routines-page-client";
 import { loadWorkspaceData } from "@/lib/workspace-data";
 
-export default async function LoopDetailPage({
-  params,
-  searchParams
-}: {
-  params: Promise<{ loopId: string }>;
-  searchParams: Promise<{ companyId?: string }>;
-}) {
-  const { loopId } = await params;
+export default async function RoutinesPage({ searchParams }: { searchParams: Promise<{ companyId?: string }> }) {
   const { companyId } = await searchParams;
   const workspaceData = await loadWorkspaceData(companyId, {
     include: {
-      issues: true,
+      issues: false,
       agents: true,
       heartbeatRuns: false,
       approvals: false,
@@ -26,13 +18,8 @@ export default async function LoopDetailPage({
     }
   });
 
-  if (!workspaceData.companyId) {
-    notFound();
-  }
-
   return (
-    <LoopDetailPageClient
-      loopId={loopId}
+    <RoutinesPageClient
       companyId={workspaceData.companyId}
       activeCompany={workspaceData.activeCompany}
       companies={workspaceData.companies}

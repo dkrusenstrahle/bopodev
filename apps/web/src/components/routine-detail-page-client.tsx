@@ -61,7 +61,7 @@ type RunRow = {
   failureReason: string | null;
 };
 
-type LoopDetail = {
+type RoutineDetail = {
   id: string;
   title: string;
   description: string | null;
@@ -98,7 +98,7 @@ const LOOP_ISSUES_AREA_CHART_CONFIG = {
   active: { label: "Open / active", color: "var(--chart-3)" }
 } satisfies ChartConfig;
 
-function shortLoopId(value: string) {
+function shortRoutineId(value: string) {
   return value.length > 12 ? `${value.slice(0, 8)}…` : value;
 }
 
@@ -296,10 +296,10 @@ function formatTriggerLastResult(raw: string | null, companyId: string | null): 
     return "No result yet.";
   }
   if (raw === "Coalesced into an existing open issue") {
-    return "No new issue was opened — this run was merged with an existing open issue from this loop.";
+    return "No new issue was opened — this run was merged with an existing open issue from this routine.";
   }
   if (raw === "Skipped while an open issue exists") {
-    return "Skipped because an issue from this loop is still open.";
+    return "Skipped because an issue from this routine is still open.";
   }
   if (raw === "Execution failed") {
     return "The run failed; no new issue was opened.";
@@ -333,7 +333,7 @@ function formatLoopRunOutcomeLabel(status: string): string {
     case "coalesced":
       return "Merged with an existing open issue";
     case "skipped":
-      return "Skipped — an issue from this loop is still open";
+      return "Skipped — an issue from this routine is still open";
     case "failed":
       return "Failed";
     case "received":
@@ -343,14 +343,14 @@ function formatLoopRunOutcomeLabel(status: string): string {
   }
 }
 
-export function LoopDetailPageClient(
+export function RoutineDetailPageClient(
   props: WorkspacePageProps & {
-    loopId: string;
+    routineId: string;
   }
 ) {
-  const { companyId, companies, projects, agents, loopId, issues } = props;
+  const { companyId, companies, projects, agents, routineId, issues } = props;
   const router = useRouter();
-  const [detail, setDetail] = useState<LoopDetail | null>(null);
+  const [detail, setDetail] = useState<RoutineDetail | null>(null);
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -386,15 +386,15 @@ export function LoopDetailPageClient(
     }
     setError(null);
     try {
-      const res = await apiGet<{ data: LoopDetail }>(`/loops/${loopId}`, companyId);
+      const res = await apiGet<{ data: RoutineDetail }>(`/routines/${routineId}`, companyId);
       setDetail(res.data.data);
-      const act = await apiGet<{ data: ActivityRow[] }>(`/loops/${loopId}/activity`, companyId);
+      const act = await apiGet<{ data: ActivityRow[] }>(`/routines/${routineId}/activity`, companyId);
       setActivity(act.data.data ?? []);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load loop.");
+      setError(e instanceof ApiError ? e.message : "Failed to load routine.");
       setDetail(null);
     }
-  }, [companyId, loopId]);
+  }, [companyId, routineId]);
 
   useEffect(() => {
     void load();
@@ -470,7 +470,7 @@ export function LoopDetailPageClient(
       byDay.set(key, { done: 0, inReview: 0, active: 0 });
     }
     for (const issue of issues) {
-      if (issue.loopId !== loopId || issue.status === "canceled") {
+      if (issue.routineId !== routineId || issue.status === "canceled") {
         continue;
       }
       const day = new Date(issue.updatedAt);
@@ -494,7 +494,7 @@ export function LoopDetailPageClient(
       inReview: values.inReview,
       active: values.active
     }));
-  }, [issues, loopId]);
+  }, [issues, routineId]);
 
   const hasLoopRunsTrend = useMemo(
     () => loopRunsDailyChartData.some((row) => row.issueCreated > 0 || row.failed > 0),
@@ -555,7 +555,7 @@ export function LoopDetailPageClient(
         accessorKey: "id",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Run" />,
         cell: ({ row }) => (
-          <span className="ui-run-table-cell-muted font-mono text-sm tabular-nums">{shortLoopId(row.original.id)}</span>
+          <span className="ui-run-table-cell-muted font-mono text-sm tabular-nums">{shortRoutineId(row.original.id)}</span>
         )
       }
     ],
@@ -619,7 +619,7 @@ export function LoopDetailPageClient(
       return;
     }
     try {
-      await apiPatch(`/loops/${detail.id}`, companyId, { status: next ? "active" : "paused" });
+      await apiPatch(`/routines/${detail.id}`, companyId, { status: next ? "active" : "paused" });
       await load();
       router.refresh();
     } catch {
@@ -634,7 +634,7 @@ export function LoopDetailPageClient(
     setRunning(true);
     setError(null);
     try {
-      await apiPost(`/loops/${detail.id}/run`, companyId, {});
+      await apiPost(`/routines/${detail.id}/run`, companyId, {});
       await load();
       router.refresh();
     } catch (e) {
@@ -673,7 +673,7 @@ export function LoopDetailPageClient(
         return;
       }
 
-      const res = await apiPatch<{ data?: Partial<LoopDetail> }>(`/loops/${detail.id}`, companyId, patch);
+      const res = await apiPatch<{ data?: Partial<RoutineDetail> }>(`/routines/${detail.id}`, companyId, patch);
       const updated = res.data?.data;
       setDetail((prev) =>
         prev
@@ -692,7 +692,7 @@ export function LoopDetailPageClient(
       );
       setEditOpen(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to update loop.");
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to update routine.");
     } finally {
       setEditBusy(false);
     }
@@ -758,7 +758,7 @@ export function LoopDetailPageClient(
     setError(null);
     try {
       const res = await apiPatch<{ data?: Partial<TriggerRow> }>(
-        `/loops/${detail.id}/triggers/${editingTriggerId}`,
+        `/routines/${detail.id}/triggers/${editingTriggerId}`,
         companyId,
         patch
       );
@@ -805,7 +805,7 @@ export function LoopDetailPageClient(
     setError(null);
     setTriggerDeleteBusy(true);
     try {
-      await apiDelete(`/loops/${detail.id}/triggers/${editingTriggerId}`, companyId);
+      await apiDelete(`/routines/${detail.id}/triggers/${editingTriggerId}`, companyId);
       const removedId = editingTriggerId;
       setDetail((prev) => {
         if (!prev) {
@@ -832,28 +832,28 @@ export function LoopDetailPageClient(
     setError(null);
     try {
       if (scheduleKind === "custom_cron") {
-        await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+        await apiPost(`/routines/${detail.id}/triggers`, companyId, {
           mode: "cron",
           cronExpression: customCron.trim(),
           timezone,
           enabled: true
         });
       } else if (scheduleKind === "every_minute") {
-        await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+        await apiPost(`/routines/${detail.id}/triggers`, companyId, {
           mode: "cron",
           cronExpression: "* * * * *",
           timezone,
           enabled: true
         });
       } else if (scheduleKind === "every_hour") {
-        await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+        await apiPost(`/routines/${detail.id}/triggers`, companyId, {
           mode: "cron",
           cronExpression: `${minute} * * * *`,
           timezone,
           enabled: true
         });
       } else if (scheduleKind === "every_day") {
-        await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+        await apiPost(`/routines/${detail.id}/triggers`, companyId, {
           mode: "preset",
           preset: "daily",
           hour24,
@@ -862,7 +862,7 @@ export function LoopDetailPageClient(
           enabled: true
         });
       } else if (scheduleKind === "weekdays") {
-        await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+        await apiPost(`/routines/${detail.id}/triggers`, companyId, {
           mode: "cron",
           cronExpression: `${minute} ${hour24} * * 1-5`,
           timezone,
@@ -875,7 +875,7 @@ export function LoopDetailPageClient(
           return;
         }
         if (days.length === 1) {
-          await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+          await apiPost(`/routines/${detail.id}/triggers`, companyId, {
             mode: "preset",
             preset: "weekly",
             hour24,
@@ -885,7 +885,7 @@ export function LoopDetailPageClient(
             enabled: true
           });
         } else {
-          await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+          await apiPost(`/routines/${detail.id}/triggers`, companyId, {
             mode: "cron",
             cronExpression: `${minute} ${hour24} * * ${days.join(",")}`,
             timezone,
@@ -893,7 +893,7 @@ export function LoopDetailPageClient(
           });
         }
       } else if (scheduleKind === "monthly") {
-        await apiPost(`/loops/${detail.id}/triggers`, companyId, {
+        await apiPost(`/routines/${detail.id}/triggers`, companyId, {
           mode: "cron",
           cronExpression: `${minute} ${hour24} ${dayOfMonth} * *`,
           timezone,
@@ -978,7 +978,7 @@ export function LoopDetailPageClient(
               <div className="ui-page-section-gap-sm">
                 <div className="ui-page-header-row">
                   <div className="ui-page-header-intro">
-                    <SectionHeading title={detail.title} description="Loop details and scheduling controls." />
+                    <SectionHeading title={detail.title} description="Routine details and scheduling controls." />
                   </div>
                   <div className="ui-page-header-actions">
                     <Dialog
@@ -1012,7 +1012,7 @@ export function LoopDetailPageClient(
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Edit loop</DialogTitle>
+                          <DialogTitle>Edit routine</DialogTitle>
                         </DialogHeader>
                         <form onSubmit={saveLoopEdits}>
                           <FieldGroup>
@@ -1021,11 +1021,11 @@ export function LoopDetailPageClient(
                               <Input value={editTitle} onChange={(ev) => setEditTitle(ev.target.value)} required />
                             </Field>
                             <Field>
-                              <FieldLabelWithHelp helpText="Becomes the new issue body when the loop runs. The markdown editor shows formatted text as you type; the loop and issue pages render the same Markdown.">
+                              <FieldLabelWithHelp helpText="Becomes the new issue body when the routine runs. The markdown editor shows formatted text as you type; the routine and issue pages render the same Markdown.">
                                 Instructions
                               </FieldLabelWithHelp>
                               <LazyMarkdownMdxEditor
-                                editorKey={`loop-edit-instructions-${loopId}-${editInstructionsMdxKey}`}
+                                editorKey={`routine-edit-instructions-${routineId}-${editInstructionsMdxKey}`}
                                 markdown={editDescription}
                                 onChange={setEditDescription}
                                 placeholder="Instructions for each run…"
@@ -1090,7 +1090,7 @@ export function LoopDetailPageClient(
                       <CardHeader>
                         <CardTitle>Run outcomes</CardTitle>
                         <CardDescription>
-                          Issue opened vs failed by trigger day (last 14 days). Based on recent runs loaded with this loop
+                          Issue opened vs failed by trigger day (last 14 days). Based on recent runs loaded with this routine
                           (up to 30); skipped or coalesced runs are not shown.
                         </CardDescription>
                       </CardHeader>
@@ -1139,9 +1139,9 @@ export function LoopDetailPageClient(
                     </Card>
                     <Card>
                       <CardHeader>
-                        <CardTitle>Loop issue activity</CardTitle>
+                        <CardTitle>Routine issue activity</CardTitle>
                         <CardDescription>
-                          Issues tied to this loop, counted on the day they were last updated, stacked by status (last 14
+                          Issues tied to this routine, counted on the day they were last updated, stacked by status (last 14
                           days).
                         </CardDescription>
                       </CardHeader>
@@ -1197,7 +1197,7 @@ export function LoopDetailPageClient(
                             </AreaChart>
                           </ChartContainer>
                         ) : (
-                          <p className="text-sm text-muted-foreground">No loop issue updates in the last 14 days.</p>
+                          <p className="text-sm text-muted-foreground">No routine issue updates in the last 14 days.</p>
                         )}
                       </CardContent>
                     </Card>
@@ -1371,7 +1371,7 @@ export function LoopDetailPageClient(
                   <div className="ui-loop-triggers-after-form">
                     <SectionHeading
                       title="Triggers"
-                      description="Triggers for this loop."
+                      description="Triggers for this routine."
                     />
                     {detail.triggers.length === 0 ? (
                       <p className="ui-issue-muted-text">No triggers yet.</p>
@@ -1585,7 +1585,7 @@ export function LoopDetailPageClient(
                 <TabsContent value="runs" className="ui-issue-tabs-content">
                   <SectionHeading
                     title="Runs"
-                    description="Heartbeat runs scoped to this loop."
+                    description="Heartbeat runs scoped to this routine."
                   />
                   <DataTable
                     columns={loopRunColumns}
@@ -1598,7 +1598,7 @@ export function LoopDetailPageClient(
                 <TabsContent value="activity" className="ui-issue-tabs-content">
                 <SectionHeading
                   title="Activity"
-                  description="Activity log for this loop."
+                  description="Activity log for this routine."
                 />
                   <DataTable
                     columns={loopActivityColumns}
@@ -1614,7 +1614,7 @@ export function LoopDetailPageClient(
         </div>
       }
       rightPane={rightPane}
-      activeNav="Loops"
+      activeNav="Routines"
       companies={companies}
       activeCompanyId={companyId}
     />

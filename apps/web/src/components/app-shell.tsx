@@ -68,7 +68,7 @@ const navGroups: Array<{
       { slug: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { slug: "projects", label: "Projects", icon: BriefcaseBusiness },
       { slug: "issues", label: "Issues", icon: FolderKanban },
-      { slug: "loops", label: "Loops", icon: Repeat },
+      { slug: "routines", label: "Routines", icon: Repeat },
       { slug: "agents", label: "Agents", icon: Users }
     ]
   },
@@ -196,8 +196,8 @@ export function AppShell({
     next.delete("issueId");
     const issueDetail = pathname.match(/^\/issues\/[^/]+$/);
     const projectDetail = pathname.match(/^\/projects\/[^/]+$/);
-    const loopDetail = pathname.match(/^\/loops\/[^/]+$/);
-    const basePath = issueDetail ? "/issues" : projectDetail ? "/projects" : loopDetail ? "/loops" : pathname;
+    const routineDetail = pathname.match(/^\/routines\/[^/]+$/);
+    const basePath = issueDetail ? "/issues" : projectDetail ? "/projects" : routineDetail ? "/routines" : pathname;
     const href = `${basePath}?${next.toString()}` as Parameters<typeof router.replace>[0];
     router.replace(href);
   }

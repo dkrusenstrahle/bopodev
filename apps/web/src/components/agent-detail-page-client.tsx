@@ -82,7 +82,7 @@ interface IssueRow {
   updatedAt: string;
 }
 
-interface AgentWorkLoopRow {
+interface AgentRoutineRow {
   id: string;
   title: string;
   projectId: string;
@@ -409,37 +409,37 @@ export function AgentDetailPageClient({
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [appearanceDialogOpen, setAppearanceDialogOpen] = useState(false);
   const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
-  const [agentWorkLoops, setAgentWorkLoops] = useState<AgentWorkLoopRow[]>([]);
-  const [loopsLoading, setLoopsLoading] = useState(true);
-  const [loopsError, setLoopsError] = useState<string | null>(null);
+  const [agentRoutines, setAgentRoutines] = useState<AgentRoutineRow[]>([]);
+  const [routinesLoading, setRoutinesLoading] = useState(true);
+  const [routinesError, setRoutinesError] = useState<string | null>(null);
 
-  const loadAgentLoops = useCallback(async () => {
+  const loadAgentRoutines = useCallback(async () => {
     if (!companyId) {
-      setAgentWorkLoops([]);
-      setLoopsLoading(false);
+      setAgentRoutines([]);
+      setRoutinesLoading(false);
       return;
     }
-    setLoopsLoading(true);
-    setLoopsError(null);
+    setRoutinesLoading(true);
+    setRoutinesError(null);
     try {
-      const res = await apiGet<{ data: AgentWorkLoopRow[] }>("/loops", companyId);
+      const res = await apiGet<{ data: AgentRoutineRow[] }>("/routines", companyId);
       const rows = res.data.data ?? [];
-      setAgentWorkLoops(
+      setAgentRoutines(
         rows
           .filter((loop) => loop.assigneeAgentId === agent.id)
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       );
     } catch (e) {
-      setAgentWorkLoops([]);
-      setLoopsError(e instanceof ApiError ? e.message : "Failed to load work loops.");
+      setAgentRoutines([]);
+      setRoutinesError(e instanceof ApiError ? e.message : "Failed to load routines.");
     } finally {
-      setLoopsLoading(false);
+      setRoutinesLoading(false);
     }
   }, [companyId, agent.id]);
 
   useEffect(() => {
-    void loadAgentLoops();
-  }, [loadAgentLoops]);
+    void loadAgentRoutines();
+  }, [loadAgentRoutines]);
 
   const managerNameById = useMemo(() => new Map(agents.map((entry) => [entry.id, entry.name])), [agents]);
 
@@ -657,14 +657,14 @@ export function AgentDetailPageClient({
     ],
     [companyId]
   );
-  const agentLoopColumns = useMemo<ColumnDef<AgentWorkLoopRow>[]>(
+  const agentRoutineColumns = useMemo<ColumnDef<AgentRoutineRow>[]>(
     () => [
       {
         accessorKey: "title",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Loop" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Routine" />,
         cell: ({ row }) => (
           <Link
-            href={`/loops/${row.original.id}?companyId=${encodeURIComponent(companyId)}` as Route}
+            href={`/routines/${row.original.id}?companyId=${encodeURIComponent(companyId)}` as Route}
             className="ui-run-table-link"
           >
             {row.original.title}
@@ -1147,7 +1147,7 @@ export function AgentDetailPageClient({
         <TabsList>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="issues">Issues ({recentDeliveryIssues.length})</TabsTrigger>
-          <TabsTrigger value="loops">Loops ({agentWorkLoops.length})</TabsTrigger>
+          <TabsTrigger value="routines">Routines ({agentRoutines.length})</TabsTrigger>
           <TabsTrigger value="runs">Runs ({agentRuns.length})</TabsTrigger>
         </TabsList>
 
@@ -1296,18 +1296,18 @@ export function AgentDetailPageClient({
           />
         </TabsContent>
 
-        <TabsContent value="loops" className="ui-issue-tabs-content">
+        <TabsContent value="routines" className="ui-issue-tabs-content">
           <SectionHeading
-            title="Loops"
-            description="Scheduled loops where this agent is the assignee (opens issues on each run)."
+            title="Routines"
+            description="Scheduled routines where this agent is the assignee (opens issues on each run)."
           />
-          {loopsLoading ? <p className="text-sm text-muted-foreground">Loading work loops…</p> : null}
-          {loopsError ? <p className="text-sm text-destructive">{loopsError}</p> : null}
-          {!loopsLoading && !loopsError ? (
+          {routinesLoading ? <p className="text-sm text-muted-foreground">Loading routines…</p> : null}
+          {routinesError ? <p className="text-sm text-destructive">{routinesError}</p> : null}
+          {!routinesLoading && !routinesError ? (
             <DataTable
-              columns={agentLoopColumns}
-              data={agentWorkLoops}
-              emptyMessage="No loops assign this agent yet."
+              columns={agentRoutineColumns}
+              data={agentRoutines}
+              emptyMessage="No routines assign this agent yet."
               defaultPageSize={10}
               showViewOptions={false}
             />

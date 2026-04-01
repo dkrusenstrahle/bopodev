@@ -65,7 +65,7 @@ Implication: to give Chat richer memory, maintain **company / project / agent me
 
 ## Read-only surface (contract)
 
-**In scope:** company profile, projects, issues (including bounded comments), goals, work loops, agents (directory fields—no runtime secrets), pending approvals, audit events, heartbeat runs, cost ledger summaries and recent rows, path-sandboxed memory and operating markdown (same path and size limits as observability).
+**In scope:** company profile, projects, issues (including bounded comments), goals, routines, agents (directory fields—no runtime secrets), pending approvals, audit events, heartbeat runs, cost ledger summaries and recent rows, path-sandboxed memory and operating markdown (same path and size limits as observability).
 
 **Out of scope:** other companies, arbitrary filesystem paths, raw credentials, external git/PR bodies. Full-text search / embeddings across all markdown are **not** in v1; answers rely on structured snapshot fields and bounded file reads.
 
@@ -73,7 +73,7 @@ Implication: to give Chat richer memory, maintain **company / project / agent me
 
 When the direct API path runs, tools are defined in `apps/api/src/services/company-assistant-service.ts` (names match `tool.name` sent to the model), including for example:
 
-`get_company`, `list_projects`, `get_project`, `list_issues`, `get_issue`, `list_issue_comments`, `list_goals`, `get_goal`, `list_work_loops`, `get_work_loop`, `list_agents`, `get_agent`, `list_pending_approvals`, `list_recent_heartbeat_runs`, `list_cost_entries`, `get_cost_usage_summary`, `list_audit_events`, `memory_context_preview`, `list_company_memory_files`, `read_company_memory_file`, `list_project_memory_files`, `read_project_memory_file`, `list_agent_memory_files`, `read_agent_memory_file`, `list_agent_operating_files`, `read_agent_operating_file`.
+`get_company`, `list_projects`, `get_project`, `list_issues`, `get_issue`, `list_issue_comments`, `list_goals`, `get_goal`, `list_routines`, `get_routine`, `list_agents`, `get_agent`, `list_pending_approvals`, `list_recent_heartbeat_runs`, `list_cost_entries`, `get_cost_usage_summary`, `list_audit_events`, `memory_context_preview`, `list_company_memory_files`, `read_company_memory_file`, `list_project_memory_files`, `read_project_memory_file`, `list_agent_memory_files`, `read_agent_memory_file`, `list_agent_operating_files`, `read_agent_operating_file`.
 
 CLI turns do not expose this tool surface to the model as separate round-trips; they rely on the snapshot payload instead.
 

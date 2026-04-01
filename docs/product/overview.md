@@ -15,7 +15,7 @@ Provide one place to define goals, organize work, run agents, manage approvals, 
 ## Core Product Areas
 
 - **Planning**: companies, projects, issues (each can link to multiple goals), and goals.
-- **Recurring work**: **work loops**—scheduled jobs that create issues and wake an assignee’s heartbeat (see [`loops.md`](./loops.md)); distinct from an agent’s standing **heartbeat** cadence.
+- **Recurring work**: **routines**—scheduled jobs that create issues and wake an assignee’s heartbeat (see [`routines.md`](./routines.md)); distinct from an agent’s standing **heartbeat** cadence.
 - **Execution**: agent lifecycle, runtime configuration, heartbeat runs, and **agent Documents** (operating + memory markdown edited in the UI at `/agents/:agentId/docs`).
 - **Governance**: explicit approvals for sensitive actions.
 - **Observability**: run diagnostics, logs, and cost signals.
@@ -24,7 +24,7 @@ Provide one place to define goals, organize work, run agents, manage approvals, 
 
 ## Long text fields (Markdown)
 
-Several rich description fields use an **MDXEditor**-based markdown surface in forms (formatted preview as you type, same as issue document attachments), and the app renders stored Markdown with GitHub-flavored Markdown where applicable on detail pages: **project description**, **issue description**, **issue comments** (composer on the issue detail page), **work loop instructions** (also copied into new issues the loop creates), **agent bootstrap prompt**, and **goal details**. Plain text still works; structure with headings, lists, links, and tables when it helps readers.
+Several rich description fields use an **MDXEditor**-based markdown surface in forms (formatted preview as you type, same as issue document attachments), and the app renders stored Markdown with GitHub-flavored Markdown where applicable on detail pages: **project description**, **issue description**, **issue comments** (composer on the issue detail page), **routine instructions** (also copied into new issues the routine creates), **agent bootstrap prompt**, and **goal details**. Plain text still works; structure with headings, lists, links, and tables when it helps readers.
 
 ## UI Section Map
 
@@ -34,7 +34,7 @@ Primary sections in the app:
 - `ask` — owner assistant chat over company data and memory ([`owner-assistant.md`](./owner-assistant.md))
 - `projects`
 - `issues`
-- `loops`
+- `routines`
 - `goals`
 - `agents` (including **Documents** on an agent: `/agents/:agentId/docs`)
 - `org-chart`
@@ -55,7 +55,7 @@ Primary sections in the app:
 2. Add projects and issues under that company.
 3. Define active goals at company/project/agent levels.
 4. Hire/configure agents with provider and runtime policy; adjust **Documents** (operating and memory markdown) when you need in-repo guidance without a full agent edit flow.
-5. Add **work loops** when you need calendar-style recurring issues for a specific agent (optional; complements general heartbeat runs).
+5. Add **routines** when you need calendar-style recurring issues for a specific agent (optional; complements general heartbeat runs).
 6. Run heartbeats manually or via sweeps.
 7. Resolve approvals and inspect outcomes in logs/runs/costs.
 8. Promote reusable patterns through templates/plugins and monitor attention cues in inbox flows.
@@ -64,7 +64,7 @@ Primary sections in the app:
 
 - Daily operating flow: [`daily-workflows.md`](./daily-workflows.md)
 - Agent and run details (including **Documents**): [`agents-and-runs.md`](./agents-and-runs.md)
-- Work loops: [`loops.md`](./loops.md)
+- Routines: [`routines.md`](./routines.md)
 - Governance model: [`governance-and-approvals.md`](./governance-and-approvals.md)
 - Realtime model: [`office-space-and-realtime.md`](./office-space-and-realtime.md)
 - Canonical terms: [`../glossary.md`](../glossary.md)

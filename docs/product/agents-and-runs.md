@@ -4,7 +4,7 @@ This page covers agent lifecycle management and heartbeat execution behavior.
 
 For **heartbeat prompt modes** (`full` vs `compact`), **cost expectations**, and **API hydration** (`GET /issues/:id`), see [`../guides/agent-heartbeat-protocol.md`](../guides/agent-heartbeat-protocol.md).
 
-For **scheduled recurring work** that opens dedicated issues (separate from the agent’s periodic heartbeat cadence), see [`loops.md`](./loops.md).
+For **scheduled recurring work** that opens dedicated issues (separate from the agent’s periodic heartbeat cadence), see [`routines.md`](./routines.md).
 
 ### Web UI: “Thinking effort” and Codex
 
@@ -29,7 +29,7 @@ Explain how to configure agents safely and interpret run outcomes.
 
 From `agents` and related modals, you can:
 
-- open an agent **detail** page to see metrics, bootstrap prompt, **issues** (done / in-review), **work loops** that assign this agent, and **heartbeat runs**,
+- open an agent **detail** page to see metrics, bootstrap prompt, **issues** (done / in-review), **routines** that assign this agent, and **heartbeat runs**,
 - open **Documents** from the agent header actions menu (⋯ → Documents; route `/agents/:agentId/docs`) to browse and edit **operating** `.md` files (e.g. `AGENTS.md`) and **memory** `.md` notes in a split layout (file list + editor); saves require `agents:write`,
 - browse the agent directory in **table** or **cards** layout (toolbar toggle next to column view options),
 - create an agent (`role`, `name`, provider type),

@@ -1,20 +1,16 @@
 import { Router } from "express";
 import { appendAuditEvent, listAuditEvents } from "bopodev-db";
 import {
-  WorkLoopCreateRequestSchema,
-  WorkLoopTriggerCreateRequestSchema,
-  WorkLoopUpdateRequestSchema,
-  WorkLoopTriggerUpdateRequestSchema
+  WorkRoutineCreateRequestSchema,
+  WorkRoutineTriggerCreateRequestSchema,
+  WorkRoutineUpdateRequestSchema,
+  WorkRoutineTriggerUpdateRequestSchema
 } from "bopodev-contracts";
 import type { AppContext } from "../context";
 import { sendError, sendOk } from "../http";
 import { requireCompanyScope } from "../middleware/company-scope";
 import { enforcePermission } from "../middleware/request-actor";
-import {
-  workLoopRuns,
-  workLoops,
-  workLoopTriggers
-} from "bopodev-db";
+import { workLoopRuns, workLoops, workLoopTriggers } from "bopodev-db";
 import {
   addWorkLoopTrigger,
   addWorkLoopTriggerFromPreset,
@@ -29,7 +25,7 @@ import {
   deleteWorkLoopTrigger
 } from "../services/work-loop-service";
 
-function serializeLoop(row: typeof workLoops.$inferSelect) {
+function serializeRoutine(row: typeof workLoops.$inferSelect) {
   let goalIds: string[] = [];
   try {
     goalIds = JSON.parse(row.goalIdsJson || "[]") as string[];
@@ -59,7 +55,7 @@ function serializeTrigger(row: typeof workLoopTriggers.$inferSelect) {
   return {
     id: row.id,
     companyId: row.companyId,
-    workLoopId: row.workLoopId,
+    routineId: row.routineId,
     kind: row.kind,
     label: row.label,
     enabled: row.enabled,
@@ -77,7 +73,7 @@ function serializeRun(row: typeof workLoopRuns.$inferSelect) {
   return {
     id: row.id,
     companyId: row.companyId,
-    workLoopId: row.workLoopId,
+    routineId: row.routineId,
     triggerId: row.triggerId,
     source: row.source,
     status: row.status,
@@ -92,23 +88,23 @@ function serializeRun(row: typeof workLoopRuns.$inferSelect) {
   };
 }
 
-export function createLoopsRouter(ctx: AppContext) {
+export function createRoutinesRouter(ctx: AppContext) {
   const router = Router();
   router.use(requireCompanyScope);
 
   router.get("/", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:read")) {
+    if (!enforcePermission(req, res, "routines:read")) {
       return;
     }
     const rows = await listWorkLoops(ctx.db, req.companyId!);
-    return sendOk(res, { data: rows.map(serializeLoop) });
+    return sendOk(res, { data: rows.map(serializeRoutine) });
   });
 
   router.post("/", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:write")) {
+    if (!enforcePermission(req, res, "routines:write")) {
       return;
     }
-    const parsed = WorkLoopCreateRequestSchema.safeParse(req.body);
+    const parsed = WorkRoutineCreateRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
@@ -127,7 +123,7 @@ export function createLoopsRouter(ctx: AppContext) {
         catchUpPolicy: parsed.data.catchUpPolicy
       });
       if (!row) {
-        return sendError(res, "Failed to create work loop.", 500);
+        return sendError(res, "Failed to create routine.", 500);
       }
       await appendAuditEvent(ctx.db, {
         companyId: req.companyId!,
@@ -137,47 +133,47 @@ export function createLoopsRouter(ctx: AppContext) {
         entityType: "work_loop",
         entityId: row.id,
         correlationId: req.requestId ?? null,
-        payload: { loopId: row.id, title: row.title }
+        payload: { routineId: row.id, title: row.title }
       });
-      return sendOk(res, { data: serializeLoop(row) });
+      return sendOk(res, { data: serializeRoutine(row) });
     } catch (e) {
-      return sendError(res, e instanceof Error ? e.message : "Failed to create work loop.", 422);
+      return sendError(res, e instanceof Error ? e.message : "Failed to create routine.", 422);
     }
   });
 
-  router.get("/:loopId", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:read")) {
+  router.get("/:routineId", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:read")) {
       return;
     }
-    const loopId = req.params.loopId;
-    const row = await getWorkLoop(ctx.db, req.companyId!, loopId);
+    const routineId = req.params.routineId;
+    const row = await getWorkLoop(ctx.db, req.companyId!, routineId);
     if (!row) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
     const [triggers, recentRuns] = await Promise.all([
-      listWorkLoopTriggers(ctx.db, req.companyId!, loopId),
-      listWorkLoopRuns(ctx.db, req.companyId!, loopId, 30)
+      listWorkLoopTriggers(ctx.db, req.companyId!, routineId),
+      listWorkLoopRuns(ctx.db, req.companyId!, routineId, 30)
     ]);
     return sendOk(res, {
       data: {
-        ...serializeLoop(row),
+        ...serializeRoutine(row),
         triggers: triggers.map(serializeTrigger),
         recentRuns: recentRuns.map(serializeRun)
       }
     });
   });
 
-  router.patch("/:loopId", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:write")) {
+  router.patch("/:routineId", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:write")) {
       return;
     }
-    const parsed = WorkLoopUpdateRequestSchema.safeParse(req.body);
+    const parsed = WorkRoutineUpdateRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
-    const row = await updateWorkLoop(ctx.db, req.companyId!, req.params.loopId, parsed.data);
+    const row = await updateWorkLoop(ctx.db, req.companyId!, req.params.routineId, parsed.data);
     if (!row) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
@@ -189,29 +185,29 @@ export function createLoopsRouter(ctx: AppContext) {
       correlationId: req.requestId ?? null,
       payload: { patch: parsed.data }
     });
-    return sendOk(res, { data: serializeLoop(row) });
+    return sendOk(res, { data: serializeRoutine(row) });
   });
 
-  router.post("/:loopId/run", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:run")) {
+  router.post("/:routineId/run", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:run")) {
       return;
     }
-    const loopId = req.params.loopId;
-    const loop = await getWorkLoop(ctx.db, req.companyId!, loopId);
+    const routineId = req.params.routineId;
+    const loop = await getWorkLoop(ctx.db, req.companyId!, routineId);
     if (!loop) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
     const run = await dispatchLoopRun(ctx.db, {
       companyId: req.companyId!,
-      loopId,
+      loopId: routineId,
       triggerId: null,
       source: "manual",
-      idempotencyKey: req.requestId ? `manual:${loopId}:${req.requestId}` : `manual:${loopId}:${Date.now()}`,
+      idempotencyKey: req.requestId ? `manual:${routineId}:${req.requestId}` : `manual:${routineId}:${Date.now()}`,
       realtimeHub: ctx.realtimeHub,
       requestId: req.requestId
     });
     if (!run) {
-      return sendError(res, "Work loop is not active or could not be dispatched.", 409);
+      return sendError(res, "Routine is not active or could not be dispatched.", 409);
     }
     await appendAuditEvent(ctx.db, {
       companyId: req.companyId!,
@@ -219,37 +215,37 @@ export function createLoopsRouter(ctx: AppContext) {
       actorId: req.actor?.id ?? null,
       eventType: "work_loop.manual_run",
       entityType: "work_loop",
-      entityId: loopId,
+      entityId: routineId,
       correlationId: req.requestId ?? null,
       payload: { runId: run.id, status: run.status }
     });
     return sendOk(res, { data: serializeRun(run) });
   });
 
-  router.get("/:loopId/runs", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:read")) {
+  router.get("/:routineId/runs", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:read")) {
       return;
     }
-    const loop = await getWorkLoop(ctx.db, req.companyId!, req.params.loopId);
+    const loop = await getWorkLoop(ctx.db, req.companyId!, req.params.routineId);
     if (!loop) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
-    const runs = await listWorkLoopRuns(ctx.db, req.companyId!, req.params.loopId, limit);
+    const runs = await listWorkLoopRuns(ctx.db, req.companyId!, req.params.routineId, limit);
     return sendOk(res, { data: runs.map(serializeRun) });
   });
 
-  router.get("/:loopId/activity", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:read")) {
+  router.get("/:routineId/activity", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:read")) {
       return;
     }
-    const loopId = req.params.loopId;
-    const loop = await getWorkLoop(ctx.db, req.companyId!, loopId);
+    const routineId = req.params.routineId;
+    const loop = await getWorkLoop(ctx.db, req.companyId!, routineId);
     if (!loop) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
     const events = await listAuditEvents(ctx.db, req.companyId!, 200);
-    const filtered = events.filter((e) => e.entityType === "work_loop" && e.entityId === loopId);
+    const filtered = events.filter((e) => e.entityType === "work_loop" && e.entityId === routineId);
     return sendOk(res, {
       data: filtered.map((e) => ({
         id: e.id,
@@ -262,16 +258,16 @@ export function createLoopsRouter(ctx: AppContext) {
     });
   });
 
-  router.post("/:loopId/triggers", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:write")) {
+  router.post("/:routineId/triggers", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:write")) {
       return;
     }
-    const loopId = req.params.loopId;
-    const loop = await getWorkLoop(ctx.db, req.companyId!, loopId);
+    const routineId = req.params.routineId;
+    const loop = await getWorkLoop(ctx.db, req.companyId!, routineId);
     if (!loop) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
-    const parsed = WorkLoopTriggerCreateRequestSchema.safeParse(req.body);
+    const parsed = WorkRoutineTriggerCreateRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
@@ -281,7 +277,7 @@ export function createLoopsRouter(ctx: AppContext) {
         body.mode === "cron"
           ? await addWorkLoopTrigger(ctx.db, {
               companyId: req.companyId!,
-              workLoopId: loopId,
+              routineId,
               cronExpression: body.cronExpression,
               timezone: body.timezone,
               label: body.label ?? null,
@@ -289,7 +285,7 @@ export function createLoopsRouter(ctx: AppContext) {
             })
           : await addWorkLoopTriggerFromPreset(ctx.db, {
               companyId: req.companyId!,
-              workLoopId: loopId,
+              routineId,
               preset: body.preset,
               hour24: body.hour24,
               minute: body.minute,
@@ -307,21 +303,21 @@ export function createLoopsRouter(ctx: AppContext) {
     }
   });
 
-  router.patch("/:loopId/triggers/:triggerId", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:write")) {
+  router.patch("/:routineId/triggers/:triggerId", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:write")) {
       return;
     }
-    const parsed = WorkLoopTriggerUpdateRequestSchema.safeParse(req.body);
+    const parsed = WorkRoutineTriggerUpdateRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(res, parsed.error.message, 422);
     }
-    const loop = await getWorkLoop(ctx.db, req.companyId!, req.params.loopId);
+    const loop = await getWorkLoop(ctx.db, req.companyId!, req.params.routineId);
     if (!loop) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
     try {
       const row = await updateWorkLoopTrigger(ctx.db, req.companyId!, req.params.triggerId, parsed.data);
-      if (!row || row.workLoopId !== req.params.loopId) {
+      if (!row || row.routineId !== req.params.routineId) {
         return sendError(res, "Trigger not found.", 404);
       }
       return sendOk(res, { data: serializeTrigger(row) });
@@ -330,16 +326,16 @@ export function createLoopsRouter(ctx: AppContext) {
     }
   });
 
-  router.delete("/:loopId/triggers/:triggerId", async (req, res) => {
-    if (!enforcePermission(req, res, "loops:write")) {
+  router.delete("/:routineId/triggers/:triggerId", async (req, res) => {
+    if (!enforcePermission(req, res, "routines:write")) {
       return;
     }
-    const { loopId, triggerId } = req.params;
-    const loop = await getWorkLoop(ctx.db, req.companyId!, loopId);
+    const { routineId, triggerId } = req.params;
+    const loop = await getWorkLoop(ctx.db, req.companyId!, routineId);
     if (!loop) {
-      return sendError(res, "Work loop not found.", 404);
+      return sendError(res, "Routine not found.", 404);
     }
-    const deleted = await deleteWorkLoopTrigger(ctx.db, req.companyId!, loopId, triggerId);
+    const deleted = await deleteWorkLoopTrigger(ctx.db, req.companyId!, routineId, triggerId);
     if (!deleted) {
       return sendError(res, "Trigger not found.", 404);
     }
@@ -349,7 +345,7 @@ export function createLoopsRouter(ctx: AppContext) {
       actorId: req.actor?.id ?? null,
       eventType: "work_loop.trigger_deleted",
       entityType: "work_loop",
-      entityId: loopId,
+      entityId: routineId,
       correlationId: req.requestId ?? null,
       payload: { triggerId }
     });

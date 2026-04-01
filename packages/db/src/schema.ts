@@ -125,9 +125,9 @@ export const issues = pgTable("issues", {
   externalLink: text("external_link"),
   isClaimed: boolean("is_claimed").notNull().default(false),
   claimedByHeartbeatRunId: text("claimed_by_heartbeat_run_id"),
-  /** Set when issue was created by a scheduled/manual work loop run (FK enforced in SQL migration). */
-  loopId: text("loop_id"),
-  loopRunId: text("loop_run_id"),
+  /** Set when issue was created by a scheduled/manual routine run (FK enforced in SQL migration). */
+  routineId: text("loop_id"),
+  routineRunId: text("loop_run_id"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull()
 });
@@ -161,7 +161,7 @@ export const workLoopTriggers = pgTable("work_loop_triggers", {
   companyId: text("company_id")
     .notNull()
     .references(() => companies.id, { onDelete: "cascade" }),
-  workLoopId: text("work_loop_id")
+  routineId: text("work_loop_id")
     .notNull()
     .references(() => workLoops.id, { onDelete: "cascade" }),
   kind: text("kind").notNull().default("schedule"),
@@ -181,7 +181,7 @@ export const workLoopRuns = pgTable("work_loop_runs", {
   companyId: text("company_id")
     .notNull()
     .references(() => companies.id, { onDelete: "cascade" }),
-  workLoopId: text("work_loop_id")
+  routineId: text("work_loop_id")
     .notNull()
     .references(() => workLoops.id, { onDelete: "cascade" }),
   triggerId: text("trigger_id").references(() => workLoopTriggers.id, { onDelete: "set null" }),

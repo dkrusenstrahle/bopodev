@@ -31,7 +31,7 @@ import { formatSmartDateTime } from "@/lib/smart-date";
 import type { WorkspacePageProps } from "@/components/workspace/workspace-page-props";
 import { SectionHeading } from "@/components/workspace/shared";
 
-type WorkLoopRow = {
+type RoutineRow = {
   id: string;
   title: string;
   projectId: string;
@@ -67,10 +67,10 @@ function formatCatchUpLabel(policy: string) {
   }
 }
 
-export function LoopsPageClient(props: WorkspacePageProps) {
+export function RoutinesPageClient(props: WorkspacePageProps) {
   const { companyId, companies, projects, agents } = props;
   const router = useRouter();
-  const [loops, setLoops] = useState<WorkLoopRow[]>([]);
+  const [loops, setLoops] = useState<RoutineRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -96,10 +96,10 @@ export function LoopsPageClient(props: WorkspacePageProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiGet<{ data: WorkLoopRow[] }>("/loops", companyId);
+      const res = await apiGet<{ data: RoutineRow[] }>("/routines", companyId);
       setLoops(res.data.data ?? []);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load loops.");
+      setError(e instanceof ApiError ? e.message : "Failed to load routines.");
       setLoops([]);
     } finally {
       setLoading(false);
@@ -118,7 +118,7 @@ export function LoopsPageClient(props: WorkspacePageProps) {
     setSubmitting(true);
     setError(null);
     try {
-      await apiPost("/loops", companyId, {
+      await apiPost("/routines", companyId, {
         projectId,
         title: title.trim(),
         description: description.trim() || null,
@@ -132,7 +132,7 @@ export function LoopsPageClient(props: WorkspacePageProps) {
       await load();
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create loop.");
+      setError(err instanceof ApiError ? err.message : "Failed to create routine.");
     } finally {
       setSubmitting(false);
     }
@@ -166,15 +166,15 @@ export function LoopsPageClient(props: WorkspacePageProps) {
     });
   }, [agentById, loops, loopsProjectFilter, loopsQuery, loopsStatusFilter, projectById]);
 
-  const loopColumns = useMemo<ColumnDef<WorkLoopRow>[]>(
+  const loopColumns = useMemo<ColumnDef<RoutineRow>[]>(
     () => [
       {
         accessorKey: "title",
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Loop" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Routine" />,
         cell: ({ row }) =>
           companyId ? (
             <Link
-              href={`/loops/${row.original.id}${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}` as Route}
+              href={`/routines/${row.original.id}${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}` as Route}
               className="font-medium text-primary hover:underline"
             >
               {row.original.title}
@@ -235,17 +235,17 @@ export function LoopsPageClient(props: WorkspacePageProps) {
   );
 
   const emptyMessage = loading
-    ? "Loading loops…"
+    ? "Loading routines…"
     : loops.length === 0
-      ? "No loops yet. Create a loop, add schedule triggers, and assign an agent."
-      : "No loops match current filters.";
+      ? "No routines yet. Create a routine, add schedule triggers, and assign an agent."
+      : "No routines match current filters.";
 
   return (
     <AppShell
       leftPane={
         <>
           <SectionHeading
-            title="Loops"
+            title="Routines"
             description="Recurring work that opens issues and wakes assignees on a schedule."
             actions={
               <Dialog
@@ -259,12 +259,12 @@ export function LoopsPageClient(props: WorkspacePageProps) {
               >
                 <DialogTrigger asChild>
                   <Button size="sm" disabled={!companyId || projects.length === 0 || agents.length === 0}>
-                    New loop
+                    New routine
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Create loop</DialogTitle>
+                    <DialogTitle>Create routine</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={onCreate}>
                     <div className="ui-dialog-content-scrollable">
@@ -274,11 +274,11 @@ export function LoopsPageClient(props: WorkspacePageProps) {
                         <Input value={title} onChange={(ev) => setTitle(ev.target.value)} required />
                       </Field>
                       <Field>
-                        <FieldLabelWithHelp helpText="Becomes the new issue body when the loop runs. The markdown editor shows formatted text as you type; the loop and issue pages render the same Markdown (headings, lists, links, GFM tables).">
+                        <FieldLabelWithHelp helpText="Becomes the new issue body when the routine runs. The markdown editor shows formatted text as you type; the routine and issue pages render the same Markdown (headings, lists, links, GFM tables).">
                           Instructions
                         </FieldLabelWithHelp>
                         <LazyMarkdownMdxEditor
-                          editorKey={`loop-create-instructions-${createInstructionsMdxKey}`}
+                          editorKey={`routine-create-instructions-${createInstructionsMdxKey}`}
                           markdown={description}
                           onChange={setDescription}
                           placeholder="Instructions for each run…"
@@ -407,7 +407,7 @@ export function LoopsPageClient(props: WorkspacePageProps) {
           />
         </>
       }
-      activeNav="Loops"
+      activeNav="Routines"
       companies={companies}
       activeCompanyId={companyId}
     />

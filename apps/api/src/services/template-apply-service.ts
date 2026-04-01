@@ -152,7 +152,7 @@ export async function applyTemplateManifest(
     if (loop) {
       await addWorkLoopTrigger(db, {
         companyId: input.companyId,
-        workLoopId: loop.id,
+        routineId: loop.id,
         cronExpression: job.cron
       });
     }

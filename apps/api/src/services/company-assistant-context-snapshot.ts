@@ -33,7 +33,7 @@ function serializeIssue(row: Record<string, unknown>, goalIds: string[]) {
     id: row.id,
     projectId: row.projectId,
     parentIssueId: row.parentIssueId ?? null,
-    loopId: row.loopId ?? null,
+    routineId: row.routineId ?? null,
     title: row.title,
     body: row.body ?? null,
     status: row.status,

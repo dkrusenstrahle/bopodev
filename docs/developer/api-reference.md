@@ -121,22 +121,24 @@ Issue ↔ goals:
 
 - `POST /issues` accepts optional `goalIds` (array, default `[]`). `PUT /issues/:issueId` accepts optional `goalIds` to replace the full set (use `[]` to clear). Each goal must belong to the same company; if a goal has a `projectId`, it must match the issue’s project.
 - `GET /issues` and `GET /issues/:issueId` include `goalIds` on each issue.
-- Issues created from a **work loop** include optional `loopId` and `loopRunId` (nullable).
+- Issues created from a **routine** include optional `routineId` and `routineRunId` (nullable).
 
-## Work loops (scheduled)
+## Routines (scheduled)
 
-Company-scoped (`x-company-id`). Permissions: `loops:read`, `loops:write`, `loops:run` (manual run).
+Company-scoped (`x-company-id`). Permissions: `routines:read`, `routines:write`, `routines:run` (manual run).
 
-- `GET /loops` — list work loops.
-- `POST /loops` — create (body: `projectId`, `title`, `assigneeAgentId`, optional `description`, `priority`, `status`, `concurrencyPolicy`, `catchUpPolicy`, `parentIssueId`, `goalIds`).
-- `GET /loops/:loopId` — detail with `triggers[]` and `recentRuns[]`.
-- `PATCH /loops/:loopId` — partial update.
-- `POST /loops/:loopId/run` — manual dispatch (`loops:run`).
-- `GET /loops/:loopId/runs` — run history (`?limit=`).
-- `GET /loops/:loopId/activity` — audit rows for this loop.
-- `POST /loops/:loopId/triggers` — add trigger; body is a discriminated union: `{ mode: "cron", cronExpression, timezone?, label?, enabled? }` or `{ mode: "preset", preset: "daily"|"weekly", hour24, minute, dayOfWeek?, timezone?, label?, enabled? }`.
-- `PATCH /loops/:loopId/triggers/:triggerId` — update trigger fields.
-- `DELETE /loops/:loopId/triggers/:triggerId` — remove a trigger (`loops:write`).
+Canonical paths use `/routines`; the same router is also mounted at `/loops` for backward compatibility.
+
+- `GET /routines` — list routines.
+- `POST /routines` — create (body: `projectId`, `title`, `assigneeAgentId`, optional `description`, `priority`, `status`, `concurrencyPolicy`, `catchUpPolicy`, `parentIssueId`, `goalIds`).
+- `GET /routines/:routineId` — detail with `triggers[]` and `recentRuns[]` (trigger/run rows use `routineId`).
+- `PATCH /routines/:routineId` — partial update.
+- `POST /routines/:routineId/run` — manual dispatch (`routines:run`).
+- `GET /routines/:routineId/runs` — run history (`?limit=`).
+- `GET /routines/:routineId/activity` — audit rows for this routine.
+- `POST /routines/:routineId/triggers` — add trigger; body is a discriminated union: `{ mode: "cron", cronExpression, timezone?, label?, enabled? }` or `{ mode: "preset", preset: "daily"|"weekly", hour24, minute, dayOfWeek?, timezone?, label?, enabled? }`.
+- `PATCH /routines/:routineId/triggers/:triggerId` — update trigger fields.
+- `DELETE /routines/:routineId/triggers/:triggerId` — remove a trigger (`routines:write`).
 
 Scheduler env: `BOPO_LOOP_SWEEP_MS`, `BOPO_LOOP_SWEEP_ENABLED` (see [`../../DEVELOPING.md`](../../DEVELOPING.md)).
 

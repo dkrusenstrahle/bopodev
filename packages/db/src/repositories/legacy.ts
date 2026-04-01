@@ -521,8 +521,8 @@ export async function createIssue(
     assigneeAgentId?: string | null;
     labels?: string[];
     tags?: string[];
-    loopId?: string | null;
-    loopRunId?: string | null;
+    routineId?: string | null;
+    routineRunId?: string | null;
   }
 ) {
   await assertProjectBelongsToCompany(db, input.companyId, input.projectId);
@@ -549,8 +549,8 @@ export async function createIssue(
         assigneeAgentId: input.assigneeAgentId ?? null,
         labelsJson: JSON.stringify(input.labels ?? []),
         tagsJson: JSON.stringify(input.tags ?? []),
-        loopId: input.loopId ?? null,
-        loopRunId: input.loopRunId ?? null
+        routineId: input.routineId ?? null,
+        routineRunId: input.routineRunId ?? null
       })
       .returning();
     if (!row) {

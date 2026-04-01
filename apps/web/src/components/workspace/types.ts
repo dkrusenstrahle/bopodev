@@ -6,8 +6,8 @@ export interface IssueRow {
   projectId: string;
   parentIssueId: string | null;
   /** Present when the issue was opened by a work loop run. */
-  loopId?: string | null;
-  loopRunId?: string | null;
+  routineId?: string | null;
+  routineRunId?: string | null;
   assigneeAgentId: string | null;
   title: string;
   body?: string | null;

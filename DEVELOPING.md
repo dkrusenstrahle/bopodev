@@ -72,7 +72,7 @@ Prints `export BOPODEV_*=…` and a suggested `cd` to the project’s primary wo
 - `--company-id` — overrides `BOPODEV_COMPANY_ID`
 - `--json` — machine-readable JSON instead of shell exports
 
-## API: scheduler and work loops
+## API: scheduler and routines
 
 The API process runs periodic sweeps when `BOPO_SCHEDULER_ROLE` is `auto` or `leader` (see `apps/api/src/startup/scheduler-config.ts`).
 

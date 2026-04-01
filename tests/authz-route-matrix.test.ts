@@ -31,7 +31,7 @@ type SeedIds = {
   goalId: string;
   agentId: string;
   approvalId: string;
-  loopId: string;
+  routineId: string;
 };
 
 describe("authorization route matrix", { timeout: 30_000, retry: 1 }, () => {
@@ -124,10 +124,10 @@ describe("authorization route matrix", { timeout: 30_000, retry: 1 }, () => {
       body: () => ({})
     },
     {
-      name: "loops:create",
-      permission: "loops:write",
+      name: "routines:create",
+      permission: "routines:write",
       method: "post",
-      path: () => "/loops",
+      path: () => "/routines",
       body: ({ projectId, agentId }) => ({
         projectId,
         title: "Authz Matrix Loop",
@@ -135,10 +135,10 @@ describe("authorization route matrix", { timeout: 30_000, retry: 1 }, () => {
       })
     },
     {
-      name: "loops:run",
-      permission: "loops:run",
+      name: "routines:run",
+      permission: "routines:run",
       method: "post",
-      path: ({ loopId }) => `/loops/${loopId}/run`,
+      path: ({ routineId }) => `/routines/${routineId}/run`,
       body: () => ({})
     }
   ];
@@ -187,9 +187,9 @@ describe("authorization route matrix", { timeout: 30_000, retry: 1 }, () => {
       assigneeAgentId: agent.id
     });
     if (!loop) {
-      throw new Error("Failed to seed work loop for authz matrix.");
+      throw new Error("Failed to seed routine for authz matrix.");
     }
-    ids = { projectId: project.id, issueId: issue.id, goalId: goal.id, agentId: agent.id, approvalId, loopId: loop.id };
+    ids = { projectId: project.id, issueId: issue.id, goalId: goal.id, agentId: agent.id, approvalId, routineId: loop.id };
   }, 30_000);
 
   afterEach(async () => {

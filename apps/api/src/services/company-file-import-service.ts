@@ -399,7 +399,7 @@ export async function seedOperationalDataFromPackage(db: BopoDb, companyId: stri
     for (const t of r.triggers) {
       await addWorkLoopTrigger(db, {
         companyId,
-        workLoopId: loop.id,
+        routineId: loop.id,
         cronExpression: t.cronExpression,
         timezone: t.timezone?.trim() || "UTC",
         label: t.label ?? null,

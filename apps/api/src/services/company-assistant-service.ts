@@ -186,7 +186,7 @@ function serializeIssue(row: Record<string, unknown>, goalIds: string[]) {
     id: row.id,
     projectId: row.projectId,
     parentIssueId: row.parentIssueId ?? null,
-    loopId: row.loopId ?? null,
+    routineId: row.routineId ?? null,
     title: row.title,
     body: row.body ?? null,
     status: row.status,
@@ -200,7 +200,7 @@ function serializeIssue(row: Record<string, unknown>, goalIds: string[]) {
   };
 }
 
-function serializeWorkLoopRow(row: Record<string, unknown>) {
+function serializeRoutineRow(row: Record<string, unknown>) {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -305,17 +305,17 @@ export const ASSISTANT_TOOLS: AssistantToolDefinition[] = [
     }
   },
   {
-    name: "list_work_loops",
-    description: "List recurring work loops.",
+    name: "list_routines",
+    description: "List recurring routines (scheduled work that opens issues per run).",
     inputSchema: { type: "object", properties: {}, additionalProperties: false }
   },
   {
-    name: "get_work_loop",
-    description: "Get one work loop by id.",
+    name: "get_routine",
+    description: "Get one routine by id.",
     inputSchema: {
       type: "object",
-      properties: { loop_id: { type: "string" } },
-      required: ["loop_id"],
+      properties: { routine_id: { type: "string" } },
+      required: ["routine_id"],
       additionalProperties: false
     }
   },
@@ -597,14 +597,14 @@ export async function executeAssistantTool(
       const g = goals.find((x) => x.id === goalId);
       return capToolOutput(g ?? { error: "goal_not_found" });
     }
-    case "list_work_loops": {
+    case "list_routines": {
       const loops = await listWorkLoops(db, companyId);
-      return capToolOutput(loops.map((l) => serializeWorkLoopRow(l as unknown as Record<string, unknown>)));
+      return capToolOutput(loops.map((l) => serializeRoutineRow(l as unknown as Record<string, unknown>)));
     }
-    case "get_work_loop": {
-      const loopId = String(args.loop_id ?? "").trim();
-      const row = await getWorkLoop(db, companyId, loopId);
-      return capToolOutput(row ? serializeWorkLoopRow(row as unknown as Record<string, unknown>) : { error: "loop_not_found" });
+    case "get_routine": {
+      const routineId = String(args.routine_id ?? "").trim();
+      const row = await getWorkLoop(db, companyId, routineId);
+      return capToolOutput(row ? serializeRoutineRow(row as unknown as Record<string, unknown>) : { error: "routine_not_found" });
     }
     case "list_agents": {
       const agents = await listAgents(db, companyId);

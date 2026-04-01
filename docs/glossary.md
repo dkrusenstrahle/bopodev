@@ -11,7 +11,7 @@ This glossary defines canonical terms used across product, API, and operations d
 - **Repo bootstrap**: heartbeat-time preparation step that clones/fetches/checks out workspace repositories before agent execution.
 - **Git credential broker**: runtime resolver that selects host credentials by default, or token-based auth from configured env var policy.
 - **Isolated worktree**: per-run/per-agent git worktree path derived from policy strategy and used as runtime cwd when enabled.
-- **Issue**: execution unit within a project; may have comments, attachments, an assignee, optional linked **goals** (zero or more) for planning alignment, and optional linkage to **work loops** (e.g. opened by a loop run; see **Loops** tab on the issue).
+- **Issue**: execution unit within a project; may have comments, attachments, an assignee, optional linked **goals** (zero or more) for planning alignment, and optional linkage to **routines** (e.g. opened by a routine run; see **Routines** tab on the issue).
 - **Goal**: desired outcome at `company`, `project`, or `agent` level; may form a hierarchy via parent goals. **Agent-level** goals may be scoped to a single agent (`ownerAgentId`) or shared across agents.
 
 ## Agent and Execution Terms
@@ -20,7 +20,7 @@ This glossary defines canonical terms used across product, API, and operations d
 - **Provider type**: adapter/runtime family (`claude_code`, `codex`, `cursor`, `opencode`, `http`, `shell`).
 - **Heartbeat run**: one execution attempt for an agent or sweep, ending as `completed`, `failed`, or `skipped`.
 - **Sweep**: scheduler/manual action that evaluates multiple agents and runs eligible ones.
-- **Loop**: named, scheduled definition that creates an issue for an assignee agent and enqueues a heartbeat focused on that issue; complements the agent’s general **heartbeat** cadence (`heartbeatCron`). UI: **Loops** (`/loops`, `/loops/:id`). See [`product/loops.md`](./product/loops.md).
+- **Routine**: named, scheduled definition that creates an issue for an assignee agent and enqueues a heartbeat focused on that issue; complements the agent’s general **heartbeat** cadence (`heartbeatCron`). UI: **Routines** (`/routines`, `/routines/:id`; legacy `/loops` redirects in the web app). See [`product/routines.md`](./product/routines.md).
 - **Agent documents** (UI: **Documents**): in-app editor at `/agents/:agentId/docs` for **operating** markdown files (e.g. repo guidance such as `AGENTS.md`) and **memory** `.md` notes for that agent; saving requires `agents:write`. See [`product/agents-and-runs.md`](./product/agents-and-runs.md).
 - **Tacit memory**: stable guidance stored in `MEMORY.md` and loaded into future runs.
 - **Episodic note**: chronological run note written to `memory/YYYY-MM-DD.md`.

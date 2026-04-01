@@ -60,7 +60,7 @@ Supported
 
 1. Turn goals into **projects** and **issues** (optional **PR / external link** on each issue).
 2. Hire and configure **agents** with clear roles, budgets, and runtime; open **Documents** on an agent to edit operating and memory markdown in the UI.
-3. Use **work loops** for calendar-style recurring jobs that open issues and wake the assignee’s heartbeat ([work loops](docs/product/loops.md))—separate from each agent’s general heartbeat schedule.
+3. Use **routines** for calendar-style recurring jobs that open issues and wake the assignee’s heartbeat ([routines](docs/product/routines.md))—separate from each agent’s general heartbeat schedule.
 4. **Review approvals**, run **heartbeats**, and watch **runs, traces, and costs** in one place.
 5. Use **`bopodev issue shell-env`** to jump from an issue to the right folder and `BOPODEV_*` env in your terminal ([DEVELOPING.md](./DEVELOPING.md)).
 6. **Export** a portable company folder as a zip via the API (`POST /companies/:id/export/files/zip` — see [DEVELOPING.md](./DEVELOPING.md)).
@@ -72,7 +72,7 @@ Supported
 | Company onboarding | Seeded CEO, starter project, and first issue. |
 | Agent lifecycle | Create, configure, pause, resume, terminate. |
 | Agent documents | In-app editor for operating markdown and memory `.md` per agent (`/agents/:id/docs`). |
-| Work loops | Scheduled recurring work that creates issues and wakes the assignee; list and detail under **Loops**. |
+| Routines | Scheduled recurring work that creates issues and wakes the assignee; list and detail under **Routines**. |
 | Projects and issues | Assign work, comments, attachments; optional external (e.g. PR) link. |
 | Heartbeats | Manual or sweep runs with stop/resume; compact prompt mode for large issues. |
 | Governance | Approvals for high-impact actions. |

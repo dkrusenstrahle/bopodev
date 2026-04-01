@@ -130,7 +130,7 @@ export async function addWorkLoopTrigger(
   db: BopoDb,
   input: {
     companyId: string;
-    workLoopId: string;
+    routineId: string;
     cronExpression: string;
     timezone?: string;
     label?: string | null;
@@ -148,7 +148,7 @@ export async function addWorkLoopTrigger(
   await db.insert(workLoopTriggers).values({
     id,
     companyId: input.companyId,
-    workLoopId: input.workLoopId,
+    routineId: input.routineId,
     kind: "schedule",
     label: input.label ?? null,
     enabled: input.enabled ?? true,
@@ -164,7 +164,7 @@ export async function addWorkLoopTriggerFromPreset(
   db: BopoDb,
   input: {
     companyId: string;
-    workLoopId: string;
+    routineId: string;
     preset: "daily" | "weekly";
     hour24: number;
     minute: number;
@@ -182,7 +182,7 @@ export async function addWorkLoopTriggerFromPreset(
       : weeklyCronAtLocalTime(input.dayOfWeek ?? 1, input.hour24, input.minute);
   return addWorkLoopTrigger(db, {
     companyId: input.companyId,
-    workLoopId: input.workLoopId,
+    routineId: input.routineId,
     cronExpression: cron,
     timezone: tz,
     label: input.label,
@@ -242,7 +242,7 @@ export async function updateWorkLoopTrigger(
 export async function deleteWorkLoopTrigger(
   db: BopoDb,
   companyId: string,
-  workLoopId: string,
+  routineId: string,
   triggerId: string
 ): Promise<boolean> {
   const [existing] = await db
@@ -252,7 +252,7 @@ export async function deleteWorkLoopTrigger(
       and(
         eq(workLoopTriggers.id, triggerId),
         eq(workLoopTriggers.companyId, companyId),
-        eq(workLoopTriggers.workLoopId, workLoopId)
+        eq(workLoopTriggers.routineId, routineId)
       )
     )
     .limit(1);
@@ -263,19 +263,19 @@ export async function deleteWorkLoopTrigger(
   return true;
 }
 
-export async function listWorkLoopTriggers(db: BopoDb, companyId: string, workLoopId: string) {
+export async function listWorkLoopTriggers(db: BopoDb, companyId: string, routineId: string) {
   return db
     .select()
     .from(workLoopTriggers)
-    .where(and(eq(workLoopTriggers.companyId, companyId), eq(workLoopTriggers.workLoopId, workLoopId)))
+    .where(and(eq(workLoopTriggers.companyId, companyId), eq(workLoopTriggers.routineId, routineId)))
     .orderBy(asc(workLoopTriggers.createdAt));
 }
 
-export async function listWorkLoopRuns(db: BopoDb, companyId: string, workLoopId: string, limit = 100) {
+export async function listWorkLoopRuns(db: BopoDb, companyId: string, routineId: string, limit = 100) {
   return db
     .select()
     .from(workLoopRuns)
-    .where(and(eq(workLoopRuns.companyId, companyId), eq(workLoopRuns.workLoopId, workLoopId)))
+    .where(and(eq(workLoopRuns.companyId, companyId), eq(workLoopRuns.routineId, routineId)))
     .orderBy(desc(workLoopRuns.triggeredAt), desc(workLoopRuns.id))
     .limit(Math.min(500, Math.max(1, limit)));
 }
@@ -287,7 +287,7 @@ async function findOpenIssueForLoop(db: BopoDb, companyId: string, loopId: strin
     .where(
       and(
         eq(issues.companyId, companyId),
-        eq(issues.loopId, loopId),
+        eq(issues.routineId, loopId),
         inArray(issues.status, [...OPEN_ISSUE_STATUSES])
       )
     )
@@ -348,7 +348,7 @@ export async function dispatchLoopRun(
         .where(
           and(
             eq(workLoopRuns.companyId, input.companyId),
-            eq(workLoopRuns.workLoopId, input.loopId),
+            eq(workLoopRuns.routineId, input.loopId),
             eq(workLoopRuns.source, input.source),
             eq(workLoopRuns.idempotencyKey, input.idempotencyKey),
             input.triggerId ? eq(workLoopRuns.triggerId, input.triggerId) : isNull(workLoopRuns.triggerId)
@@ -371,7 +371,7 @@ export async function dispatchLoopRun(
       await txDb.insert(workLoopRuns).values({
         id: runId,
         companyId: input.companyId,
-        workLoopId: loop.id,
+        routineId: loop.id,
         triggerId: input.triggerId,
         source: input.source,
         status: "failed",
@@ -390,7 +390,7 @@ export async function dispatchLoopRun(
     await txDb.insert(workLoopRuns).values({
       id: runId,
       companyId: input.companyId,
-      workLoopId: loop.id,
+      routineId: loop.id,
       triggerId: input.triggerId,
       source: input.source,
       status: "received",
@@ -410,7 +410,7 @@ export async function dispatchLoopRun(
         .set({
           status,
           linkedIssueId: activeIssue.id,
-          coalescedIntoRunId: activeIssue.loopRunId,
+          coalescedIntoRunId: activeIssue.routineRunId,
           completedAt: triggeredAt,
           updatedAt: new Date()
         })
@@ -465,8 +465,8 @@ export async function dispatchLoopRun(
       assigneeAgentId: loop.assigneeAgentId,
       labelsJson: JSON.stringify(["work-loop"]),
       tagsJson: "[]",
-      loopId: loop.id,
-      loopRunId: runId
+      routineId: loop.id,
+      routineRunId: runId
     });
     if (goalIds.length > 0) {
       await syncIssueGoals(txDb, {
@@ -567,7 +567,7 @@ export async function runLoopSweep(
       loop: workLoops
     })
     .from(workLoopTriggers)
-    .innerJoin(workLoops, eq(workLoopTriggers.workLoopId, workLoops.id))
+    .innerJoin(workLoops, eq(workLoopTriggers.routineId, workLoops.id))
     .where(
       and(
         eq(workLoopTriggers.companyId, companyId),

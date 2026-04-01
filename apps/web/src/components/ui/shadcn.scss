@@ -1973,7 +1973,7 @@ body {
 /* ─── Run detail page ─────────────────────────────────────────── */
 
 .run-sidebar-pane {
-  @apply w-full min-w-0 space-y-3 h-[calc(100dvh-2rem)] overflow-y-auto;
+  @apply w-full min-w-0 space-y-6 h-[calc(100dvh-2rem)] overflow-y-auto;
 }
 
 .run-sidebar-kicker {
@@ -1985,7 +1985,7 @@ body {
 }
 
 .run-sidebar-list {
-  @apply flex min-w-0 flex-col gap-4;
+  @apply flex min-w-0 flex-col gap-6;
 }
 
 .run-sidebar-item {
@@ -2358,4 +2358,165 @@ body {
 
 .ui-ask-brain-dialog-footer {
   @apply gap-2 sm:gap-0;
+}
+
+/* Template preview (template-preview-content) */
+.ui-template-preview-root {
+  @apply space-y-6;
+}
+
+.ui-template-preview-section-title {
+  @apply mb-3 text-base font-medium;
+}
+
+.ui-template-preview-lead {
+  @apply text-base leading-relaxed text-muted-foreground;
+}
+
+.ui-template-preview-muted-p {
+  @apply text-base text-muted-foreground;
+}
+
+.ui-template-preview-variable-list {
+  @apply space-y-6;
+}
+
+.ui-template-preview-variable-item {
+  @apply rounded-lg border bg-card px-4 py-3 shadow-sm;
+}
+
+.ui-template-preview-row-wrap {
+  @apply flex flex-wrap items-center gap-2;
+}
+
+.ui-template-preview-row-wrap-start {
+  @apply flex flex-wrap items-start gap-2;
+}
+
+.ui-template-preview-emphasis {
+  @apply font-medium;
+}
+
+.ui-template-preview-badge {
+  @apply font-normal;
+}
+
+.ui-template-preview-badge--optional {
+  @apply font-normal text-muted-foreground;
+}
+
+.ui-template-preview-badge--mono {
+  @apply font-mono font-normal;
+}
+
+.ui-template-preview-badge--shrink {
+  @apply shrink-0 font-normal;
+}
+
+.ui-template-preview-variable-desc {
+  @apply mt-1.5 text-base text-muted-foreground;
+}
+
+.ui-template-preview-meta-key {
+  @apply mt-2 font-mono text-base text-muted-foreground;
+}
+
+.ui-template-preview-meta-key-tight {
+  @apply mt-1 font-mono text-base text-muted-foreground;
+}
+
+.ui-template-preview-default-row {
+  @apply mt-1 text-base text-muted-foreground;
+}
+
+.ui-template-preview-default-value {
+  @apply text-foreground;
+}
+
+.ui-template-preview-options-row {
+  @apply mt-2 flex flex-wrap gap-1.5;
+}
+
+.ui-template-preview-card-header {
+  @apply pb-2;
+}
+
+.ui-template-preview-card-title {
+  @apply text-base;
+}
+
+.ui-template-preview-body-pre {
+  @apply whitespace-pre-wrap text-base leading-relaxed;
+}
+
+.ui-template-preview-stack-2 {
+  @apply space-y-6;
+}
+
+.ui-template-preview-stack-3 {
+  @apply space-y-6;
+}
+
+.ui-template-preview-stack-4 {
+  @apply space-y-4;
+}
+
+.ui-template-preview-muted-box {
+  @apply rounded-md border bg-muted/30 px-4 py-3;
+}
+
+.ui-template-preview-goal-card {
+  @apply flex flex-col gap-1 rounded-md border px-3 py-2;
+}
+
+.ui-template-preview-subtitle {
+  @apply mt-1 text-base text-muted-foreground;
+}
+
+.ui-template-preview-caps {
+  @apply mt-2 line-clamp-3 text-base leading-relaxed text-muted-foreground;
+}
+
+.ui-template-preview-reports {
+  @apply mt-2 text-base text-muted-foreground;
+}
+
+.ui-template-preview-reports-strong {
+  @apply font-medium text-foreground;
+}
+
+.ui-template-preview-issue-row {
+  @apply flex flex-wrap items-start gap-6 rounded-md border px-3 py-2;
+}
+
+.ui-template-preview-issue-title {
+  @apply min-w-0 flex-1 font-medium;
+}
+
+.ui-template-preview-recurrence-box {
+  @apply rounded-md border px-3 py-2.5;
+}
+
+.ui-template-preview-recurrence-row {
+  @apply flex flex-wrap gap-2;
+}
+
+.ui-template-preview-recurrence-arrow {
+  @apply text-base;
+}
+
+.ui-template-preview-recurrence-target {
+  @apply font-medium;
+}
+
+.ui-template-preview-recurrence-instr {
+  @apply mt-2 text-base leading-relaxed text-muted-foreground;
+}
+
+.ui-template-preview-plugin-row {
+  @apply flex flex-wrap items-center gap-2 rounded-md border px-3 py-2;
+}
+
+.ui-template-preview-plugin-id {
+  @apply font-mono text-base;
 }

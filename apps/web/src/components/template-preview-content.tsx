@@ -56,56 +56,53 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
   const variables = template.variables ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="ui-template-preview-root">
       <section>
-        <h3 className="mb-3 text-base font-medium">When you import</h3>
-        <p className="text-muted-foreground text-base leading-relaxed">
+        <h3 className="ui-template-preview-section-title">When you import</h3>
+        <p className="ui-template-preview-lead">
           You will be prompted for the fields below. The org structure summarizes what will be created in your workspace.
         </p>
       </section>
 
       <section>
-        <h3 className="mb-3 text-base font-medium">Variables</h3>
+        <h3 className="ui-template-preview-section-title">Variables</h3>
         {variables.length === 0 ? (
-          <p className="text-muted-foreground text-base">No variables—this template applies as-is.</p>
+          <p className="ui-template-preview-muted-p">No variables—this template applies as-is.</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="ui-template-preview-variable-list">
             {variables.map((v) => {
               const def = formatDefaultValue(v.defaultValue);
               const opts = Array.isArray(v.options) ? v.options.filter((o) => typeof o === "string" && o.trim()) : [];
               return (
-                <li
-                  key={v.key}
-                  className="rounded-lg border bg-card px-4 py-3 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{v.label?.trim() || v.key}</span>
-                    <Badge variant="secondary" className="font-normal">
+                <li key={v.key} className="ui-template-preview-variable-item">
+                  <div className="ui-template-preview-row-wrap">
+                    <span className="ui-template-preview-emphasis">{v.label?.trim() || v.key}</span>
+                    <Badge variant="secondary" className="ui-template-preview-badge">
                       {v.type}
                     </Badge>
                     {v.required ? (
-                      <Badge variant="outline" className="font-normal">
+                      <Badge variant="outline" className="ui-template-preview-badge">
                         Required
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-muted-foreground font-normal">
+                      <Badge variant="outline" className="ui-template-preview-badge--optional">
                         Optional
                       </Badge>
                     )}
                   </div>
                   {v.description?.trim() ? (
-                    <p className="text-muted-foreground mt-1.5 text-base">{v.description.trim()}</p>
+                    <p className="ui-template-preview-variable-desc">{v.description.trim()}</p>
                   ) : null}
-                  <div className="text-muted-foreground mt-2 font-mono text-base">Key: {v.key}</div>
+                  <div className="ui-template-preview-meta-key">Key: {v.key}</div>
                   {def ? (
-                    <div className="text-muted-foreground mt-1 text-base">
-                      Default: <span className="text-foreground">{def}</span>
+                    <div className="ui-template-preview-default-row">
+                      Default: <span className="ui-template-preview-default-value">{def}</span>
                     </div>
                   ) : null}
                   {opts.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="ui-template-preview-options-row">
                       {opts.map((o) => (
-                        <Badge key={o} variant="outline" className="font-normal">
+                        <Badge key={o} variant="outline" className="ui-template-preview-badge">
                           {o}
                         </Badge>
                       ))}
@@ -121,44 +118,44 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
       <Separator />
 
       <section>
-        <h3 className="mb-3 text-base font-medium">What gets created</h3>
-        <div className="space-y-4">
+        <h3 className="ui-template-preview-section-title">What gets created</h3>
+        <div className="ui-template-preview-stack-4">
           {mission ? (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Company mission</CardTitle>
+              <CardHeader className="ui-template-preview-card-header">
+                <CardTitle className="ui-template-preview-card-title">Company mission</CardTitle>
                 <CardDescription>Applied after you fill in variables (placeholders like {"{{name}}"} are substituted).</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-base leading-relaxed whitespace-pre-wrap">{mission}</p>
+                <p className="ui-template-preview-body-pre">{mission}</p>
               </CardContent>
             </Card>
           ) : null}
 
           {projects.length > 0 ? (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Projects ({projects.length})</CardTitle>
+              <CardHeader className="ui-template-preview-card-header">
+                <CardTitle className="ui-template-preview-card-title">Projects ({projects.length})</CardTitle>
                 <CardDescription>Work areas created with the template.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="ui-template-preview-stack-3">
                 {projects.map((p, i) => {
                   const key = str(p.key) || `project-${i}`;
                   const name = str(p.name) || key;
                   const desc = str(p.description).trim();
                   const status = str(p.status).trim();
                   return (
-                    <div key={key} className="rounded-md border bg-muted/30 px-3 py-2.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{name}</span>
+                    <div key={key} className="ui-template-preview-muted-box">
+                      <div className="ui-template-preview-row-wrap">
+                        <span className="ui-template-preview-emphasis">{name}</span>
                         {status ? (
-                          <Badge variant="outline" className="font-normal">
+                          <Badge variant="outline" className="ui-template-preview-badge">
                             {status}
                           </Badge>
                         ) : null}
                       </div>
-                      {desc ? <p className="text-muted-foreground mt-1.5 text-base">{desc}</p> : null}
-                      <div className="text-muted-foreground mt-1 font-mono text-base">key: {key}</div>
+                      {desc ? <p className="ui-template-preview-variable-desc">{desc}</p> : null}
+                      <div className="ui-template-preview-meta-key-tight">key: {key}</div>
                     </div>
                   );
                 })}
@@ -168,31 +165,31 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
 
           {goals.length > 0 ? (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Goals ({goals.length})</CardTitle>
+              <CardHeader className="ui-template-preview-card-header">
+                <CardTitle className="ui-template-preview-card-title">Goals ({goals.length})</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="ui-template-preview-stack-2">
                 {goals.map((g, i) => {
                   const title = str(g.title) || `Goal ${i + 1}`;
                   const level = str(g.level).trim();
                   const pk = str(g.projectKey).trim();
                   const desc = str(g.description).trim();
                   return (
-                    <div key={`${title}-${i}`} className="flex flex-col gap-1 rounded-md border px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{title}</span>
+                    <div key={`${title}-${i}`} className="ui-template-preview-goal-card">
+                      <div className="ui-template-preview-row-wrap">
+                        <span className="ui-template-preview-emphasis">{title}</span>
                         {level ? (
-                          <Badge variant="secondary" className="font-normal">
+                          <Badge variant="secondary" className="ui-template-preview-badge">
                             {level}
                           </Badge>
                         ) : null}
                         {pk ? (
-                          <Badge variant="outline" className="font-normal">
+                          <Badge variant="outline" className="ui-template-preview-badge">
                             project: {pk}
                           </Badge>
                         ) : null}
                       </div>
-                      {desc ? <p className="text-muted-foreground text-base">{desc}</p> : null}
+                      {desc ? <p className="ui-template-preview-muted-p">{desc}</p> : null}
                     </div>
                   );
                 })}
@@ -202,11 +199,11 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
 
           {agents.length > 0 ? (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Agents ({agents.length})</CardTitle>
+              <CardHeader className="ui-template-preview-card-header">
+                <CardTitle className="ui-template-preview-card-title">Agents ({agents.length})</CardTitle>
                 <CardDescription>Roles, reporting structure, and capabilities in the template.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="ui-template-preview-stack-3">
                 {agents.map((a, i) => {
                   const key = str(a.key) || `agent-${i}`;
                   const name = str(a.name) || key;
@@ -216,26 +213,28 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
                   const mgr = str(a.managerAgentKey).trim();
                   const rk = str(a.roleKey).trim();
                   return (
-                    <div key={key} className="rounded-md border bg-muted/30 px-3 py-2.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{name}</span>
-                        {role ? <Badge variant="secondary">{role}</Badge> : null}
+                    <div key={key} className="ui-template-preview-muted-box">
+                      <div className="ui-template-preview-row-wrap">
+                        <span className="ui-template-preview-emphasis">{name}</span>
+                        {role ? (
+                          <Badge variant="secondary" className="ui-template-preview-badge">
+                            {role}
+                          </Badge>
+                        ) : null}
                         {rk ? (
-                          <Badge variant="outline" className="font-normal">
+                          <Badge variant="outline" className="ui-template-preview-badge">
                             {rk}
                           </Badge>
                         ) : null}
                       </div>
-                      {title ? <p className="text-muted-foreground mt-1 text-base">{title}</p> : null}
-                      {caps ? (
-                        <p className="text-muted-foreground mt-2 text-base leading-relaxed line-clamp-3">{caps}</p>
-                      ) : null}
+                      {title ? <p className="ui-template-preview-subtitle">{title}</p> : null}
+                      {caps ? <p className="ui-template-preview-caps">{caps}</p> : null}
                       {mgr ? (
-                        <p className="text-muted-foreground mt-2 text-base">
-                          Reports to: <span className="text-foreground font-medium">{mgr}</span>
+                        <p className="ui-template-preview-reports">
+                          Reports to: <span className="ui-template-preview-reports-strong">{mgr}</span>
                         </p>
                       ) : null}
-                      <div className="text-muted-foreground mt-1 font-mono text-base">key: {key}</div>
+                      <div className="ui-template-preview-meta-key-tight">key: {key}</div>
                     </div>
                   );
                 })}
@@ -245,25 +244,25 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
 
           {issues.length > 0 ? (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Seed issues ({issues.length})</CardTitle>
+              <CardHeader className="ui-template-preview-card-header">
+                <CardTitle className="ui-template-preview-card-title">Seed issues ({issues.length})</CardTitle>
                 <CardDescription>Starter tasks created in the matching projects.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="ui-template-preview-stack-2">
                 {issues.map((issue, i) => {
                   const title = str(issue.title) || `Issue ${i + 1}`;
                   const pk = str(issue.projectKey).trim();
                   const pri = str(issue.priority).trim();
                   return (
-                    <div key={`${title}-${i}`} className="flex flex-wrap items-start gap-2 rounded-md border px-3 py-2">
-                      <span className="min-w-0 flex-1 font-medium">{title}</span>
+                    <div key={`${title}-${i}`} className="ui-template-preview-issue-row">
+                      <span className="ui-template-preview-issue-title">{title}</span>
                       {pk ? (
-                        <Badge variant="outline" className="shrink-0 font-normal">
+                        <Badge variant="outline" className="ui-template-preview-badge--shrink">
                           {pk}
                         </Badge>
                       ) : null}
                       {pri ? (
-                        <Badge variant="secondary" className="shrink-0 font-normal">
+                        <Badge variant="secondary" className="ui-template-preview-badge--shrink">
                           {pri}
                         </Badge>
                       ) : null}
@@ -276,36 +275,36 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
 
           {recurrence.length > 0 ? (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Scheduled routines ({recurrence.length})</CardTitle>
+              <CardHeader className="ui-template-preview-card-header">
+                <CardTitle className="ui-template-preview-card-title">Scheduled routines ({recurrence.length})</CardTitle>
                 <CardDescription>Recurring work assigned to agents when the template is applied.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="ui-template-preview-stack-3">
                 {recurrence.map((job, i) => {
                   const cron = str(job.cron).trim();
                   const target = str(job.targetKey).trim();
                   const ttype = str(job.targetType).trim();
                   const instr = str(job.instruction).trim();
                   return (
-                    <div key={`${cron}-${target}-${i}`} className="rounded-md border px-3 py-2.5">
-                      <div className="flex flex-wrap gap-2">
+                    <div key={`${cron}-${target}-${i}`} className="ui-template-preview-recurrence-box">
+                      <div className="ui-template-preview-recurrence-row">
                         {cron ? (
-                          <Badge variant="secondary" className="font-mono font-normal">
+                          <Badge variant="secondary" className="ui-template-preview-badge--mono">
                             {cron}
                           </Badge>
                         ) : null}
                         {ttype ? (
-                          <Badge variant="outline" className="font-normal">
+                          <Badge variant="outline" className="ui-template-preview-badge">
                             {ttype}
                           </Badge>
                         ) : null}
                         {target ? (
-                          <span className="text-base">
-                            → <span className="font-medium">{target}</span>
+                          <span className="ui-template-preview-recurrence-arrow">
+                            → <span className="ui-template-preview-recurrence-target">{target}</span>
                           </span>
                         ) : null}
                       </div>
-                      {instr ? <p className="text-muted-foreground mt-2 text-base leading-relaxed">{instr}</p> : null}
+                      {instr ? <p className="ui-template-preview-recurrence-instr">{instr}</p> : null}
                     </div>
                   );
                 })}
@@ -315,17 +314,19 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
 
           {plugins.length > 0 ? (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Plugins ({plugins.length})</CardTitle>
+              <CardHeader className="ui-template-preview-card-header">
+                <CardTitle className="ui-template-preview-card-title">Plugins ({plugins.length})</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="ui-template-preview-stack-2">
                 {plugins.map((pl, i) => {
                   const id = str(pl.pluginId) || `plugin-${i}`;
                   const en = pl.enabled === true;
                   return (
-                    <div key={id} className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
-                      <span className="font-mono text-base">{id}</span>
-                      <Badge variant={en ? "default" : "outline"}>{en ? "enabled" : "disabled"}</Badge>
+                    <div key={id} className="ui-template-preview-plugin-row">
+                      <span className="ui-template-preview-plugin-id">{id}</span>
+                      <Badge variant={en ? "default" : "outline"} className="ui-template-preview-badge">
+                        {en ? "enabled" : "disabled"}
+                      </Badge>
                     </div>
                   );
                 })}
@@ -340,7 +341,7 @@ export function TemplatePreviewContent({ template }: { template: TemplateRow }) 
           issues.length === 0 &&
           recurrence.length === 0 &&
           plugins.length === 0 ? (
-            <p className="text-muted-foreground text-base">No manifest details available for this template.</p>
+            <p className="ui-template-preview-muted-p">No manifest details available for this template.</p>
           ) : null}
         </div>
       </section>

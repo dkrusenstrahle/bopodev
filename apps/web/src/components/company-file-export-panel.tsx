@@ -366,9 +366,7 @@ export function CompanyFileImportCard() {
       <CardHeader>
         <CardTitle>Import company from zip</CardTitle>
         <CardDescription>
-          Only members with the board role can import. Upload a zip from Export, or any archive that matches the Bopo
-          export layout (<code className="ui-company-file-import-code">.bopo.yaml</code> at the root). This creates a new
-          company and does not replace the one you have open.
+          Only members with the board role can import.
         </CardDescription>
       </CardHeader>
       <CardContent>

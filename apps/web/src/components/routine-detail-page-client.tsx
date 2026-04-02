@@ -412,6 +412,21 @@ export function RoutineDetailPageClient(
 
   const projectName = projects.find((p) => p.id === detail?.projectId)?.name;
   const agent = agents.find((a) => a.id === detail?.assigneeAgentId);
+  const routineProjectChoices = useMemo(() => {
+    const entries = projects.map((p) => ({ id: p.id, name: p.name }));
+    if (detail && !entries.some((e) => e.id === detail.projectId)) {
+      entries.push({ id: detail.projectId, name: projectName ?? "Unknown project" });
+    }
+    return entries.sort((a, b) => a.name.localeCompare(b.name));
+  }, [projects, detail, projectName]);
+
+  const routineAgentChoices = useMemo(() => {
+    const entries = agents.map((a) => ({ id: a.id, name: a.name }));
+    if (detail && !entries.some((e) => e.id === detail.assigneeAgentId)) {
+      entries.push({ id: detail.assigneeAgentId, name: agent?.name ?? "Unknown agent" });
+    }
+    return entries.sort((a, b) => a.name.localeCompare(b.name));
+  }, [agents, detail, agent]);
   const editingTrigger = detail?.triggers.find((t) => t.id === editingTriggerId) ?? null;
 
   const loopSidebarMeta = useMemo(() => {
@@ -624,6 +639,20 @@ export function RoutineDetailPageClient(
       router.refresh();
     } catch {
       setError("Failed to update status.");
+    }
+  }
+
+  async function updateRoutineSidebar(patch: { projectId?: string; assigneeAgentId?: string }) {
+    if (!companyId || !detail) {
+      return;
+    }
+    setError(null);
+    try {
+      await apiPatch(`/routines/${detail.id}`, companyId, patch);
+      await load();
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to update routine.");
     }
   }
 
@@ -971,6 +1000,55 @@ export function RoutineDetailPageClient(
   const rightPane =
     !detail ? null : (
       <div className="ui-detail-sidebar">
+        <Card>
+          <CardContent className="ui-detail-sidebar-section">
+            <Field>
+              <FieldLabel>Project</FieldLabel>
+              <Select
+                value={detail.projectId}
+                onValueChange={(value) => {
+                  if (value !== detail.projectId) {
+                    void updateRoutineSidebar({ projectId: value });
+                  }
+                }}
+              >
+                <SelectTrigger className="ui-select-trigger-full">
+                  <SelectValue placeholder="Select a project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {routineProjectChoices.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel>Agent</FieldLabel>
+              <Select
+                value={detail.assigneeAgentId}
+                onValueChange={(value) => {
+                  if (value !== detail.assigneeAgentId) {
+                    void updateRoutineSidebar({ assigneeAgentId: value });
+                  }
+                }}
+              >
+                <SelectTrigger className="ui-select-trigger-full">
+                  <SelectValue placeholder="Select an agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {routineAgentChoices.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardContent className="ui-detail-sidebar-section">
             <PropertyRow label="Title" value={detail.title} />

@@ -2669,7 +2669,7 @@ body {
 
 /* Settings /knowledge — collapsible folder tree (filesystem-style sidebar) */
 .ui-knowledge-files-header {
-  @apply flex items-center justify-between gap-0 pr-1;
+  @apply flex items-center justify-between gap-0;
 }
 
 .ui-knowledge-files-header-label {

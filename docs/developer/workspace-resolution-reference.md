@@ -36,6 +36,8 @@ Managed company root:
 <instanceRoot>/
   workspaces/
     <companyId>/
+      knowledge/
+        ...  # company knowledge base (.md, .yaml, etc.)
       projects/
         <projectId>/
           issues/
@@ -63,6 +65,7 @@ Managed company root:
 
 All mutable workspace paths must stay inside the managed company root:
 
+- company `knowledge/` tree (filesystem-backed pages and text files)
 - project workspace `cwd`
 - agent runtime `runtimeCwd`
 - git worktree `strategy.rootDir`

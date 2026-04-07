@@ -63,6 +63,7 @@ describe("response contract normalization", { timeout: 30_000 }, () => {
       expect.objectContaining({
         companyId,
         goalIds: [],
+        knowledgePaths: [],
         createdAt: expect.any(String),
         updatedAt: expect.any(String)
       })

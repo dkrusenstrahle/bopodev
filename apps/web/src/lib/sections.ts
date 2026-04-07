@@ -16,6 +16,7 @@ export const sectionItems = [
   { slug: "templates", label: "Templates" },
   { slug: "plugins", label: "Plugins" },
   { slug: "skills", label: "Skills" },
+  { slug: "knowledge", label: "Knowledge" },
   { slug: "settings", label: "Settings" }
 ] as const;
 

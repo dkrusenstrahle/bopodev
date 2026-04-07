@@ -85,6 +85,13 @@
       "when": 1743600000000,
       "tag": "0011_plugin_installs",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1743700000000,
+      "tag": "0012_issue_knowledge_paths",
+      "breakpoints": true
     }
   ]
 }

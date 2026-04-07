@@ -65,6 +65,7 @@ describe("GET /issues/:issueId", { timeout: 30_000 }, () => {
       labels: [],
       tags: [],
       goalIds: [],
+      knowledgePaths: [],
       attachments: []
     });
   });

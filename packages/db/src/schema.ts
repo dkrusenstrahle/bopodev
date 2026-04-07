@@ -121,6 +121,8 @@ export const issues = pgTable("issues", {
   assigneeAgentId: text("assignee_agent_id"),
   labelsJson: text("labels_json").notNull().default("[]"),
   tagsJson: text("tags_json").notNull().default("[]"),
+  /** Relative paths under company workspace `knowledge/` linked from this issue. */
+  knowledgePathsJson: text("knowledge_paths_json").notNull().default("[]"),
   /** Optional link to a PR, branch page, or other external tracker (GitHub/GitLab/etc.). */
   externalLink: text("external_link"),
   isClaimed: boolean("is_claimed").notNull().default(false),

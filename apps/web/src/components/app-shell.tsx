@@ -25,7 +25,8 @@ import {
   MessageCircle,
   Plus,
   Repeat,
-  BookOpen
+  BookOpen,
+  Library
 } from "lucide-react";
 import type { SectionLabel, SectionSlug } from "@/lib/sections";
 import {
@@ -87,6 +88,8 @@ const navGroups: Array<{
       { slug: "goals", label: "Goals", icon: Target },
       { slug: "office-space", label: "Office", icon: Map },
       { slug: "costs", label: "Costs", icon: BarChart3 },
+      { slug: "skills", label: "Skills", icon: BookOpen, href: "/settings/skills" },
+      { slug: "knowledge", label: "Knowledge", icon: Library, href: "/settings/knowledge" },
       { slug: "settings", label: "Settings", icon: Settings, href: "/settings" }
     ]
   }
@@ -100,7 +103,6 @@ const settingsNavItems: Array<{
 }> = [
   { href: "/settings/templates", label: "Templates", icon: LayoutTemplate, isActive: (pathname) => pathname.startsWith("/settings/templates") },
   { href: "/settings/plugins", label: "Plugins", icon: Puzzle, isActive: (pathname) => pathname.startsWith("/settings/plugins") },
-  { href: "/settings/skills", label: "Skills", icon: BookOpen, isActive: (pathname) => pathname.startsWith("/settings/skills") },
   {
     href: "/settings",
     label: "Settings",
@@ -183,8 +185,8 @@ export function AppShell({
   const resolvedSecondaryPane =
     secondaryPane ??
     (isSettingsRoute ? (
-      <div className="flex h-full min-h-0 flex-col">
-        <ScrollArea className="ui-shell-secondary-scroll min-h-0 flex-1">
+      <div className="ui-shell-secondary-column">
+        <ScrollArea className="ui-shell-secondary-scroll ui-shell-secondary-scroll--fill">
           <div className="ui-shell-sidebar-scroll-content">{renderSettingsLinks(false)}</div>
         </ScrollArea>
       </div>
@@ -211,7 +213,16 @@ export function AppShell({
             <nav className="ui-shell-nav">
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = item.slug === "settings" && isSettingsRoute ? true : activeNav === item.label;
+                const isActive =
+                  item.href === "/settings/skills"
+                    ? pathname.startsWith("/settings/skills")
+                    : item.href === "/settings/knowledge"
+                      ? pathname.startsWith("/settings/knowledge")
+                      : item.slug === "settings"
+                        ? isSettingsRoute &&
+                          !pathname.startsWith("/settings/skills") &&
+                          !pathname.startsWith("/settings/knowledge")
+                        : activeNav === item.label;
                 const showPendingApprovalsBadge =
                   item.slug === "inbox" &&
                   typeof resolvedPendingApprovalsCount === "number" &&
@@ -350,7 +361,7 @@ export function AppShell({
               </div>
             </div>
             <Separator className="ui-shell-separator" />
-            <ScrollArea className="ui-shell-sidebar-scroll mt-8">
+            <ScrollArea className="ui-shell-sidebar-scroll-below-separator">
               <div className="ui-shell-sidebar-scroll-content">
                 {renderNavLinks(false)}
               </div>
@@ -390,7 +401,7 @@ export function AppShell({
                     </SheetTitle>
                     <SheetDescription>Navigate the control plane.</SheetDescription>
                   </SheetHeader>
-                  <div className="ui-shell-stack-sm mt-4">
+                  <div className="ui-shell-stack-sm ui-shell-mobile-nav-stack-offset">
                     <div className="ui-shell-company-header">
                       <div className="ui-shell-section-label">Company</div>
                       <CreateCompanyModal

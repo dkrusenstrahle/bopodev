@@ -16,6 +16,7 @@ describe("issue route validation", () => {
       expect(parsed.data.priority).toBe("none");
       expect(parsed.data.labels).toEqual([]);
       expect(parsed.data.goalIds).toEqual([]);
+      expect(parsed.data.knowledgePaths).toEqual([]);
     }
   });
 
@@ -46,6 +47,32 @@ describe("issue route validation", () => {
 
   it("accepts update with a single field", () => {
     const parsed = updateIssueSchema.safeParse({ title: "Only title" });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("accepts create payload with knowledgePaths", () => {
+    const parsed = createIssueSchema.safeParse({
+      projectId: "proj1",
+      title: "Hello",
+      knowledgePaths: ["playbook/a.md", "config.yaml"]
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.knowledgePaths).toEqual(["playbook/a.md", "config.yaml"]);
+    }
+  });
+
+  it("rejects knowledgePaths with traversal", () => {
+    const parsed = createIssueSchema.safeParse({
+      projectId: "proj1",
+      title: "Hello",
+      knowledgePaths: ["../secret.md"]
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts update with knowledgePaths only", () => {
+    const parsed = updateIssueSchema.safeParse({ knowledgePaths: ["notes/x.md"] });
     expect(parsed.success).toBe(true);
   });
 });

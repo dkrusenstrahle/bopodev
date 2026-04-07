@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { IssuePriority, IssueStatus } from "bopodev-contracts";
-import { ApiError, apiDelete, apiPost, apiPostFormData, apiPut } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPostFormData, apiPut } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -107,6 +107,7 @@ export function CreateIssueModal({
     priority?: string | null;
     assigneeAgentId?: string | null;
     goalIds?: string[];
+    knowledgePaths?: string[];
     labels?: string[];
   };
   defaultParentIssueId?: string | null;
@@ -125,6 +126,8 @@ export function CreateIssueModal({
   const [priority, setPriority] = useState<IssuePriority>(normalizeIssuePriority(issue?.priority));
   const [assigneeAgentId, setAssigneeAgentId] = useState<string>(issue?.assigneeAgentId ?? "unassigned");
   const [goalIds, setGoalIds] = useState<string[]>(issue?.goalIds ?? []);
+  const [knowledgePaths, setKnowledgePaths] = useState<string[]>(issue?.knowledgePaths ?? []);
+  const [knowledgeFileOptions, setKnowledgeFileOptions] = useState<string[]>([]);
   const [labels, setLabels] = useState(issue?.labels?.join(", ") ?? "");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,6 +159,18 @@ export function CreateIssueModal({
     });
   }
 
+  function toggleKnowledgePath(path: string, isChecked: boolean) {
+    setKnowledgePaths((current) => {
+      if (isChecked) {
+        if (current.includes(path)) {
+          return current;
+        }
+        return [...current, path];
+      }
+      return current.filter((p) => p !== path);
+    });
+  }
+
   function hydrateFormFromProps() {
     setProjectId(issue?.projectId ?? defaultProjectId ?? projects[0]?.id ?? "");
     setTitle(issue?.title ?? "");
@@ -165,6 +180,7 @@ export function CreateIssueModal({
     setPriority(normalizeIssuePriority(issue?.priority));
     setAssigneeAgentId(issue?.assigneeAgentId ?? "unassigned");
     setGoalIds(issue?.goalIds ?? []);
+    setKnowledgePaths(issue?.knowledgePaths ?? []);
     setLabels(issue?.labels?.join(", ") ?? "");
     setSelectedFiles([]);
     setError(null);
@@ -195,6 +211,7 @@ export function CreateIssueModal({
         priority,
         assigneeAgentId: assigneeAgentId === "unassigned" ? null : assigneeAgentId,
         goalIds,
+        knowledgePaths,
         labels: labels
           .split(",")
           .map((label) => label.trim())
@@ -224,6 +241,7 @@ export function CreateIssueModal({
         setAssigneeAgentId("unassigned");
         setLabels("");
         setGoalIds([]);
+        setKnowledgePaths([]);
       }
       setSelectedFiles([]);
       setOpen(false);
@@ -268,6 +286,17 @@ export function CreateIssueModal({
         if (nextOpen) {
           hydrateFormFromProps();
           setBodyMdxKey((k) => k + 1);
+          void (async () => {
+            try {
+              const res = await apiGet<{ items: Array<{ relativePath: string }> }>(
+                "/observability/company-knowledge",
+                companyId
+              );
+              setKnowledgeFileOptions(res.data.items.map((i) => i.relativePath).sort());
+            } catch {
+              setKnowledgeFileOptions([]);
+            }
+          })();
         }
       }}
     >
@@ -396,11 +425,11 @@ export function CreateIssueModal({
                               : `${goalIds.length} selected`}
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="min-w-[var(--radix-dropdown-menu-trigger-width)]">
+                    <DropdownMenuContent align="start" className="ui-dropdown-menu-content--trigger-width">
                       <DropdownMenuLabel>Attach goals</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       {applicableGoals.length === 0 ? (
-                        <p className="px-2 py-1.5 text-base text-muted-foreground">No applicable goals.</p>
+                        <p className="ui-dropdown-menu-empty-hint">No applicable goals.</p>
                       ) : (
                         applicableGoals.map((g) => (
                           <DropdownMenuCheckboxItem
@@ -416,6 +445,40 @@ export function CreateIssueModal({
                   </DropdownMenu>
                 </Field>
               ) : null}
+              <Field>
+                <FieldLabelWithHelp helpText="Link company knowledge files. Paths must exist under Company → Knowledge. Agents can load them via the observability API.">
+                  Knowledge
+                </FieldLabelWithHelp>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" className={styles.createIssueModalGoalsTrigger}>
+                      {knowledgeFileOptions.length === 0
+                        ? "No knowledge files"
+                        : knowledgePaths.length === 0
+                          ? "Select knowledge"
+                          : `${knowledgePaths.length} selected`}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="ui-dropdown-menu-content--trigger-width-max-h-72">
+                    <DropdownMenuLabel>Knowledge files</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {knowledgeFileOptions.length === 0 ? (
+                      <p className="ui-dropdown-menu-empty-hint">Create files under Company → Knowledge.</p>
+                    ) : (
+                      knowledgeFileOptions.map((p) => (
+                        <DropdownMenuCheckboxItem
+                          key={p}
+                          checked={knowledgePaths.includes(p)}
+                          onSelect={(event) => event.preventDefault()}
+                          onCheckedChange={(next) => toggleKnowledgePath(p, Boolean(next))}
+                        >
+                          {p}
+                        </DropdownMenuCheckboxItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </Field>
               <Field>
                 <FieldLabelWithHelp
                   htmlFor="issue-labels"

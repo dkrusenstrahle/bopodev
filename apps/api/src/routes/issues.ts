@@ -50,6 +50,7 @@ import { isInsidePath, normalizeCompanyWorkspacePath, resolveProjectWorkspacePat
 import { requireCompanyScope } from "../middleware/company-scope";
 import { enforcePermission } from "../middleware/request-actor";
 import { triggerIssueCommentDispatchWorker } from "../services/comment-recipient-dispatch-service";
+import { knowledgeFileExists } from "../services/company-knowledge-file-service";
 import { publishAttentionSnapshot } from "../realtime/attention";
 import {
   createIssueCommentLegacySchema,
@@ -108,10 +109,26 @@ function normalizeOptionalExternalLink(value: string | null | undefined) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+async function validateIssueKnowledgePaths(companyId: string, paths: string[]): Promise<string | null> {
+  for (const p of paths) {
+    if (!(await knowledgeFileExists({ companyId, relativePath: p }))) {
+      return `Knowledge file not found: ${p}`;
+    }
+  }
+  return null;
+}
+
 function toIssueResponse(issue: Record<string, unknown>, goalIds: string[] = []) {
   const labels = parseStringArray(issue.labelsJson);
   const tags = parseStringArray(issue.tagsJson);
-  const { labelsJson: _labelsJson, tagsJson: _tagsJson, goalId: _legacyGoalId, ...rest } = issue as Record<string, unknown> & {
+  const knowledgePaths = parseStringArray(issue.knowledgePathsJson);
+  const {
+    labelsJson: _labelsJson,
+    tagsJson: _tagsJson,
+    knowledgePathsJson: _knowledgePathsJson,
+    goalId: _legacyGoalId,
+    ...rest
+  } = issue as Record<string, unknown> & {
     goalId?: unknown;
   };
   const externalRaw = rest.externalLink;
@@ -122,7 +139,8 @@ function toIssueResponse(issue: Record<string, unknown>, goalIds: string[] = [])
     externalLink,
     labels,
     tags,
-    goalIds
+    goalIds,
+    knowledgePaths
   };
 }
 
@@ -209,6 +227,12 @@ export function createIssuesRouter(ctx: AppContext) {
         return sendError(res, assignmentValidation, 422);
       }
     }
+    if (parsed.data.knowledgePaths.length > 0) {
+      const kpErr = await validateIssueKnowledgePaths(req.companyId!, parsed.data.knowledgePaths);
+      if (kpErr) {
+        return sendError(res, kpErr, 422);
+      }
+    }
     const issue = await createIssue(ctx.db, {
       companyId: req.companyId!,
       projectId: parsed.data.projectId,
@@ -221,7 +245,8 @@ export function createIssuesRouter(ctx: AppContext) {
       priority: parsed.data.priority,
       assigneeAgentId: parsed.data.assigneeAgentId,
       labels: parsed.data.labels,
-      tags: parsed.data.tags
+      tags: parsed.data.tags,
+      knowledgePaths: parsed.data.knowledgePaths
     });
     await appendActivity(ctx.db, {
       companyId: req.companyId!,
@@ -605,6 +630,12 @@ export function createIssuesRouter(ctx: AppContext) {
     const updateBody = { ...parsed.data };
     if (updateBody.externalLink !== undefined) {
       updateBody.externalLink = normalizeOptionalExternalLink(updateBody.externalLink) ?? null;
+    }
+    if (updateBody.knowledgePaths !== undefined && updateBody.knowledgePaths.length > 0) {
+      const kpErr = await validateIssueKnowledgePaths(req.companyId!, updateBody.knowledgePaths);
+      if (kpErr) {
+        return sendError(res, kpErr, 422);
+      }
     }
     const issue = await updateIssue(ctx.db, { companyId: req.companyId!, id: req.params.issueId, ...updateBody });
     if (!issue) {

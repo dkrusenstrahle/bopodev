@@ -118,7 +118,7 @@ export function createCompaniesRouter(ctx: AppContext) {
       return sendOk(res, {
         ok: false,
         companyName: "",
-        counts: { projects: 0, agents: 0, goals: 0, routines: 0, skillFiles: 0 },
+        counts: { projects: 0, agents: 0, goals: 0, routines: 0, skillFiles: 0, knowledgeFiles: 0 },
         hasCeo: false,
         errors: [message],
         warnings: [] as string[]

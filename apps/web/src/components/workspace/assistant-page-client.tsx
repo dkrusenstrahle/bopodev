@@ -187,7 +187,7 @@ function TypingIndicator({ ceoPersona }: { ceoPersona: CeoPersona }) {
       <div className="ui-ask-message-col">
         <Card className={cn("ui-card", "ui-ask-bubble-card", "ui-ask-bubble-card--typing")}>
           <CardContent className={cn("ui-card-content", "ui-ask-bubble-content", "ui-ask-bubble-content--typing")}>
-            <span className="ui-ask-typing-dots flex items-center gap-1.5" aria-hidden>
+            <span className="ui-ask-typing-dots" aria-hidden>
               <span className="ui-ask-typing-dot" />
               <span className="ui-ask-typing-dot" />
               <span className="ui-ask-typing-dot" />
@@ -558,17 +558,17 @@ export function AssistantPageClient({
   ) : undefined;
 
   const leftPane = (
-    <div className="ui-page-stack flex h-full min-h-0 flex-col">
-      <div className="ui-page-section-gap-sm shrink-0">
+    <div className="ui-page-stack ui-page-stack-fullheight">
+      <div className="ui-page-section-gap-sm-shrink">
         <SectionHeading
           title="Ask the CEO"
           description="Message your CEO with full company context. Choose which runtime answers (same adapters as when you hire an agent). Older threads stay saved on the server."
           actions={
             companyId ? (
-              <div className="flex min-w-0 flex-row flex-nowrap items-center justify-end gap-6">
+              <div className="ui-assistant-toolbar-row">
                 {brains.length > 0 ? (
                   <Select value={brainSelection} onValueChange={(v) => persistBrain(v)}>
-                    <SelectTrigger className="h-9 w-[11.5rem] shrink-0 sm:w-72" aria-label="Brain">
+                    <SelectTrigger className="ui-assistant-brain-select-trigger" aria-label="Brain">
                       <SelectValue placeholder="Brain" />
                     </SelectTrigger>
                     <SelectContent>
@@ -580,11 +580,11 @@ export function AssistantPageClient({
                     </SelectContent>
                   </Select>
                 ) : null}
-                <div className="flex shrink-0 items-center gap-6">
+                <div className="ui-assistant-toolbar-actions">
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-9 shrink-0 gap-2 whitespace-nowrap"
+                    className="ui-assistant-toolbar-btn"
                     disabled={isStartingNewThread || isDeletingThread}
                     onClick={() => void startNewConversation()}
                   >
@@ -593,7 +593,7 @@ export function AssistantPageClient({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-9 shrink-0 gap-2 whitespace-nowrap text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="ui-assistant-toolbar-btn-danger"
                     disabled={isDeletingThread || isStartingNewThread || !readStoredChatThreadId(companyId)}
                     onClick={() => void deleteCurrentConversation()}
                   >
@@ -653,12 +653,12 @@ export function AssistantPageClient({
 
             <CardFooter className={cn("ui-card-footer", "ui-ask-thread-footer")}>
               {sendError ? (
-                <Alert variant="destructive" className="w-full">
+                <Alert variant="destructive" className="ui-alert-w-full">
                   <AlertTitle>Message not sent</AlertTitle>
                   <AlertDescription>{sendError}</AlertDescription>
                 </Alert>
               ) : null}
-              <div className="ui-ask-pill-composer w-full">
+              <div className="ui-ask-pill-composer">
                 <Textarea
                   ref={composerRef}
                   value={draft}

@@ -328,6 +328,12 @@ export async function seedOperationalDataFromPackage(db: BopoDb, companyId: stri
       const dest = join(companyRoot, path);
       await mkdir(dirname(dest), { recursive: true });
       await writeFile(dest, text, "utf8");
+      continue;
+    }
+    if (path.startsWith("knowledge/")) {
+      const dest = join(companyRoot, path);
+      await mkdir(dirname(dest), { recursive: true });
+      await writeFile(dest, text, "utf8");
     }
   }
 
@@ -424,11 +430,15 @@ export function summarizeCompanyPackageForPreview(parsed: ParsedCompanyPackage):
     goals: number;
     routines: number;
     skillFiles: number;
+    knowledgeFiles: number;
   };
   hasCeo: boolean;
 } {
   const doc = parsed.doc;
   const skillFiles = Object.keys(parsed.entries).filter((k) => k.startsWith("skills/") && !k.endsWith("/")).length;
+  const knowledgeFiles = Object.keys(parsed.entries).filter(
+    (k) => k.startsWith("knowledge/") && !k.endsWith("/")
+  ).length;
   const hasCeo = Object.values(doc.agents).some((a) => (a.roleKey ?? "").trim().toLowerCase() === "ceo");
   return {
     companyName: doc.company.name,
@@ -437,7 +447,8 @@ export function summarizeCompanyPackageForPreview(parsed: ParsedCompanyPackage):
       agents: Object.keys(doc.agents).length,
       goals: Object.keys(doc.goals ?? {}).length,
       routines: Object.keys(doc.routines ?? {}).length,
-      skillFiles
+      skillFiles,
+      knowledgeFiles
     },
     hasCeo
   };

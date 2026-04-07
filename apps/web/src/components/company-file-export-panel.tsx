@@ -306,7 +306,14 @@ export function CompanyFileExportCard({ companyId, companyName }: { companyId: s
 type ImportPreviewPayload = {
   ok: boolean;
   companyName: string;
-  counts: { projects: number; agents: number; goals: number; routines: number; skillFiles: number };
+  counts: {
+    projects: number;
+    agents: number;
+    goals: number;
+    routines: number;
+    skillFiles: number;
+    knowledgeFiles: number;
+  };
   hasCeo: boolean;
   errors: string[];
   warnings: string[];
@@ -390,7 +397,7 @@ export function CompanyFileImportCard() {
                   <p className="ui-company-file-import-preview-summary">
                     <strong>{preview.companyName}</strong> — {preview.counts.projects} projects, {preview.counts.agents}{" "}
                     agents, {preview.counts.goals} goals, {preview.counts.routines} scheduled routines, {preview.counts.skillFiles}{" "}
-                    skill files.
+                    skill files, {preview.counts.knowledgeFiles} knowledge files.
                   </p>
                   {!preview.hasCeo ? (
                     <p className="ui-company-file-import-preview-warn">Warning: no CEO agent (roleKey ceo) in manifest.</p>
@@ -400,7 +407,7 @@ export function CompanyFileImportCard() {
                       {w}
                     </p>
                   ))}
-                  <Button type="button" size="sm" className="mt-2" disabled={!preview.ok} onClick={() => void onConfirmImport()}>
+                  <Button type="button" size="sm" className="ui-button-mt-2" disabled={!preview.ok} onClick={() => void onConfirmImport()}>
                     Import this company
                   </Button>
                 </>

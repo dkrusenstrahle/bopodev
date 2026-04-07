@@ -522,6 +522,7 @@ export async function createIssue(
     assigneeAgentId?: string | null;
     labels?: string[];
     tags?: string[];
+    knowledgePaths?: string[];
     routineId?: string | null;
     routineRunId?: string | null;
   }
@@ -550,6 +551,7 @@ export async function createIssue(
         assigneeAgentId: input.assigneeAgentId ?? null,
         labelsJson: JSON.stringify(input.labels ?? []),
         tagsJson: JSON.stringify(input.tags ?? []),
+        knowledgePathsJson: JSON.stringify(input.knowledgePaths ?? []),
         routineId: input.routineId ?? null,
         routineRunId: input.routineRunId ?? null
       })
@@ -582,6 +584,7 @@ export async function updateIssue(
     assigneeAgentId?: string | null;
     labels?: string[];
     tags?: string[];
+    knowledgePaths?: string[];
   }
 ) {
   const [existing] = await db
@@ -616,6 +619,8 @@ export async function updateIssue(
         assigneeAgentId: input.assigneeAgentId,
         labelsJson: input.labels ? JSON.stringify(input.labels) : undefined,
         tagsJson: input.tags ? JSON.stringify(input.tags) : undefined,
+        knowledgePathsJson:
+          input.knowledgePaths !== undefined ? JSON.stringify(input.knowledgePaths) : undefined,
         updatedAt: touchUpdatedAtSql
       })
     )

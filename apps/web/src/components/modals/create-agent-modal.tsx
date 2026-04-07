@@ -1454,7 +1454,7 @@ export function CreateAgentModal({
                         })}
                       </div>
                     ) : (
-                      <p className={styles.createAgentModalText}>No company skills yet. Add them in Settings → Skills.</p>
+                      <p className={styles.createAgentModalText}>No company skills yet. Add them under Company → Skills.</p>
                     )
                   ) : null}
                 </FieldGroup>

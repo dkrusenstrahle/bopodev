@@ -66,6 +66,11 @@ export function resolveCompanySkillsPath(companyId: string) {
   return join(resolveCompanyProjectsWorkspacePath(companyId), "skills");
 }
 
+/** Company knowledge base (`knowledge/**`), markdown and text files on disk; exportable with company zip. */
+export function resolveCompanyKnowledgePath(companyId: string) {
+  return join(resolveCompanyProjectsWorkspacePath(companyId), "knowledge");
+}
+
 export function resolveAgentFallbackWorkspacePath(companyId: string, agentId: string) {
   const safeCompanyId = assertPathSegment(companyId, "companyId");
   const safeAgentId = assertPathSegment(agentId, "agentId");

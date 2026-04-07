@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import type { IssuePriority, IssueStatus } from "bopodev-contracts";
 import { AGENT_ROLE_LABELS, AGENT_ROLE_KEYS, type AgentRoleKey } from "bopodev-contracts";
 import { ChevronDownIcon, FileTextIcon } from "lucide-react";
@@ -55,6 +56,7 @@ interface IssueRow {
   /** Set when this issue was opened by a routine run. */
   routineId?: string | null;
   goalIds?: string[];
+  knowledgePaths?: string[];
   assigneeAgentId: string | null;
   title: string;
   body?: string | null;
@@ -202,7 +204,7 @@ function toRecipientPayload(selectedRecipientKey: string | null) {
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
-  return <div className={cn("ui-feature-empty-state", "mb-8")}>{children}</div>;
+  return <div className={cn("ui-feature-empty-state", "ui-mb-8")}>{children}</div>;
 }
 
 function PropertyRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -496,7 +498,9 @@ export function IssueDetailPageClient({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [issueDocumentDialogOpen, setIssueDocumentDialogOpen] = useState(false);
   const [issueDocumentEditTarget, setIssueDocumentEditTarget] = useState<IssueDocumentEditTarget | null>(null);
+  const [knowledgeFileOptions, setKnowledgeFileOptions] = useState<string[]>([]);
   const visibleComments = useMemo(() => collapseRunComments(comments), [comments]);
+  const linkedKnowledgePaths = issue.knowledgePaths ?? [];
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === issue.projectId) ?? null,
@@ -587,6 +591,28 @@ export function IssueDetailPageClient({
       cancelled = true;
     };
   }, [companyId, issue.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await apiGet<{ items: Array<{ relativePath: string }> }>(
+          "/observability/company-knowledge",
+          companyId
+        );
+        if (!cancelled) {
+          setKnowledgeFileOptions(result.data.items.map((i) => i.relativePath).sort());
+        }
+      } catch {
+        if (!cancelled) {
+          setKnowledgeFileOptions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -770,6 +796,7 @@ export function IssueDetailPageClient({
     priority?: IssuePriority;
     assigneeAgentId?: string | null;
     labels?: string[];
+    knowledgePaths?: string[];
   }) {
     await runIssueAction(async () => {
       await apiPut(`/issues/${issue.id}`, companyId, payload);
@@ -931,7 +958,7 @@ export function IssueDetailPageClient({
       header: ({ column }) => <DataTableColumnHeader column={column} title="Details" />,
       enableSorting: false,
       cell: ({ row }) => (
-        <span className="ui-run-table-cell-muted text-sm">
+        <span className="ui-run-table-cell-muted--sm">
           {attachmentDescriptionLine(row.original, formatSmartDateTime(row.original.createdAt))}
         </span>
       )
@@ -1064,7 +1091,7 @@ export function IssueDetailPageClient({
       header: ({ column }) => <DataTableColumnHeader column={column} title="Summary" />,
       enableSorting: false,
       cell: ({ row }) => (
-        <span className="ui-issue-activity-message min-w-0" title={row.original.eventType}>
+        <span className="ui-issue-activity-message" title={row.original.eventType}>
           {formatIssueActivityTitle(row.original, agents)}
         </span>
       )
@@ -1078,7 +1105,7 @@ export function IssueDetailPageClient({
         if (line === "Event recorded.") {
           return <span className="ui-run-table-cell-muted">—</span>;
         }
-        return <span className="ui-run-table-cell-muted text-sm">{line}</span>;
+        return <span className="ui-run-table-cell-muted--sm">{line}</span>;
       }
     }
   ];
@@ -1124,7 +1151,7 @@ export function IssueDetailPageClient({
               href={issue.externalLink.trim()}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm break-all underline underline-offset-2"
+              className="ui-issue-external-link"
             >
               {issue.externalLink.trim()}
             </a>
@@ -1187,7 +1214,7 @@ export function IssueDetailPageClient({
                   >
                     <div
                       ref={setCommentMdxOverlayHost}
-                      className="mdxeditor-popup-mount pointer-events-none absolute left-0 right-0 top-0 z-1 h-0 overflow-visible"
+                        className="ui-mdxeditor-popup-mount"
                       aria-hidden
                     />
                     {commentMdxOverlayHost ? (
@@ -1203,7 +1230,7 @@ export function IssueDetailPageClient({
                     ) : null}
                   </div>
                 </CardContent>
-                <CardFooter className="ui-loop-card-footer-actions gap-6">
+                <CardFooter className="ui-loop-card-footer-actions">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button type="button" variant="outline" disabled={isSubmittingComment}>
@@ -1506,6 +1533,64 @@ export function IssueDetailPageClient({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+
+          <Field>
+            <FieldLabel>Knowledge</FieldLabel>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" className="ui-select-trigger-full ui-select-trigger-menu">
+                  {knowledgeFileOptions.length === 0
+                    ? "No knowledge files"
+                    : linkedKnowledgePaths.length === 0
+                      ? "Link knowledge…"
+                      : `${linkedKnowledgePaths.length} linked`}
+                  <ChevronDownIcon className="ui-chevron-muted" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="ui-dropdown-menu-content--trigger-width-max-h-64"
+              >
+                {knowledgeFileOptions.length === 0 ? (
+                  <p className="ui-dropdown-menu-empty-hint-compact">Add files under Company → Knowledge.</p>
+                ) : (
+                  knowledgeFileOptions.map((p) => (
+                    <DropdownMenuCheckboxItem
+                      key={p}
+                      checked={linkedKnowledgePaths.includes(p)}
+                      onSelect={(event) => event.preventDefault()}
+                      onCheckedChange={(checked) => {
+                        const next = checked
+                          ? [...linkedKnowledgePaths, p]
+                          : linkedKnowledgePaths.filter((x) => x !== p);
+                        void updateIssue({ knowledgePaths: next });
+                      }}
+                    >
+                      <span className="ui-truncate" title={p}>
+                        {p}
+                      </span>
+                    </DropdownMenuCheckboxItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {linkedKnowledgePaths.length > 0 ? (
+              <ul className="ui-knowledge-linked-list">
+                {linkedKnowledgePaths.map((p) => (
+                  <li key={p}>
+                    <Link
+                      href={
+                        `/settings/knowledge?companyId=${encodeURIComponent(companyId)}&path=${encodeURIComponent(p)}` as Route
+                      }
+                      className="ui-knowledge-linked-path"
+                    >
+                      {p}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </Field>
         </CardContent>
       </Card>

@@ -8,6 +8,7 @@ import { getCompany, listAgents, listGoals, listProjects } from "bopodev-db";
 import {
   resolveAgentMemoryRootPath,
   resolveAgentOperatingPath,
+  resolveCompanyKnowledgePath,
   resolveCompanyProjectsWorkspacePath
 } from "../lib/instance-paths";
 import { SKILL_LINK_BASENAME } from "./company-skill-file-service";
@@ -110,12 +111,23 @@ async function walkSkillsDir(companyId: string, budget: { n: number }): Promise<
   return out;
 }
 
+async function walkKnowledgeDir(companyId: string, budget: { n: number }): Promise<Record<string, string>> {
+  const root = resolveCompanyKnowledgePath(companyId);
+  const files = await walkTextFilesUnder(root, budget);
+  const out: Record<string, string> = {};
+  for (const [rel, content] of Object.entries(files)) {
+    out[`knowledge/${rel}`] = content;
+  }
+  return out;
+}
+
 function buildReadmeMarkdown(input: {
   companyName: string;
   slug: string;
   agentRows: { slug: string; name: string; role: string; managerSlug: string | null }[];
   projectRows: { slug: string; name: string; description: string | null }[];
   skillFileCount: number;
+  knowledgeFileCount: number;
   taskCount: number;
   goalCount: number;
   exportedAt: string;
@@ -131,6 +143,7 @@ function buildReadmeMarkdown(input: {
     `| Projects | ${input.projectRows.length} |`,
     `| Goals | ${input.goalCount} |`,
     `| Skills (files under skills/) | ${input.skillFileCount} |`,
+    `| Knowledge (files under knowledge/) | ${input.knowledgeFileCount} |`,
     `| Scheduled tasks | ${input.taskCount} |`,
     "",
     "### Agents",
@@ -350,6 +363,12 @@ export async function buildCompanyExportFileMap(
     files[p] = c;
   }
 
+  const knowledgeFiles = await walkKnowledgeDir(companyId, skillBudget);
+  const knowledgeFileCount = Object.keys(knowledgeFiles).length;
+  for (const [p, c] of Object.entries(knowledgeFiles)) {
+    files[p] = c;
+  }
+
   const taskCount = Object.keys(routineManifest).length;
 
   files["README.md"] = buildReadmeMarkdown({
@@ -358,6 +377,7 @@ export async function buildCompanyExportFileMap(
     agentRows: agentRowsForReadme,
     projectRows: projectEntries.map((p) => ({ slug: p.slug, name: p.name, description: p.description })),
     skillFileCount,
+    knowledgeFileCount,
     taskCount,
     goalCount: sortedGoals.length,
     exportedAt: yamlDoc.exportedAt
@@ -420,7 +440,9 @@ export async function listCompanyExportManifest(
   return Object.entries(files)
     .map(([path, content]): CompanyExportFileEntry => {
       const source: "generated" | "workspace" =
-        path.startsWith("agents/") || path.startsWith("skills/") ? "workspace" : "generated";
+        path.startsWith("agents/") || path.startsWith("skills/") || path.startsWith("knowledge/")
+          ? "workspace"
+          : "generated";
       return {
         path,
         bytes: Buffer.byteLength(content, "utf8"),

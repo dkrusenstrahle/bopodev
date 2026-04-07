@@ -172,7 +172,7 @@ export function IssueDocumentDialog({
             <Field>
               <FieldLabel>Content</FieldLabel>
               {isLoadingDocument ? (
-                <div className="ui-issue-muted-text py-8">Loading document…</div>
+                <div className="ui-issue-muted-text ui-py-8">Loading document…</div>
               ) : (
                 <IssueDocumentMdxEditor
                   editorKey={`${issueId}-${editorSession}-${editTarget?.id ?? "new"}`}
@@ -181,7 +181,7 @@ export function IssueDocumentDialog({
                 />
               )}
             </Field>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? <p className="ui-form-error-text">{error}</p> : null}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>

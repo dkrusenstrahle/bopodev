@@ -551,7 +551,7 @@ function CostDailyBreakdownChartCard({
         <CardTitle className={styles.costProviderDailyCardTitle}>{title}</CardTitle>
         <CardDescription>
           Day-by-day usage for {chartMonthLabel}.
-          {metaLine ? <span className="mt-1 block text-muted-foreground">{metaLine}</span> : null}
+          {metaLine ? <span className="ui-cost-chart-meta-line">{metaLine}</span> : null}
         </CardDescription>
         <CardAction className={styles.costProviderDailyCardAction}>
           <div role="group" aria-label="Month totals" className={styles.costProviderDailyMetricGroup}>
@@ -559,7 +559,7 @@ function CostDailyBreakdownChartCard({
               className={cn(
                 styles.costProviderDailyMetricButton,
                 styles.costProviderDailyMetricButtonInactive,
-                "pointer-events-none cursor-default"
+                "ui-pointer-events-none-cursor-default"
               )}
             >
               <span className={styles.costProviderDailyMetricLabel}>USD</span>
@@ -569,7 +569,7 @@ function CostDailyBreakdownChartCard({
               className={cn(
                 styles.costProviderDailyMetricButton,
                 styles.costProviderDailyMetricButtonInactive,
-                "pointer-events-none cursor-default"
+                "ui-pointer-events-none-cursor-default"
               )}
             >
               <span className={styles.costProviderDailyMetricLabel}>Tokens</span>
@@ -580,7 +580,7 @@ function CostDailyBreakdownChartCard({
                 className={cn(
                   styles.costProviderDailyMetricButton,
                   styles.costProviderDailyMetricButtonInactive,
-                  "pointer-events-none cursor-default"
+                  "ui-pointer-events-none-cursor-default"
                 )}
               >
                 <span className={styles.costProviderDailyMetricLabel}>Messages</span>
@@ -627,9 +627,9 @@ function CostDailyBreakdownChartCard({
                     return null;
                   }
                   return (
-                    <div className="grid min-w-36 items-start gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-base shadow-md">
-                      {label != null ? <div className="font-medium">{label}</div> : null}
-                      <div className="grid gap-1.5">
+                    <div className="ui-chart-tooltip">
+                      {label != null ? <div className="ui-font-medium">{label}</div> : null}
+                      <div className="ui-chart-tooltip-rows">
                         {payload.map((item, index) => {
                           const key = String(item.dataKey ?? item.name ?? index);
                           const isUsd = key === "usd";
@@ -640,10 +640,10 @@ function CostDailyBreakdownChartCard({
                             item.color ?? (isUsd ? "var(--color-usd)" : "var(--color-tokens)");
                           const conf = chartConfig[isUsd ? "usd" : "tokens"];
                           return (
-                            <div key={`${key}-${index}`} className="flex items-center gap-2">
-                              <span className="h-0.5 w-3 shrink-0 rounded-[1px]" style={{ backgroundColor: color }} />
-                              <span className="text-muted-foreground">{conf.label}</span>
-                              <span className="ml-auto font-mono font-medium tabular-nums">{display}</span>
+                            <div key={`${key}-${index}`} className="ui-chart-tooltip-row">
+                              <span className="ui-chart-tooltip-swatch" style={{ backgroundColor: color }} />
+                              <span className="ui-text-muted">{conf.label}</span>
+                              <span className="ui-chart-tooltip-value">{display}</span>
                             </div>
                           );
                         })}
@@ -4924,7 +4924,7 @@ export function WorkspaceClient({
                             <DrawerTitle>Filters</DrawerTitle>
                             <DrawerDescription>Refine agents with quick mobile controls.</DrawerDescription>
                           </DrawerHeader>
-                          <div className="space-y-3 pb-2">{agentsToolbarFilters}</div>
+                          <div className="ui-drawer-filters-body">{agentsToolbarFilters}</div>
                         </DrawerContent>
                       </Drawer>
                     </div>
@@ -4932,9 +4932,7 @@ export function WorkspaceClient({
                   </div>
                   {filteredAgents.length === 0 ? (
                     <div className="ui-data-table-surface">
-                      <div className="ui-data-table-empty-cell flex min-h-24 items-center justify-center px-4 py-8">
-                        No agents match current filters.
-                      </div>
+                      <div className="ui-data-table-empty-centered">No agents match current filters.</div>
                     </div>
                   ) : (
                     <div className={styles.agentsDirectoryCardGrid}>
@@ -4967,7 +4965,7 @@ export function WorkspaceClient({
                                     {getAgentDisplayRole(agent)}
                                   </CardDescription>
                                 </div>
-                                <Badge variant="outline" className={cn("shrink-0", getStatusBadgeClassName(agent.status))}>
+                                <Badge variant="outline" className={cn("ui-shrink-0", getStatusBadgeClassName(agent.status))}>
                                   {agent.status}
                                 </Badge>
                               </CardHeader>
@@ -5021,7 +5019,7 @@ export function WorkspaceClient({
                             <DrawerTitle>Filters</DrawerTitle>
                             <DrawerDescription>Refine agents with quick mobile controls.</DrawerDescription>
                           </DrawerHeader>
-                          <div className="space-y-3 pb-2">{agentsToolbarFilters}</div>
+                          <div className="ui-drawer-filters-body">{agentsToolbarFilters}</div>
                         </DrawerContent>
                       </Drawer>
                     </div>
@@ -5029,9 +5027,7 @@ export function WorkspaceClient({
                   </div>
                   {filteredAgents.length === 0 ? (
                     <div className="ui-data-table-surface">
-                      <div className="ui-data-table-empty-cell flex min-h-24 items-center justify-center px-4 py-8">
-                        No agents match current filters.
-                      </div>
+                      <div className="ui-data-table-empty-centered">No agents match current filters.</div>
                     </div>
                   ) : (
                     <>
@@ -5172,7 +5168,7 @@ export function WorkspaceClient({
                 }
               }}
             >
-              <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+              <DialogContent className="ui-dialog-content-scroll-tall">
                 <DialogHeader>
                   <DialogTitle>{selectedAttentionItem?.title ?? "Inbox item details"}</DialogTitle>
                   <DialogDescription>
@@ -6051,7 +6047,7 @@ export function WorkspaceClient({
               }
             />
             {pluginActionNotice ? (
-              <Alert variant={pluginActionNotice.kind === "error" ? "destructive" : "default"} className="mb-4">
+              <Alert variant={pluginActionNotice.kind === "error" ? "destructive" : "default"} className="ui-alert--mb-section">
                 <AlertTitle>{pluginActionNotice.kind === "error" ? "Plugin action failed" : "Plugin health"}</AlertTitle>
                 <AlertDescription className="whitespace-pre-wrap break-words">{pluginActionNotice.message}</AlertDescription>
               </Alert>
@@ -6105,7 +6101,7 @@ export function WorkspaceClient({
                   <DialogDescription>Install a plugin by npm package name.</DialogDescription>
                 </DialogHeader>
                 <form
-                  className="space-y-4"
+                  className="ui-space-y-4"
                   onSubmit={(event) => {
                     event.preventDefault();
                     void runCrudAction(
@@ -6173,8 +6169,8 @@ export function WorkspaceClient({
               title="Templates"
               description="Portable org templates for reproducible company setup."
             />
-            <Tabs defaultValue="templates" className="mt-4">
-              <TabsList className="mb-4">
+            <Tabs defaultValue="templates" className="ui-tabs-mt-4">
+              <TabsList className="ui-tabs-list-mb-4">
                 <TabsTrigger value="templates">Templates</TabsTrigger>
                 {companyId && activeCompany ? (
                   <>
@@ -6183,7 +6179,7 @@ export function WorkspaceClient({
                   </>
                 ) : null}
               </TabsList>
-              <TabsContent value="templates" className="mt-0">
+              <TabsContent value="templates" className="ui-tabs-content-flush">
                 <DataTable
                   columns={templateColumns}
                   data={filteredTemplates}
@@ -6224,28 +6220,28 @@ export function WorkspaceClient({
                   }
                 />
                 <Dialog open={templateDetailsOpen} onOpenChange={setTemplateDetailsOpen}>
-                  <DialogContent size="xl" className="min-h-0 max-h-[min(90vh,calc(100dvh-10rem))]">
-                    <DialogHeader className="shrink-0">
+                  <DialogContent size="xl" className="ui-dialog-content-template-preview">
+                    <DialogHeader className="ui-dialog-header-shrink">
                       <DialogTitle>{selectedTemplate?.name ?? "Template details"}</DialogTitle>
                       <DialogDescription>
                         {selectedTemplate?.description?.trim() || "Portable org template details and manifest."}
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
+                    <div className="ui-dialog-body-scroll-template">
                       {selectedTemplate ? (
-                        <div className="space-y-6">
-                          <div className="grid gap-6 text-base sm:grid-cols-3">
-                            <div className="rounded-lg border bg-muted/40 px-3 py-2">
-                              <div className="text-muted-foreground text-base">Slug</div>
-                              <div className="font-mono text-base">{selectedTemplate.slug}</div>
+                        <div className="ui-space-y-6">
+                          <div className="ui-template-preview-grid">
+                            <div className="ui-template-preview-stat">
+                              <div className="ui-template-preview-stat-label">Slug</div>
+                              <div className="ui-template-preview-stat-value">{selectedTemplate.slug}</div>
                             </div>
-                            <div className="rounded-lg border bg-muted/40 px-3 py-2">
-                              <div className="text-muted-foreground text-base">Version</div>
-                              <div className="font-mono text-base">{selectedTemplate.currentVersion}</div>
+                            <div className="ui-template-preview-stat">
+                              <div className="ui-template-preview-stat-label">Version</div>
+                              <div className="ui-template-preview-stat-value">{selectedTemplate.currentVersion}</div>
                             </div>
-                            <div className="rounded-lg border bg-muted/40 px-3 py-2">
-                              <div className="text-muted-foreground text-base">Status</div>
-                              <Badge variant="outline" className="mt-1">
+                            <div className="ui-template-preview-stat">
+                              <div className="ui-template-preview-stat-label">Status</div>
+                              <Badge variant="outline" className="ui-mt-1">
                                 {selectedTemplate.status}
                               </Badge>
                             </div>
@@ -6254,7 +6250,7 @@ export function WorkspaceClient({
                         </div>
                       ) : null}
                     </div>
-                    <DialogFooter className="shrink-0">
+                    <DialogFooter className="ui-dialog-footer-shrink">
                       <Button type="button" variant="outline" onClick={() => setTemplateDetailsOpen(false)}>
                         Close
                       </Button>
@@ -6264,10 +6260,10 @@ export function WorkspaceClient({
               </TabsContent>
               {companyId && activeCompany ? (
                 <>
-                  <TabsContent value="export" className="mt-0">
+                  <TabsContent value="export" className="ui-tabs-content-flush">
                     <CompanyFileExportCard companyId={companyId} companyName={activeCompany.name} />
                   </TabsContent>
-                  <TabsContent value="import" className="mt-0">
+                  <TabsContent value="import" className="ui-tabs-content-flush">
                     <CompanyFileImportCard />
                   </TabsContent>
                 </>

@@ -176,12 +176,12 @@ export function RoutinesPageClient(props: WorkspacePageProps) {
           companyId ? (
             <Link
               href={`/routines/${row.original.id}${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}` as Route}
-              className="font-medium text-primary hover:underline"
+              className="ui-link-primary-sm"
             >
               {row.original.title}
             </Link>
           ) : (
-            <span className="font-medium">{row.original.title}</span>
+            <span className="ui-font-medium">{row.original.title}</span>
           )
       },
       {
@@ -189,7 +189,7 @@ export function RoutinesPageClient(props: WorkspacePageProps) {
         accessorFn: (row) => projectById.get(row.projectId) ?? row.projectId,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Project" />,
         cell: ({ row }) => (
-          <span className="text-muted-foreground">{projectById.get(row.original.projectId) ?? row.original.projectId}</span>
+          <span className="ui-text-muted">{projectById.get(row.original.projectId) ?? row.original.projectId}</span>
         )
       },
       {
@@ -199,15 +199,15 @@ export function RoutinesPageClient(props: WorkspacePageProps) {
           const agent = agentById.get(row.original.assigneeAgentId);
           const name = agent?.name ?? row.original.assigneeAgentId;
           return (
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="ui-routine-table-assignee-row">
               <AgentAvatar
                 seed={agentAvatarSeed(row.original.assigneeAgentId, name, agent?.avatarSeed ?? undefined)}
                 name={name}
                 lucideIconName={agent?.lucideIconName}
-                className="h-6 w-6 shrink-0"
+                className="ui-avatar-thumb-routine"
                 size={48}
               />
-              <span className="truncate">{name}</span>
+              <span className="ui-truncate">{name}</span>
             </div>
           );
         }
@@ -226,7 +226,7 @@ export function RoutinesPageClient(props: WorkspacePageProps) {
         header: ({ column }) => <DataTableColumnHeader column={column} title="Last run" />,
         accessorFn: (row) => row.lastTriggeredAt ?? "",
         cell: ({ row }) => (
-          <span className="text-muted-foreground tabular-nums">
+          <span className="ui-text-muted ui-tabular-nums">
             {row.original.lastTriggeredAt ? formatSmartDateTime(row.original.lastTriggeredAt) : "—"}
           </span>
         )
@@ -356,7 +356,7 @@ export function RoutinesPageClient(props: WorkspacePageProps) {
             }
           />
           {error ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="ui-form-error-text" role="alert">
               {error}
             </p>
           ) : null}

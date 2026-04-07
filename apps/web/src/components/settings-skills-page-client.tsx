@@ -601,7 +601,7 @@ export function SettingsSkillsPageClient({
   return (
     <>
       <AppShell
-        activeNav="Settings"
+        activeNav="Skills"
         companies={companies}
         activeCompanyId={companyId}
         leftPaneScrollable={false}

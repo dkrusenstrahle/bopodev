@@ -437,6 +437,38 @@ body {
   @apply space-y-3;
 }
 
+.ui-page-section-gap-sm-shrink {
+  @apply space-y-3 shrink-0;
+}
+
+.ui-page-stack-fullheight {
+  @apply flex h-full min-h-0 flex-col;
+}
+
+.ui-assistant-toolbar-row {
+  @apply flex min-w-0 flex-row flex-nowrap items-center justify-end gap-6;
+}
+
+.ui-assistant-toolbar-actions {
+  @apply flex shrink-0 items-center gap-6;
+}
+
+.ui-assistant-toolbar-btn {
+  @apply h-9 shrink-0 gap-2 whitespace-nowrap;
+}
+
+.ui-assistant-toolbar-btn-danger {
+  @apply h-9 shrink-0 gap-2 whitespace-nowrap text-destructive hover:bg-destructive/10 hover:text-destructive;
+}
+
+.ui-assistant-brain-select-trigger {
+  @apply h-9 w-[11.5rem] shrink-0 sm:w-72;
+}
+
+.ui-alert-w-full {
+  @apply w-full;
+}
+
 .ui-page-header-row {
   @apply flex flex-wrap items-start justify-between gap-3;
 }
@@ -533,7 +565,7 @@ body {
 }
 
 .ui-loop-card-footer-actions {
-  @apply border-t items-end justify-end pt-6;
+  @apply gap-6 border-t items-end justify-end pt-6;
 }
 
 .ui-loop-triggers-after-form {
@@ -644,6 +676,515 @@ body {
 
 .ui-stack-y-6 {
   @apply space-y-6;
+}
+
+/* Shared layout / type primitives — prefer over inline Tailwind in TSX */
+.ui-stack-xs {
+  @apply flex flex-col gap-1;
+}
+
+.ui-stack-sm {
+  @apply flex flex-col gap-2;
+}
+
+.ui-stack-md {
+  @apply flex flex-col gap-4;
+}
+
+.ui-stack-lg {
+  @apply flex flex-col gap-6;
+}
+
+.ui-flex {
+  @apply flex;
+}
+
+.ui-inline-flex {
+  @apply inline-flex;
+}
+
+.ui-flex-wrap {
+  @apply flex-wrap;
+}
+
+.ui-grid {
+  @apply grid;
+}
+
+.ui-items-center {
+  @apply items-center;
+}
+
+.ui-items-start {
+  @apply items-start;
+}
+
+.ui-items-end {
+  @apply items-end;
+}
+
+.ui-justify-center {
+  @apply justify-center;
+}
+
+.ui-justify-end {
+  @apply justify-end;
+}
+
+.ui-gap-xs {
+  @apply gap-1;
+}
+
+.ui-gap-sm {
+  @apply gap-2;
+}
+
+.ui-gap-md {
+  @apply gap-4;
+}
+
+.ui-gap-1-5 {
+  @apply gap-1.5;
+}
+
+.ui-gap-x-2-y-1 {
+  @apply gap-x-2 gap-y-1;
+}
+
+.ui-text-xs {
+  @apply text-xs;
+}
+
+.ui-text-sm {
+  @apply text-sm;
+}
+
+.ui-text-base {
+  @apply text-base;
+}
+
+.ui-text-muted {
+  @apply text-muted-foreground;
+}
+
+.ui-text-destructive {
+  @apply text-destructive;
+}
+
+.ui-text-foreground {
+  @apply text-foreground;
+}
+
+.ui-text-foreground-90 {
+  @apply text-base text-foreground/90;
+}
+
+.ui-text-primary {
+  @apply text-primary;
+}
+
+.ui-font-medium {
+  @apply font-medium;
+}
+
+.ui-font-normal {
+  @apply font-normal;
+}
+
+.ui-font-mono {
+  @apply font-mono;
+}
+
+.ui-tabular-nums {
+  @apply tabular-nums;
+}
+
+.ui-truncate {
+  @apply truncate;
+}
+
+.ui-shrink-0 {
+  @apply shrink-0;
+}
+
+.ui-min-w-0 {
+  @apply min-w-0;
+}
+
+.ui-min-w-36 {
+  @apply min-w-36;
+}
+
+.ui-w-full {
+  @apply w-full;
+}
+
+.ui-h-9 {
+  @apply h-9;
+}
+
+.ui-ml-auto {
+  @apply ml-auto;
+}
+
+.ui-icon-sm {
+  @apply h-4 w-4;
+}
+
+.ui-icon-size-4 {
+  @apply size-4;
+}
+
+.ui-icon-size-3-5 {
+  @apply size-3.5;
+}
+
+.ui-icon-size-6 {
+  @apply size-6;
+}
+
+.ui-avatar-thumb-routine {
+  @apply h-6 w-6 shrink-0;
+}
+
+.ui-routine-table-assignee-row {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.ui-pt-4 {
+  @apply pt-4;
+}
+
+.ui-py-8 {
+  @apply py-8;
+}
+
+.ui-px-4-py-8 {
+  @apply px-4 py-8;
+}
+
+.ui-mb-4 {
+  @apply mb-4;
+}
+
+.ui-mb-8 {
+  @apply mb-8;
+}
+
+.ui-mt-0 {
+  @apply mt-0;
+}
+
+.ui-mt-1 {
+  @apply mt-1;
+}
+
+.ui-mt-2 {
+  @apply mt-2;
+}
+
+.ui-mt-4 {
+  @apply mt-4;
+}
+
+.ui-mt-8 {
+  @apply mt-8;
+}
+
+.ui-block {
+  @apply block;
+}
+
+.ui-list-decimal {
+  @apply list-decimal;
+}
+
+.ui-space-y-2 {
+  @apply space-y-2;
+}
+
+.ui-space-y-3 {
+  @apply space-y-3;
+}
+
+.ui-space-y-4 {
+  @apply space-y-4;
+}
+
+.ui-pl-5 {
+  @apply pl-5;
+}
+
+.ui-rounded-lg {
+  @apply rounded-lg;
+}
+
+.ui-border-l-muted-quote {
+  @apply border-l-4 border-muted pl-4;
+}
+
+.ui-pointer-events-none-cursor-default {
+  @apply pointer-events-none cursor-default;
+}
+
+.ui-dialog-description-inline-code {
+  @apply text-xs;
+}
+
+.ui-inline-code-xs {
+  @apply rounded bg-muted px-1 py-0.5 text-xs;
+}
+
+.ui-inline-code-sm {
+  @apply rounded bg-muted px-1.5 py-0.5 text-sm;
+}
+
+.ui-dropdown-menu-empty-hint {
+  @apply px-2 py-1.5 text-base text-muted-foreground;
+}
+
+.ui-dropdown-menu-empty-hint-compact {
+  @apply px-2 py-2 text-sm text-muted-foreground;
+}
+
+.ui-dropdown-menu-content--trigger-width {
+  @apply min-w-[var(--radix-dropdown-menu-trigger-width)];
+}
+
+.ui-dropdown-menu-content--trigger-width-max-h-64 {
+  @apply max-h-64 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto;
+}
+
+.ui-dropdown-menu-content--trigger-width-max-h-72 {
+  @apply max-h-72 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto;
+}
+
+.ui-alert--mb-section {
+  @apply mb-4;
+}
+
+.ui-shell-secondary-column {
+  @apply flex h-full min-h-0 flex-col;
+}
+
+.ui-shell-secondary-scroll--fill {
+  @apply min-h-0 flex-1;
+}
+
+.ui-shell-sidebar-scroll-below-separator {
+  @apply mt-8 min-h-0 flex-1;
+}
+
+.ui-shell-mobile-nav-stack-offset {
+  @apply mt-4;
+}
+
+.ui-select-trigger-menu {
+  @apply w-full justify-between font-normal;
+}
+
+.ui-chevron-muted {
+  @apply h-4 w-4 opacity-50;
+}
+
+.ui-issue-external-link {
+  @apply text-sm break-all underline underline-offset-2;
+}
+
+.ui-knowledge-linked-path {
+  @apply break-all text-primary underline underline-offset-2;
+}
+
+.ui-knowledge-linked-list {
+  @apply mt-2 space-y-1 text-sm;
+}
+
+.ui-run-table-cell-muted--sm {
+  @apply text-sm text-sidebar-foreground/70;
+}
+
+.ui-chart-tooltip {
+  @apply grid min-w-36 items-start gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-base shadow-md;
+}
+
+.ui-chart-tooltip-rows {
+  @apply grid gap-1.5;
+}
+
+.ui-chart-tooltip-row {
+  @apply flex items-center gap-2;
+}
+
+.ui-chart-tooltip-swatch {
+  @apply h-0.5 w-3 shrink-0 rounded-[1px];
+}
+
+.ui-chart-tooltip-value {
+  @apply ml-auto font-mono font-medium tabular-nums;
+}
+
+.ui-data-table-empty-centered {
+  @apply flex min-h-24 items-center justify-center px-4 py-8 text-center text-muted-foreground/50;
+}
+
+.ui-dialog-content-scroll-tall {
+  @apply max-h-[85vh] overflow-y-auto sm:max-w-2xl;
+}
+
+.ui-dialog-content-template-preview {
+  @apply min-h-0 max-h-[min(90vh,calc(100dvh-10rem))];
+}
+
+.ui-template-preview-grid {
+  @apply grid gap-6 text-base sm:grid-cols-3;
+}
+
+.ui-template-preview-stat {
+  @apply rounded-lg border bg-muted/40 px-3 py-2;
+}
+
+.ui-template-preview-stat-label {
+  @apply text-base text-muted-foreground;
+}
+
+.ui-template-preview-stat-value {
+  @apply font-mono text-base;
+}
+
+.ui-tabs-mt-4 {
+  @apply mt-4;
+}
+
+.ui-tabs-list-mb-4 {
+  @apply mb-4;
+}
+
+.ui-tabs-content-flush {
+  @apply mt-0;
+}
+
+.ui-space-y-6 {
+  @apply space-y-6;
+}
+
+.ui-dialog-header-shrink {
+  @apply shrink-0;
+}
+
+.ui-dialog-footer-shrink {
+  @apply shrink-0;
+}
+
+.ui-dialog-body-scroll-template {
+  @apply min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch];
+}
+
+.ui-cost-chart-meta-line {
+  @apply mt-1 block text-muted-foreground;
+}
+
+.ui-mdxeditor-popup-mount {
+  @apply pointer-events-none absolute top-0 right-0 left-0 z-1 h-0 overflow-visible;
+}
+
+.ui-drawer-filters-body {
+  @apply space-y-3 pb-2;
+}
+
+.ui-button-mt-2 {
+  @apply mt-2;
+}
+
+.ui-form-error-text {
+  @apply text-sm text-destructive;
+}
+
+.ui-link-primary-sm {
+  @apply font-medium text-primary hover:underline;
+}
+
+.ui-runtime-cwd-dialog-content {
+  @apply gap-4;
+}
+
+.ui-runtime-cwd-tabs {
+  @apply w-full;
+}
+
+.ui-runtime-cwd-tabs-list {
+  @apply mb-2 grid h-auto w-full grid-cols-3 gap-1 p-1;
+}
+
+.ui-runtime-cwd-tabs-trigger {
+  @apply gap-1.5 data-[state=active]:border data-[state=active]:border-primary data-[state=active]:bg-background;
+}
+
+.ui-runtime-cwd-tabs-content {
+  @apply mt-0 space-y-4;
+}
+
+.ui-runtime-cwd-ol {
+  @apply list-decimal space-y-2 pl-5 text-base text-foreground;
+}
+
+.ui-runtime-cwd-blockquote {
+  @apply border-l-4 border-muted pl-4 text-sm text-muted-foreground;
+}
+
+.ui-runtime-cwd-field {
+  @apply flex flex-col gap-2;
+}
+
+.ui-runtime-cwd-label-row {
+  @apply flex flex-wrap items-center gap-x-2 gap-y-1;
+}
+
+.ui-runtime-cwd-help-trigger {
+  @apply inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border/80 bg-background text-muted-foreground transition-colors hover:border-border hover:text-foreground;
+}
+
+.ui-runtime-cwd-input-shell {
+  @apply flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-transparent text-base transition-[color,box-shadow] outline-none dark:bg-input/30 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50;
+}
+
+.ui-runtime-cwd-input-prefix {
+  @apply flex shrink-0 items-center pl-3 text-muted-foreground;
+}
+
+.ui-runtime-cwd-input-field {
+  @apply h-9 min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-base text-sidebar-foreground shadow-none outline-none placeholder:text-sidebar-foreground/60 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent;
+}
+
+.ui-runtime-cwd-choose-btn {
+  @apply mr-1.5 h-6 shrink-0 rounded-full px-2.5 text-xs font-medium;
+}
+
+.ui-runtime-cwd-help-link {
+  @apply h-auto p-0 text-base font-normal text-muted-foreground underline-offset-4 hover:text-foreground;
+}
+
+.ui-select-trigger-summary {
+  @apply min-w-0 flex-1 truncate text-start;
+}
+
+.ui-chevron-select-trigger {
+  @apply size-4 shrink-0 opacity-50;
+}
+
+.ui-weekday-popover {
+  @apply min-w-60 p-2;
+}
+
+.ui-weekday-list {
+  @apply flex flex-col gap-1;
+}
+
+.ui-weekday-option {
+  @apply flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent;
+}
+
+.ui-weekday-option--checked {
+  @apply bg-accent/60;
 }
 
 .ui-card-body-stack {
@@ -2126,6 +2667,154 @@ body {
   @apply mt-2;
 }
 
+/* Settings /knowledge — collapsible folder tree (filesystem-style sidebar) */
+.ui-knowledge-files-header {
+  @apply flex items-center justify-between gap-0 pr-1;
+}
+
+.ui-knowledge-files-header-label {
+  @apply mb-0;
+}
+
+.ui-knowledge-files-header-add-folder {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground;
+}
+
+.ui-knowledge-autosave-status {
+  @apply text-sm text-muted-foreground;
+}
+
+.ui-knowledge-tree {
+  @apply flex flex-col gap-0 py-0;
+}
+
+.ui-knowledge-tree-children {
+  @apply flex flex-col;
+}
+
+.ui-knowledge-tree-row {
+  @apply flex min-h-8 w-full items-center gap-0.5 rounded-xl pr-1 py-0.5 text-left;
+}
+
+.ui-knowledge-tree-row--dir {
+  @apply text-foreground;
+}
+
+.ui-knowledge-tree-row--file {
+  @apply border-0 bg-transparent text-foreground;
+}
+
+.ui-knowledge-tree-row--active {
+  @apply bg-muted;
+}
+
+.ui-knowledge-tree-chevron {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-muted/80;
+}
+
+.ui-knowledge-tree-chevron-spacer {
+  @apply inline-block h-7 w-7 shrink-0;
+}
+
+.ui-knowledge-tree-icon {
+  @apply h-4 w-4 shrink-0 text-muted-foreground mr-2;
+}
+
+.ui-knowledge-tree-label {
+  @apply min-w-0 flex-1 gap-4 cursor-pointer truncate py-1.5 text-left font-normal hover:bg-muted/40 rounded-sm;
+}
+
+.ui-knowledge-tree-dir-name {
+  @apply min-w-0 flex-1 truncate text-left font-medium;
+}
+
+.ui-knowledge-tree-dir-toggle {
+  @apply flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pr-2 text-left hover:bg-muted/50;
+}
+
+.ui-knowledge-plain-editor {
+  @apply min-h-[320px] font-mono text-sm;
+}
+
+.ui-knowledge-edit-folder-hint {
+  @apply mt-1;
+}
+
+.ui-knowledge-tree-add-file {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground;
+}
+
+.ui-knowledge-tree-dir-row-body {
+  @apply flex min-w-0 flex-1 items-center gap-0;
+}
+
+/* Knowledge Tiptap editor */
+.ui-knowledge-tiptap-shell {
+  @apply flex min-h-[calc(100dvh-7.5rem)] flex-1 flex-col rounded-md border border-border bg-muted/25 px-12 py-10;
+}
+
+.ui-knowledge-tiptap-editor-root {
+  @apply flex flex-1 flex-col overflow-hidden;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap {
+  @apply min-h-[min(24rem,calc(100dvh-10rem))] flex-1 overflow-y-auto px-3 py-3 text-base text-foreground outline-none;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap p {
+  @apply my-2 first:mt-0 last:mb-0;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap h1 {
+  @apply mt-4 mb-2 text-2xl font-semibold first:mt-0;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap h2 {
+  @apply mt-4 mb-2 text-xl font-semibold first:mt-0;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap h3 {
+  @apply mt-3 mb-1.5 text-lg font-semibold first:mt-0;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap ul,
+.ui-knowledge-tiptap-editor-root .tiptap ol {
+  @apply my-2 pl-6 list-disc;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap li {
+  @apply my-0.5 px-2;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap blockquote {
+  @apply my-2 border-l-2 border-muted-foreground/40 pl-3 italic text-muted-foreground;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap pre {
+  @apply my-2 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap code {
+  @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] before:content-none after:content-none;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap pre code {
+  @apply bg-transparent p-0;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap hr {
+  @apply my-4 border-border;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap a.ui-knowledge-tiptap-link {
+  @apply text-primary underline underline-offset-2;
+}
+
+.ui-knowledge-tiptap-editor-root .tiptap .is-empty::before {
+  @apply pointer-events-none float-left h-0 text-muted-foreground;
+  content: attr(data-placeholder);
+}
+
 .ui-settings-skills-sidebar-alert {
   @apply mx-2 mt-2;
 }
@@ -2308,6 +2997,10 @@ body {
   @apply size-2 animate-pulse rounded-full bg-muted-foreground;
 }
 
+.ui-ask-typing-dots {
+  @apply flex items-center gap-1.5;
+}
+
 .ui-ask-typing-dots span:nth-child(2) {
   animation-delay: 200ms;
 }
@@ -2317,7 +3010,7 @@ body {
 }
 
 .ui-ask-pill-composer {
-  @apply flex min-h-11 items-center gap-0.5 rounded-3xl border border-border/70 bg-muted/50 px-2 py-1.5 pl-4;
+  @apply flex min-h-11 w-full items-center gap-0.5 rounded-3xl border border-border/70 bg-muted/50 px-2 py-1.5 pl-4;
 }
 
 .ui-ask-composer-textarea {

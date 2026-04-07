@@ -515,7 +515,7 @@ export function CreateProjectModal({
                     <DropdownMenuLabel>Attach goals</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {goals.length === 0 ? (
-                      <p className="px-2 py-1.5 text-base text-muted-foreground">No goals available.</p>
+                      <p className="ui-dropdown-menu-empty-hint">No goals available.</p>
                     ) : (
                       goals.map((goal) => (
                         <DropdownMenuCheckboxItem

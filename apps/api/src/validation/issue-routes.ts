@@ -1,4 +1,19 @@
 import { z } from "zod";
+import { assertKnowledgeRelativePath } from "../services/company-knowledge-file-service";
+
+const KnowledgePathSchema = z.string().min(1).max(1024).superRefine((val, ctx) => {
+  try {
+    assertKnowledgeRelativePath(val);
+  } catch (err) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: err instanceof Error ? err.message : "Invalid knowledge path"
+    });
+  }
+});
+
+const knowledgePathsCreate = z.array(KnowledgePathSchema).max(20).default([]);
+const knowledgePathsUpdate = z.array(KnowledgePathSchema).max(20);
 
 export const createIssueSchema = z.object({
   projectId: z.string().min(1),
@@ -28,7 +43,8 @@ export const createIssueSchema = z.object({
   goalIds: z.array(z.string().min(1)).default([]),
   externalLink: z.string().max(2048).nullable().optional(),
   labels: z.array(z.string()).default([]),
-  tags: z.array(z.string()).default([])
+  tags: z.array(z.string()).default([]),
+  knowledgePaths: knowledgePathsCreate
 });
 
 export const createIssueCommentSchema = z.object({
@@ -75,6 +91,7 @@ export const updateIssueSchema = z
     goalIds: z.array(z.string().min(1)).optional(),
     externalLink: z.string().max(2048).nullable().optional(),
     labels: z.array(z.string()).optional(),
-    tags: z.array(z.string()).optional()
+    tags: z.array(z.string()).optional(),
+    knowledgePaths: knowledgePathsUpdate.optional()
   })
   .refine((payload) => Object.keys(payload).length > 0, "At least one field must be provided.");

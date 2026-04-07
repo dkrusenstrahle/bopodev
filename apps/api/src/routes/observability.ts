@@ -26,6 +26,15 @@ import {
 } from "../services/agent-operating-file-service";
 import { BUILTIN_BOPO_SKILLS } from "../lib/builtin-bopo-skills";
 import {
+  buildKnowledgeTreeFromPaths,
+  createKnowledgeFile,
+  deleteKnowledgeFile,
+  listKnowledgeFiles,
+  readKnowledgeFile,
+  renameKnowledgeFile,
+  writeKnowledgeFile
+} from "../services/company-knowledge-file-service";
+import {
   createCompanySkillPackage,
   deleteCompanySkillPackage,
   linkCompanySkillFromUrl,
@@ -673,6 +682,119 @@ export function createObservabilityRouter(ctx: AppContext) {
     }
     try {
       const result = await deleteCompanySkillPackage({ companyId, skillId });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/company-knowledge", async (req, res) => {
+    const companyId = req.companyId!;
+    try {
+      const { files } = await listKnowledgeFiles({ companyId });
+      const tree = buildKnowledgeTreeFromPaths(files);
+      return sendOk(res, { items: files, tree });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.get("/company-knowledge/file", async (req, res) => {
+    const companyId = req.companyId!;
+    const relativePath = typeof req.query.path === "string" ? req.query.path.trim() : "";
+    if (!relativePath) {
+      return sendError(res, "Query parameter 'path' is required.", 422);
+    }
+    try {
+      const file = await readKnowledgeFile({ companyId, relativePath });
+      return sendOk(res, { content: file.content });
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.put("/company-knowledge/file", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const relativePath = typeof req.query.path === "string" ? req.query.path.trim() : "";
+    if (!relativePath) {
+      return sendError(res, "Query parameter 'path' is required.", 422);
+    }
+    const body = req.body as { content?: unknown };
+    if (typeof body?.content !== "string") {
+      return sendError(res, "Expected JSON body with string 'content'.", 422);
+    }
+    try {
+      const result = await writeKnowledgeFile({
+        companyId,
+        relativePath,
+        content: body.content
+      });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.post("/company-knowledge/file", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const body = req.body as { path?: unknown; content?: unknown };
+    if (typeof body?.path !== "string" || !body.path.trim()) {
+      return sendError(res, "Expected JSON body with string 'path'.", 422);
+    }
+    const content = typeof body.content === "string" ? body.content : undefined;
+    try {
+      const result = await createKnowledgeFile({
+        companyId,
+        relativePath: body.path.trim(),
+        ...(content !== undefined ? { content } : {})
+      });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.patch("/company-knowledge/file", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const body = req.body as { from?: unknown; to?: unknown };
+    if (typeof body?.from !== "string" || !body.from.trim()) {
+      return sendError(res, "Expected JSON body with string 'from' (current path).", 422);
+    }
+    if (typeof body?.to !== "string" || !body.to.trim()) {
+      return sendError(res, "Expected JSON body with string 'to' (new path).", 422);
+    }
+    try {
+      const result = await renameKnowledgeFile({
+        companyId,
+        fromRelativePath: body.from.trim(),
+        toRelativePath: body.to.trim()
+      });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.delete("/company-knowledge/file", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const relativePath = typeof req.query.path === "string" ? req.query.path.trim() : "";
+    if (!relativePath) {
+      return sendError(res, "Query parameter 'path' is required.", 422);
+    }
+    try {
+      const result = await deleteKnowledgeFile({ companyId, relativePath });
       return sendOk(res, result);
     } catch (error) {
       return sendError(res, String(error), 422);

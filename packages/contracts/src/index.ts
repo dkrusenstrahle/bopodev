@@ -113,6 +113,8 @@ export const IssueSchema = z.object({
   parentIssueId: EntityIdSchema.nullable(),
   /** Planning goals linked to this issue (company-wide or same project as the issue). */
   goalIds: z.array(EntityIdSchema).default([]),
+  /** Relative paths under company `knowledge/` (filesystem). */
+  knowledgePaths: z.array(z.string().min(1)).default([]),
   title: z.string().min(1),
   body: z.string().nullable().optional(),
   /** PR URL, compare view, or other external link (optional). */

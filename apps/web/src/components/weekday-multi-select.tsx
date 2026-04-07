@@ -69,27 +69,21 @@ export function WeekdayMultiSelect({
           role="combobox"
           data-size="default"
           disabled={disabled}
-          className={cn(
-            "ui-select-trigger font-normal",
-            !value.length && "text-muted-foreground"
-          )}
+          className={cn("ui-select-trigger", "ui-font-normal", !value.length && "ui-text-muted")}
         >
-          <span className="min-w-0 flex-1 truncate text-start">{summary}</span>
-          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+          <span className="ui-select-trigger-summary">{summary}</span>
+          <ChevronsUpDown className="ui-chevron-select-trigger" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="min-w-60 p-2" align="start">
-        <div className="flex flex-col gap-1">
+      <PopoverContent className="ui-weekday-popover" align="start">
+        <div className="ui-weekday-list">
           {WEEKDAY_ORDER.map((day) => {
             const checked = value.includes(day);
             const meta = WEEKDAY_META[day] ?? { short: String(day), long: `Day ${day}` };
             return (
               <label
                 key={day}
-                className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
-                  checked && "bg-accent/60"
-                )}
+                className={cn("ui-weekday-option", checked && "ui-weekday-option--checked")}
               >
                 <Checkbox
                   checked={checked}

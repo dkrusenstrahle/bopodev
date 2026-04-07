@@ -38,6 +38,7 @@ export interface WorkspaceData {
     routineId?: string | null;
     routineRunId?: string | null;
     goalIds: string[];
+    knowledgePaths: string[];
     assigneeAgentId: string | null;
     title: string;
     body?: string | null;

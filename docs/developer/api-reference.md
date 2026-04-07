@@ -95,7 +95,7 @@ File-oriented company pack (zip folder tree, editable in git):
 ## Issues
 
 - `GET /issues`
-- `GET /issues/:issueId` — full issue row (same shape as list items), including `goalIds`, plus `attachments[]` with metadata and `downloadPath` for each file. Used by agents for **compact** heartbeat hydration; see [`../guides/agent-heartbeat-protocol.md`](../guides/agent-heartbeat-protocol.md).
+- `GET /issues/:issueId` — full issue row (same shape as list items), including `goalIds` and `knowledgePaths` (string paths relative to company `knowledge/`), plus `attachments[]` with metadata and `downloadPath` for each file. Used by agents for **compact** heartbeat hydration; see [`../guides/agent-heartbeat-protocol.md`](../guides/agent-heartbeat-protocol.md).
 - `POST /issues`
 - `PUT /issues/:issueId`
 - `DELETE /issues/:issueId`
@@ -116,6 +116,10 @@ Attachments:
 Delegated hiring metadata:
 
 - `POST /issues` accepts optional `metadata.delegatedHiringIntent` for typed hiring delegation context (e.g. `requestedRoleKey`, `requestedTitle`, `requestedCapabilities`—nullable string, max 4000—so the hiring manager can pass suggested org-chart text for the new hire).
+
+Issue ↔ knowledge:
+
+- `POST /issues` accepts optional `knowledgePaths` (array of relative paths under company `knowledge/`, max 20). `PUT /issues/:issueId` accepts optional `knowledgePaths` to replace the full set. Each path must refer to an existing knowledge file.
 
 Issue ↔ goals:
 
@@ -217,6 +221,12 @@ Queue route supports filters: `status`, `agentId`, `jobType`, `limit`.
 - `GET /observability/agent-operating/:agentId/files` (supports `limit`; lists `*.md` under the agent operating directory)
 - `GET /observability/agent-operating/:agentId/file?path=...`
 - `PUT /observability/agent-operating/:agentId/file?path=...` — JSON body `{ "content": "<utf-8 string>" }`; requires `agents:write` (only `.md` paths)
+- `GET /observability/company-knowledge` — `{ items: { relativePath }[], tree }` for files under the company `knowledge/` directory (`.md`, `.yaml`, `.yml`, `.txt`, `.json`).
+- `GET /observability/company-knowledge/file?path=...` — `{ content }` (UTF-8 text).
+- `PUT /observability/company-knowledge/file?path=...` — JSON body `{ "content": "<utf-8 string>" }`; requires `agents:write`.
+- `POST /observability/company-knowledge/file` — JSON body `{ "path": "<relative path>", "content"?: "<utf-8 string>" }`; creates a new file (empty body for markdown/text/yaml if `content` omitted, `{}` for `.json`); requires `agents:write`.
+- `PATCH /observability/company-knowledge/file` — JSON body `{ "from": "<current relative path>", "to": "<new relative path>" }`; renames/moves a file within knowledge; requires `agents:write`.
+- `DELETE /observability/company-knowledge/file?path=...` — remove a knowledge file; requires `agents:write`.
 
 For memory semantics, see [`../product/agent-memory-workflow.md`](../product/agent-memory-workflow.md).
 For artifact storage/path guardrails, see [`../operations/workspace-path-surface.md`](../operations/workspace-path-surface.md).

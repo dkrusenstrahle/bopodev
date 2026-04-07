@@ -1100,11 +1100,10 @@ export function SettingsKnowledgePageClient({
             <DialogDescription>
               {knowledgeEditDialog.kind === "renameFolder" ? (
                 <>
-                  Renames this folder for every file inside it. Use a single segment (no slashes); parent path stays
-                  the same.
+                  Renames this folder for every file inside it.
                 </>
               ) : (
-                <>Change the file name (extension stays the same).</>
+                <>Change the file name.</>
               )}
             </DialogDescription>
           </DialogHeader>

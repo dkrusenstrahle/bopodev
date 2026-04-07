@@ -154,6 +154,26 @@ function parseKnowledgeFolderInput(
   return { ok: true, prefix: parts.join("/") };
 }
 
+/** Single path segment for renaming a folder in the tree (no slashes). */
+function parseKnowledgeFolderSegmentInput(
+  input: string
+): { ok: true; segment: string } | { ok: false; message: string } {
+  const s = input.trim();
+  if (!s) {
+    return { ok: false, message: "Enter a folder name." };
+  }
+  if (s.includes("/") || s.includes("..")) {
+    return { ok: false, message: "Use a single folder name (no slashes)." };
+  }
+  if (s.startsWith(".")) {
+    return { ok: false, message: "Folder name cannot start with a dot." };
+  }
+  if (s.length > 200) {
+    return { ok: false, message: "Folder name is too long." };
+  }
+  return { ok: true, segment: s };
+}
+
 function collectAllDirectoryKeys(nodes: KnowledgeTreeNode[], prefix: string): string[] {
   const keys: string[] = [];
   for (const node of nodes) {
@@ -173,7 +193,9 @@ function KnowledgeTreeNav({
   toggleDir,
   selectedPath,
   onSelectFile,
-  onRequestNewInFolder
+  onRequestNewInFolder,
+  onFileDoubleClick,
+  onFolderDoubleClick
 }: {
   nodes: KnowledgeTreeNode[];
   depth: number;
@@ -183,6 +205,8 @@ function KnowledgeTreeNav({
   selectedPath: string | null;
   onSelectFile: (path: string) => void;
   onRequestNewInFolder: (folderPathPrefix: string) => void;
+  onFileDoubleClick?: (relativePath: string) => void;
+  onFolderDoubleClick?: (dirKey: string) => void;
 }) {
   return (
     <div className="ui-knowledge-tree-children">
@@ -204,8 +228,12 @@ function KnowledgeTreeNav({
               <button
                 type="button"
                 className={cn("ui-knowledge-tree-label", active && "font-medium")}
-                title={node.relativePath}
+                title={`${node.relativePath} · double-click to rename file`}
                 onClick={() => onSelectFile(node.relativePath)}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  onFileDoubleClick?.(node.relativePath);
+                }}
               >
                 {node.name}
               </button>
@@ -230,7 +258,15 @@ function KnowledgeTreeNav({
                 {expanded ? <ChevronDown className="ui-icon-sm" /> : <ChevronRight className="ui-icon-sm" />}
               </button>
               <div className="ui-knowledge-tree-dir-row-body">
-                <button type="button" className="ui-knowledge-tree-dir-toggle" onClick={() => toggleDir(dirKey)}>
+                <button
+                  type="button"
+                  className="ui-knowledge-tree-dir-toggle"
+                  title="Use the arrow to expand or collapse. Double-click the name to rename this folder."
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    onFolderDoubleClick?.(dirKey);
+                  }}
+                >
                   <Folder className="ui-knowledge-tree-icon" aria-hidden />
                   <span className="ui-knowledge-tree-dir-name">{node.name}</span>
                 </button>
@@ -258,6 +294,8 @@ function KnowledgeTreeNav({
                 selectedPath={selectedPath}
                 onSelectFile={onSelectFile}
                 onRequestNewInFolder={onRequestNewInFolder}
+                onFileDoubleClick={onFileDoubleClick}
+                onFolderDoubleClick={onFolderDoubleClick}
               />
             ) : null}
           </div>
@@ -376,8 +414,13 @@ export function SettingsKnowledgePageClient({
   const [folderCreateBusy, setFolderCreateBusy] = useState(false);
   const [folderCreateError, setFolderCreateError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [editFileDialogOpen, setEditFileDialogOpen] = useState(false);
+  type KnowledgeEditDialog =
+    | { kind: "closed" }
+    | { kind: "renameFile"; relativePath: string }
+    | { kind: "renameFolder"; dirKey: string };
+  const [knowledgeEditDialog, setKnowledgeEditDialog] = useState<KnowledgeEditDialog>({ kind: "closed" });
   const [editTitleDraft, setEditTitleDraft] = useState("");
+  const [folderNameDraft, setFolderNameDraft] = useState("");
   const [editDialogError, setEditDialogError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
 
@@ -473,18 +516,28 @@ export function SettingsKnowledgePageClient({
   const editorLoading = Boolean(loadKey && settledKey !== loadKey && !fileError);
 
   useEffect(() => {
-    if (editFileDialogOpen && !selectedPath) {
-      setEditFileDialogOpen(false);
+    if (knowledgeEditDialog.kind === "renameFile" && !listLoading && companyId) {
+      if (!flatPaths.includes(knowledgeEditDialog.relativePath)) {
+        setKnowledgeEditDialog({ kind: "closed" });
+        setEditDialogError(null);
+      }
     }
-  }, [editFileDialogOpen, selectedPath]);
+  }, [knowledgeEditDialog, flatPaths, listLoading, companyId]);
 
   useEffect(() => {
-    if (editFileDialogOpen && selectedPath) {
-      const { stem } = knowledgeStemAndExtFromBasename(knowledgeBasenameFromRelativePath(selectedPath));
+    if (knowledgeEditDialog.kind === "renameFile") {
+      const { stem } = knowledgeStemAndExtFromBasename(
+        knowledgeBasenameFromRelativePath(knowledgeEditDialog.relativePath)
+      );
       setEditTitleDraft(stem);
       setEditDialogError(null);
+    } else if (knowledgeEditDialog.kind === "renameFolder") {
+      const dk = knowledgeEditDialog.dirKey;
+      const seg = dk.includes("/") ? dk.slice(dk.lastIndexOf("/") + 1) : dk;
+      setFolderNameDraft(seg);
+      setEditDialogError(null);
     }
-  }, [editFileDialogOpen, selectedPath]);
+  }, [knowledgeEditDialog]);
 
   useLayoutEffect(() => {
     setFileError(null);
@@ -656,10 +709,11 @@ export function SettingsKnowledgePageClient({
     }
   }
 
-  async function performDeleteOpenFile() {
-    if (!companyId || !selectedPath) {
+  async function performDeleteKnowledgeFile() {
+    if (!companyId || knowledgeEditDialog.kind !== "renameFile") {
       return;
     }
+    const path = knowledgeEditDialog.relativePath;
     setEditDialogError(null);
     setDeleteBusy(true);
     try {
@@ -668,15 +722,16 @@ export function SettingsKnowledgePageClient({
         setEditDialogError("Finish saving before deleting.");
         return;
       }
-      const path = selectedPath;
       const q = `/observability/company-knowledge/file?path=${encodeURIComponent(path)}`;
       await apiDelete(q, companyId);
-      setEditFileDialogOpen(false);
-      setSelectedPath(null);
-      syncPathToUrl(null);
+      setKnowledgeEditDialog({ kind: "closed" });
+      if (selectedPathRef.current === path) {
+        setSelectedPath(null);
+        syncPathToUrl(null);
+        setBaselineContent("");
+        setDraftContent("");
+      }
       await refreshList();
-      setBaselineContent("");
-      setDraftContent("");
     } catch (error) {
       setEditDialogError(error instanceof ApiError ? error.message : "Delete failed.");
     } finally {
@@ -684,18 +739,19 @@ export function SettingsKnowledgePageClient({
     }
   }
 
-  async function applyEditFileDialogSave() {
-    if (!companyId || !selectedPath) {
+  async function applyKnowledgeFileRenameSave() {
+    if (!companyId || knowledgeEditDialog.kind !== "renameFile") {
       return;
     }
+    const filePath = knowledgeEditDialog.relativePath;
     const parsedStem = parseKnowledgeTitleStemInput(editTitleDraft);
     if (!parsedStem.ok) {
       setEditDialogError(parsedStem.message);
       return;
     }
-    const { ext } = knowledgeStemAndExtFromBasename(knowledgeBasenameFromRelativePath(selectedPath));
+    const { ext } = knowledgeStemAndExtFromBasename(knowledgeBasenameFromRelativePath(filePath));
     const filename = `${parsedStem.stem}${ext}`;
-    const parent = knowledgeParentPrefixFromRelativePath(selectedPath);
+    const parent = knowledgeParentPrefixFromRelativePath(filePath);
     const nextPath = knowledgeRelativePathFromParentAndFilename(parent, filename);
     const segmentCount = nextPath.split("/").filter(Boolean).length;
     if (segmentCount > KNOWLEDGE_MAX_PATH_SEGMENTS) {
@@ -708,8 +764,8 @@ export function SettingsKnowledgePageClient({
       return;
     }
     setEditDialogError(null);
-    if (fullParse.path === selectedPath) {
-      setEditFileDialogOpen(false);
+    if (fullParse.path === filePath) {
+      setKnowledgeEditDialog({ kind: "closed" });
       return;
     }
     setRenameBusy(true);
@@ -720,7 +776,7 @@ export function SettingsKnowledgePageClient({
         return;
       }
       await apiPatch("/observability/company-knowledge/file", companyId, {
-        from: selectedPath,
+        from: filePath,
         to: fullParse.path
       });
       const next = fullParse.path;
@@ -734,9 +790,11 @@ export function SettingsKnowledgePageClient({
         }
         return nextSet;
       });
-      setEditFileDialogOpen(false);
-      setSelectedPath(next);
-      syncPathToUrl(next);
+      setKnowledgeEditDialog({ kind: "closed" });
+      if (selectedPathRef.current === filePath) {
+        setSelectedPath(next);
+        syncPathToUrl(next);
+      }
       await refreshList();
     } catch (e) {
       setEditDialogError(e instanceof ApiError ? e.message : "Rename failed.");
@@ -745,26 +803,125 @@ export function SettingsKnowledgePageClient({
     }
   }
 
-  const handleEditFileDialogOpenChange = useCallback((open: boolean) => {
-    setEditFileDialogOpen(open);
+  async function applyKnowledgeFolderRenameSave() {
+    if (!companyId || knowledgeEditDialog.kind !== "renameFolder") {
+      return;
+    }
+    const dirKey = knowledgeEditDialog.dirKey;
+    const parsedSeg = parseKnowledgeFolderSegmentInput(folderNameDraft);
+    if (!parsedSeg.ok) {
+      setEditDialogError(parsedSeg.message);
+      return;
+    }
+    const currentSeg = dirKey.includes("/") ? dirKey.slice(dirKey.lastIndexOf("/") + 1) : dirKey;
+    if (parsedSeg.segment === currentSeg) {
+      setKnowledgeEditDialog({ kind: "closed" });
+      return;
+    }
+    const parent = dirKey.includes("/") ? dirKey.slice(0, dirKey.lastIndexOf("/")) : "";
+    const toPrefix = parent ? `${parent}/${parsedSeg.segment}` : parsedSeg.segment;
+    const fullParse = parseKnowledgeFolderInput(toPrefix);
+    if (!fullParse.ok) {
+      setEditDialogError(fullParse.message);
+      return;
+    }
+    setEditDialogError(null);
+    setRenameBusy(true);
+    try {
+      await flushKnowledgeAutosave();
+      if (draftContentRef.current !== baselineContentRef.current) {
+        setEditDialogError("Finish saving before renaming.");
+        return;
+      }
+      const fromP = dirKey;
+      const toP = fullParse.prefix;
+      await apiPatch("/observability/company-knowledge/folder", companyId, {
+        from: fromP,
+        to: toP
+      });
+      setKnowledgeEditDialog({ kind: "closed" });
+      setExpandedDirs((prev) => {
+        const next = new Set<string>();
+        for (const k of prev) {
+          if (k === fromP || k.startsWith(`${fromP}/`)) {
+            next.add(k === fromP ? toP : `${toP}${k.slice(fromP.length)}`);
+          } else {
+            next.add(k);
+          }
+        }
+        return next;
+      });
+      const sp = selectedPathRef.current;
+      if (sp && sp.startsWith(`${fromP}/`)) {
+        const np = `${toP}${sp.slice(fromP.length)}`;
+        setSelectedPath(np);
+        syncPathToUrl(np);
+      }
+      await refreshList();
+    } catch (e) {
+      setEditDialogError(e instanceof ApiError ? e.message : "Rename folder failed.");
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
+  const handleKnowledgeEditDialogOpenChange = useCallback((open: boolean) => {
     if (!open) {
+      setKnowledgeEditDialog({ kind: "closed" });
       setEditDialogError(null);
     }
   }, []);
 
-  const editStemParsed = parseKnowledgeTitleStemInput(editTitleDraft);
-  const editTitleUnchanged =
-    selectedPath !== null &&
-    editStemParsed.ok &&
+  const fileRenameStemParsed =
+    knowledgeEditDialog.kind === "renameFile"
+      ? parseKnowledgeTitleStemInput(editTitleDraft)
+      : { ok: false as const, message: "" };
+  const fileRenameTitleUnchanged =
+    knowledgeEditDialog.kind === "renameFile" &&
+    fileRenameStemParsed.ok &&
     knowledgeRelativePathFromParentAndFilename(
-      knowledgeParentPrefixFromRelativePath(selectedPath),
-      `${editStemParsed.stem}${knowledgeStemAndExtFromBasename(knowledgeBasenameFromRelativePath(selectedPath)).ext}`
-    ) === selectedPath;
-  const editSaveDisabled =
-    !selectedPath ||
+      knowledgeParentPrefixFromRelativePath(knowledgeEditDialog.relativePath),
+      `${fileRenameStemParsed.stem}${knowledgeStemAndExtFromBasename(knowledgeBasenameFromRelativePath(knowledgeEditDialog.relativePath)).ext}`
+    ) === knowledgeEditDialog.relativePath;
+  const fileRenameSaveDisabled =
+    knowledgeEditDialog.kind !== "renameFile" ||
+    !companyId ||
+    !fileRenameStemParsed.ok ||
     renameBusy ||
     deleteBusy ||
-    (!editTitleUnchanged && saving);
+    (!fileRenameTitleUnchanged && saving);
+
+  const folderSegParsed =
+    knowledgeEditDialog.kind === "renameFolder"
+      ? parseKnowledgeFolderSegmentInput(folderNameDraft)
+      : { ok: false as const, message: "" };
+  const folderRenameUnchanged =
+    knowledgeEditDialog.kind === "renameFolder" &&
+    folderSegParsed.ok &&
+    folderSegParsed.segment ===
+      (knowledgeEditDialog.dirKey.includes("/")
+        ? knowledgeEditDialog.dirKey.slice(knowledgeEditDialog.dirKey.lastIndexOf("/") + 1)
+        : knowledgeEditDialog.dirKey);
+  const folderRenameSaveDisabled =
+    knowledgeEditDialog.kind !== "renameFolder" ||
+    !companyId ||
+    !folderSegParsed.ok ||
+    folderRenameUnchanged ||
+    renameBusy ||
+    deleteBusy ||
+    (!folderRenameUnchanged && saving);
+
+  const knowledgeEditSaveDisabled =
+    knowledgeEditDialog.kind === "closed" ||
+    (knowledgeEditDialog.kind === "renameFile" ? fileRenameSaveDisabled : folderRenameSaveDisabled);
+
+  const onKnowledgeFileDoubleClick = useCallback((relativePath: string) => {
+    setKnowledgeEditDialog({ kind: "renameFile", relativePath });
+  }, []);
+
+  const onKnowledgeFolderDoubleClick = useCallback((dirKey: string) => {
+    setKnowledgeEditDialog({ kind: "renameFolder", dirKey });
+  }, []);
 
   const openCreateDocumentDialog = useCallback((folderPathPrefix: string) => {
     setCreateError(null);
@@ -841,6 +998,8 @@ export function SettingsKnowledgePageClient({
                   })();
                 }}
                 onRequestNewInFolder={(folderPrefix) => openCreateDocumentDialog(folderPrefix)}
+                onFileDoubleClick={onKnowledgeFileDoubleClick}
+                onFolderDoubleClick={onKnowledgeFolderDoubleClick}
               />
             </div>
           )}
@@ -877,7 +1036,11 @@ export function SettingsKnowledgePageClient({
                         size="sm"
                         variant="outline"
                         type="button"
-                        onClick={() => setEditFileDialogOpen(true)}
+                        onClick={() => {
+                          if (selectedPath) {
+                            setKnowledgeEditDialog({ kind: "renameFile", relativePath: selectedPath });
+                          }
+                        }}
                         disabled={saving}
                       >
                         Edit
@@ -925,28 +1088,66 @@ export function SettingsKnowledgePageClient({
           </div>
         }
       />
-      <Dialog open={editFileDialogOpen} onOpenChange={handleEditFileDialogOpenChange}>
+      <Dialog
+        open={knowledgeEditDialog.kind !== "closed"}
+        onOpenChange={handleKnowledgeEditDialogOpenChange}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit knowledge file</DialogTitle>
+            <DialogTitle>
+              {knowledgeEditDialog.kind === "renameFolder" ? "Rename folder" : "Rename knowledge file"}
+            </DialogTitle>
             <DialogDescription>
-              Change the title to rename the file.
+              {knowledgeEditDialog.kind === "renameFolder" ? (
+                <>
+                  Renames this folder for every file inside it. Use a single segment (no slashes); parent path stays
+                  the same.
+                </>
+              ) : (
+                <>Change the file name (extension stays the same).</>
+              )}
             </DialogDescription>
           </DialogHeader>
-          {selectedPath ? (
+          {knowledgeEditDialog.kind === "renameFile" ? (
+            <Field>
+              <FieldLabel>Title</FieldLabel>
+              <Input
+                value={editTitleDraft}
+                onChange={(e) => setEditTitleDraft(e.target.value)}
+                placeholder={
+                  knowledgeStemAndExtFromBasename(
+                    knowledgeBasenameFromRelativePath(knowledgeEditDialog.relativePath)
+                  ).stem || "Untitled"
+                }
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+          ) : null}
+          {knowledgeEditDialog.kind === "renameFolder" ? (
             <>
               <Field>
-                <FieldLabel>Title</FieldLabel>
+                <FieldLabel>Folder name</FieldLabel>
                 <Input
-                  value={editTitleDraft}
-                  onChange={(e) => setEditTitleDraft(e.target.value)}
+                  value={folderNameDraft}
+                  onChange={(e) => setFolderNameDraft(e.target.value)}
                   placeholder={
-                    knowledgeStemAndExtFromBasename(knowledgeBasenameFromRelativePath(selectedPath)).stem || "Untitled"
+                    knowledgeEditDialog.dirKey.includes("/")
+                      ? knowledgeEditDialog.dirKey.slice(knowledgeEditDialog.dirKey.lastIndexOf("/") + 1)
+                      : knowledgeEditDialog.dirKey
                   }
                   autoComplete="off"
                   spellCheck={false}
                 />
               </Field>
+              {knowledgeEditDialog.dirKey.includes("/") ? (
+                <p className="ui-issue-muted-text ui-knowledge-edit-folder-hint">
+                  Parent:{" "}
+                  <code className="ui-dialog-description-inline-code">
+                    {knowledgeEditDialog.dirKey.slice(0, knowledgeEditDialog.dirKey.lastIndexOf("/"))}/
+                  </code>
+                </p>
+              ) : null}
             </>
           ) : null}
           {editDialogError ? (
@@ -955,18 +1156,24 @@ export function SettingsKnowledgePageClient({
             </Alert>
           ) : null}
           <DialogFooter>
+            {knowledgeEditDialog.kind === "renameFile" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void performDeleteKnowledgeFile()}
+                disabled={deleteBusy || renameBusy || saving}
+              >
+                {deleteBusy ? "Deleting…" : "Delete"}
+              </Button>
+            ) : null}
             <Button
               type="button"
-              variant="ghost"
-              onClick={() => void performDeleteOpenFile()}
-              disabled={deleteBusy || renameBusy || saving || !selectedPath}
-            >
-              {deleteBusy ? "Deleting…" : "Delete"}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void applyEditFileDialogSave()}
-              disabled={editSaveDisabled}
+              onClick={() =>
+                void (knowledgeEditDialog.kind === "renameFolder"
+                  ? applyKnowledgeFolderRenameSave()
+                  : applyKnowledgeFileRenameSave())
+              }
+              disabled={knowledgeEditSaveDisabled}
             >
               {renameBusy ? "Saving…" : "Save"}
             </Button>

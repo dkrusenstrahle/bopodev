@@ -32,6 +32,7 @@ import {
   listKnowledgeFiles,
   readKnowledgeFile,
   renameKnowledgeFile,
+  renameKnowledgeFolderPrefix,
   writeKnowledgeFile
 } from "../services/company-knowledge-file-service";
 import {
@@ -852,6 +853,30 @@ export function createObservabilityRouter(ctx: AppContext) {
         companyId,
         fromRelativePath: body.from.trim(),
         toRelativePath: body.to.trim()
+      });
+      return sendOk(res, result);
+    } catch (error) {
+      return sendError(res, String(error), 422);
+    }
+  });
+
+  router.patch("/company-knowledge/folder", async (req, res) => {
+    if (!enforcePermission(req, res, "agents:write")) {
+      return;
+    }
+    const companyId = req.companyId!;
+    const body = req.body as { from?: unknown; to?: unknown };
+    if (typeof body?.from !== "string" || !body.from.trim()) {
+      return sendError(res, "Expected JSON body with string 'from' (current folder prefix).", 422);
+    }
+    if (typeof body?.to !== "string" || !body.to.trim()) {
+      return sendError(res, "Expected JSON body with string 'to' (new folder prefix).", 422);
+    }
+    try {
+      const result = await renameKnowledgeFolderPrefix({
+        companyId,
+        fromPrefix: body.from.trim(),
+        toPrefix: body.to.trim()
       });
       return sendOk(res, result);
     } catch (error) {

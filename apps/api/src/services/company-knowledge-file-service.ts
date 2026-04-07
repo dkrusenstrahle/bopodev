@@ -266,6 +266,70 @@ export async function renameKnowledgeFile(input: {
   return { relativePath: toRel };
 }
 
+/** Folder path prefix (no trailing slash), e.g. `guides/onboarding`. */
+export function assertKnowledgeFolderPrefix(prefix: string): string {
+  const normalized = prefix.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  if (!normalized) {
+    throw new Error("Invalid folder path.");
+  }
+  if (normalized.startsWith("/") || normalized.includes("..")) {
+    throw new Error("Invalid folder path.");
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length === 0 || parts.length > MAX_PATH_SEGMENTS - 1) {
+    throw new Error("Invalid folder path.");
+  }
+  for (const p of parts) {
+    if (p === "." || p === ".." || p.startsWith(".")) {
+      throw new Error("Invalid folder path.");
+    }
+  }
+  return parts.join("/");
+}
+
+/**
+ * Rename a knowledge folder by moving every file under `fromPrefix/` to the same relative paths under `toPrefix`.
+ */
+export async function renameKnowledgeFolderPrefix(input: {
+  companyId: string;
+  fromPrefix: string;
+  toPrefix: string;
+}) {
+  const fromP = assertKnowledgeFolderPrefix(input.fromPrefix);
+  const toP = assertKnowledgeFolderPrefix(input.toPrefix);
+  if (fromP === toP) {
+    return { moved: 0, fromPrefix: fromP, toPrefix: toP };
+  }
+  if (toP.startsWith(`${fromP}/`) || fromP.startsWith(`${toP}/`)) {
+    throw new Error("Invalid folder rename: one folder sits inside the other.");
+  }
+  const { files } = await listKnowledgeFiles({ companyId: input.companyId, maxFiles: MAX_OBSERVABILITY_FILES });
+  const paths = files.map((f) => f.relativePath);
+  const filePathsToMove = paths.filter((p) => p.startsWith(`${fromP}/`));
+  if (filePathsToMove.length === 0) {
+    throw new Error("No files found under that folder.");
+  }
+  const existing = new Set(paths);
+  for (const p of filePathsToMove) {
+    const np = `${toP}${p.slice(fromP.length)}`;
+    if (existing.has(np) && !filePathsToMove.includes(np)) {
+      throw new Error(`A file already exists at ${np}.`);
+    }
+  }
+  const sorted = [...filePathsToMove].sort((a, b) => b.length - a.length);
+  for (const p of sorted) {
+    const np = `${toP}${p.slice(fromP.length)}`;
+    await renameKnowledgeFile({
+      companyId: input.companyId,
+      fromRelativePath: p,
+      toRelativePath: np
+    });
+    existing.delete(p);
+    existing.add(np);
+  }
+  return { moved: sorted.length, fromPrefix: fromP, toPrefix: toP };
+}
+
 export async function deleteKnowledgeFile(input: { companyId: string; relativePath: string }) {
   const { root } = await knowledgeRoot(input.companyId);
   const rel = assertKnowledgeRelativePath(input.relativePath);

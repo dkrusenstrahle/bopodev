@@ -1,7 +1,7 @@
 @reference "../../app/globals.css";
 
 .mdxEditorRoot {
-  @apply min-h-[320px] bg-input/30 border border-input rounded-md px-12 py-10;
+  @apply min-h-[320px] bg-input/30 border border-input rounded-md px-3 py-2;
   h1 {
     @apply text-2xl mb-4 font-bold text-foreground;
   }

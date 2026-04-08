@@ -9,7 +9,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import type { IssueStatus } from "bopodev-contracts";
 import { Kanban, Table } from "lucide-react";
 import { ApiError, apiPut } from "@/lib/api";
-import { getStatusBadgeClassName } from "@/lib/status-presentation";
+import { getPriorityBadgeClassName, getStatusBadgeClassName } from "@/lib/status-presentation";
 import { selectedProjectNameFor } from "@/lib/workspace-logic";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -248,7 +248,11 @@ export function IssueWorkspace({
       {
         accessorKey: "priority",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Priority" />,
-        cell: ({ row }) => <Badge variant="outline">{row.original.priority}</Badge>
+        cell: ({ row }) => (
+          <Badge variant="outline" className={getPriorityBadgeClassName(row.original.priority)}>
+            {row.original.priority}
+          </Badge>
+        )
       },
       {
         accessorKey: "status",

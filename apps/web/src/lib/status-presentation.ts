@@ -3,19 +3,23 @@ type StatusPresentation = {
   chartColor: string;
 };
 
-/** Brighter fills/borders on dark so status pills read clearly (tables, runs, etc.). */
+/** Table pills: saturated tints and clear borders; no outer glow or shadow. */
 const BADGE_EMERALD =
-  "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:border-emerald-400/60 dark:bg-emerald-400/28 dark:text-emerald-100";
+  "border-teal-500/55 bg-teal-500/12 font-semibold tracking-tight text-teal-900 dark:border-teal-300/50 dark:bg-teal-400/28 dark:text-teal-50";
 const BADGE_SKY =
-  "border-sky-500/40 bg-sky-500/15 text-sky-700 dark:border-sky-400/55 dark:bg-sky-500/30 dark:text-sky-100";
+  "border-sky-500/55 bg-sky-500/12 font-semibold tracking-tight text-sky-900 dark:border-sky-300/50 dark:bg-sky-400/26 dark:text-sky-50";
 const BADGE_AMBER =
-  "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:border-amber-400/55 dark:bg-amber-400/28 dark:text-amber-100";
+  "border-amber-500/55 bg-amber-500/12 font-semibold tracking-tight text-amber-950 dark:border-amber-300/50 dark:bg-amber-400/24 dark:text-amber-50";
 const BADGE_VIOLET =
-  "border-violet-500/40 bg-violet-500/15 text-violet-700 dark:border-violet-400/55 dark:bg-violet-500/30 dark:text-violet-100";
+  "border-violet-500/55 bg-violet-500/12 font-semibold tracking-tight text-violet-900 dark:border-violet-300/48 dark:bg-violet-400/28 dark:text-violet-50";
 const BADGE_SLATE =
-  "border-slate-500/40 bg-slate-500/15 text-slate-700 dark:border-slate-400/50 dark:bg-slate-400/22 dark:text-slate-100";
+  "border-zinc-400/50 bg-zinc-500/10 font-semibold tracking-tight text-zinc-800 dark:border-zinc-400/40 dark:bg-zinc-400/16 dark:text-zinc-50";
 const BADGE_ROSE =
-  "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:border-rose-400/60 dark:bg-rose-500/32 dark:text-rose-100";
+  "border-red-500/50 bg-red-500/10 font-semibold tracking-tight text-red-950 dark:border-red-300/50 dark:bg-red-500/26 dark:text-red-50";
+const BADGE_ORANGE =
+  "border-orange-500/55 bg-orange-500/12 font-semibold tracking-tight text-orange-950 dark:border-orange-300/50 dark:bg-orange-400/26 dark:text-orange-50";
+const BADGE_INDIGO =
+  "border-indigo-500/55 bg-indigo-500/12 font-semibold tracking-tight text-indigo-950 dark:border-indigo-300/48 dark:bg-indigo-400/26 dark:text-indigo-50";
 
 const STATUS_PRESENTATION: Record<string, StatusPresentation> = {
   active: {
@@ -104,13 +108,43 @@ const STATUS_PRESENTATION: Record<string, StatusPresentation> = {
   }
 };
 
+/** Issue / work-item priority (bopodev-contracts IssuePriority). */
+const PRIORITY_PRESENTATION: Record<string, string> = {
+  none: BADGE_SLATE,
+  low: BADGE_SKY,
+  medium: BADGE_AMBER,
+  high: BADGE_ORANGE,
+  urgent: BADGE_ROSE
+};
+
+/** Goal hierarchy level (bopodev-contracts GoalLevel). */
+const GOAL_LEVEL_PRESENTATION: Record<string, string> = {
+  company: BADGE_INDIGO,
+  project: BADGE_SKY,
+  agent: BADGE_EMERALD
+};
+
 function normalizeStatus(status: string) {
   return status.toLowerCase().replace(/[\s-]+/g, "_");
 }
 
+/** Unknown workflow states: neutral but not flat gray-on-gray. */
+const BADGE_FALLBACK =
+  "border-zinc-500/45 bg-zinc-500/10 font-semibold tracking-tight text-zinc-800 dark:border-zinc-500/35 dark:bg-zinc-500/14 dark:text-zinc-100";
+
 export function getStatusBadgeClassName(status: string) {
   const normalized = normalizeStatus(status);
-  return STATUS_PRESENTATION[normalized]?.badgeClassName ?? "border-border bg-muted/40 text-foreground";
+  return STATUS_PRESENTATION[normalized]?.badgeClassName ?? BADGE_FALLBACK;
+}
+
+export function getPriorityBadgeClassName(priority: string) {
+  const key = priority.toLowerCase().trim();
+  return PRIORITY_PRESENTATION[key] ?? BADGE_FALLBACK;
+}
+
+export function getGoalLevelBadgeClassName(level: string) {
+  const key = level.toLowerCase().trim();
+  return GOAL_LEVEL_PRESENTATION[key] ?? BADGE_FALLBACK;
 }
 
 export function getStatusChartColor(status: string, fallback = "var(--color-chart-1)") {

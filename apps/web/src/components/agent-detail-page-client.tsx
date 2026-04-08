@@ -36,7 +36,7 @@ import {
 } from "@/lib/model-registry-options";
 import { showThinkingEffortControlForProvider } from "@/lib/provider-runtime-ui";
 import { formatSmartDateTime } from "@/lib/smart-date";
-import { getStatusBadgeClassName } from "@/lib/status-presentation";
+import { getPriorityBadgeClassName, getStatusBadgeClassName } from "@/lib/status-presentation";
 import { isSkippedRun } from "@/lib/workspace-logic";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { MoreHorizontal } from "lucide-react";
@@ -639,7 +639,11 @@ export function AgentDetailPageClient({
       {
         accessorKey: "priority",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Priority" />,
-        cell: ({ row }) => <Badge variant="outline">{row.original.priority}</Badge>
+        cell: ({ row }) => (
+          <Badge variant="outline" className={getPriorityBadgeClassName(row.original.priority)}>
+            {row.original.priority}
+          </Badge>
+        )
       },
       {
         accessorKey: "updatedAt",

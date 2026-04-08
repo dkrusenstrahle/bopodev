@@ -19,7 +19,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError, apiPut } from "@/lib/api";
-import { getStatusBadgeClassName } from "@/lib/status-presentation";
+import { getPriorityBadgeClassName, getStatusBadgeClassName } from "@/lib/status-presentation";
 import { formatSmartDateTime } from "@/lib/smart-date";
 import { MetricCard, SectionHeading } from "./workspace/shared";
 
@@ -232,7 +232,11 @@ export function ProjectDetailPageClient({
       {
         accessorKey: "priority",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Priority" />,
-        cell: ({ row }) => <Badge variant="outline">{row.original.priority}</Badge>
+        cell: ({ row }) => (
+          <Badge variant="outline" className={getPriorityBadgeClassName(row.original.priority)}>
+            {row.original.priority}
+          </Badge>
+        )
       },
       {
         id: "assignee",

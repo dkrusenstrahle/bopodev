@@ -90,7 +90,7 @@ body {
 }
 
 .ui-badge--destructive {
-  @apply bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90;
+  @apply bg-destructive text-white focus-visible:ring-destructive/25 dark:bg-destructive dark:focus-visible:ring-red-400/35 [a&]:hover:bg-destructive/90 dark:[a&]:hover:bg-destructive/85;
 }
 
 .ui-badge--outline {
@@ -114,11 +114,11 @@ body {
 }
 
 .ui-button--destructive {
-  @apply bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40;
+  @apply bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/25 dark:bg-destructive dark:hover:bg-destructive/88 dark:focus-visible:ring-red-400/35;
 }
 
 .ui-button--outline {
-  @apply border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50;
+  @apply border bg-background hover:bg-accent hover:text-accent-foreground dark:border-white/14 dark:bg-white/[0.05] dark:hover:border-white/22 dark:hover:bg-white/[0.1];
 }
 
 .ui-button--secondary {
@@ -2681,7 +2681,7 @@ body {
 }
 
 .ui-knowledge-autosave-status {
-  @apply text-sm text-muted-foreground;
+  @apply text-sm text-muted-foreground dark:text-zinc-400;
 }
 
 .ui-knowledge-tree {
@@ -2779,29 +2779,33 @@ body {
   @apply flex flex-1 flex-col overflow-hidden;
 }
 
+.ui-knowledge-tiptap-prosemirror {
+  @apply flex flex-col gap-4;
+}
+
 .ui-knowledge-tiptap-editor-root .tiptap {
   @apply min-h-[min(24rem,calc(100dvh-10rem))] flex-1 overflow-y-auto px-3 py-3 text-base text-foreground outline-none;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap p {
-  @apply my-2 first:mt-0 last:mb-0;
+  @apply first:mt-0 last:mb-0;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap h1 {
-  @apply mt-4 mb-2 text-2xl font-semibold first:mt-0;
+  @apply text-2xl font-semibold first:mt-0;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap h2 {
-  @apply mt-4 mb-2 text-xl font-semibold first:mt-0;
+  @apply text-xl font-semibold first:mt-0;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap h3 {
-  @apply mt-3 mb-1.5 text-lg font-semibold first:mt-0;
+  @apply text-lg font-semibold first:mt-0;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap ul,
 .ui-knowledge-tiptap-editor-root .tiptap ol {
-  @apply my-2 pl-6 list-disc;
+  @apply my-2 ml-6 pl-6 list-disc;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap li {
@@ -2809,15 +2813,15 @@ body {
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap blockquote {
-  @apply my-2 border-l-2 border-muted-foreground/40 pl-3 italic text-muted-foreground;
+  @apply border-l-2 border-muted-foreground/40 pl-3 italic text-muted-foreground;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap pre {
-  @apply my-2 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs;
+  @apply overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap code {
-  @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] before:content-none after:content-none;
+  @apply rounded bg-muted px-1 py-0.5 font-mono before:content-none after:content-none;
 }
 
 .ui-knowledge-tiptap-editor-root .tiptap pre code {

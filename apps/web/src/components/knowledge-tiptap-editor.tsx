@@ -1,8 +1,8 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import { isTextSelection } from "@tiptap/core";
-import type { Transaction } from "@tiptap/pm/state";
+import { Extension, generateJSON, isTextSelection } from "@tiptap/core";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { BubbleMenu } from "@tiptap/react/menus";
@@ -11,7 +11,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { Bold, Code, Heading1, Heading2, Heading3, Italic, Link2, Strikethrough } from "lucide-react";
 import MarkdownIt from "markdown-it";
 import TurndownService from "turndown";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MutableRefObject } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,121 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
 const markdownIt = new MarkdownIt({ html: false, linkify: true, breaks: true });
+
+const knowledgeMarkdownPasteKey = new PluginKey("knowledgeMarkdownPaste");
+
+function tiptapEditorFromView(view: { dom: HTMLElement }): Editor | null {
+  const dom = view.dom as HTMLElement & { editor?: Editor };
+  return dom.editor ?? null;
+}
+
+/** Plain text from clipboard; falls back to stripping text/html when apps omit text/plain. */
+function clipboardPlainText(data: ClipboardEvent["clipboardData"]): string {
+  if (!data) {
+    return "";
+  }
+  const plain = data.getData("text/plain") || data.getData("Text");
+  if (plain.trim()) {
+    return plain;
+  }
+  const html = data.getData("text/html");
+  if (!html.trim()) {
+    return "";
+  }
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body?.innerText ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** Heuristic: pasted plain text is probably markdown source, not a normal sentence. */
+function looksLikeMarkdown(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 2) {
+    return false;
+  }
+  if (/^#{1,6}\s/m.test(t)) {
+    return true;
+  }
+  if (/^\s*[-*+]\s/m.test(t)) {
+    return true;
+  }
+  if (/^\s*\d+\.\s/m.test(t)) {
+    return true;
+  }
+  if (/^\s*>/m.test(t)) {
+    return true;
+  }
+  if (/^(\*{3}|-{3}|_{3})\s*$/m.test(t)) {
+    return true;
+  }
+  if (/^```/m.test(t)) {
+    return true;
+  }
+  if (/\[[^\]]+\]\([^)\s]+\)/.test(t)) {
+    return true;
+  }
+  if (/`[^`\n]+`/.test(t)) {
+    return true;
+  }
+  if (/(\*\*|__)(?=\S)([\s\S]+?)(?<=\S)\1/m.test(t)) {
+    return true;
+  }
+  if (/(?<![*])\*(?=\S)([^*\n]+)(?<=\S)\*(?!\*)/m.test(t)) {
+    return true;
+  }
+  if (/(?<![_])_(?=\S)([^_\n]+)(?<=\S)_(?!_)/m.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * ProseMirror paste hook (see https://github.com/ueberdosis/tiptap/issues/2874).
+ * Runs as a high-priority plugin so we always get the real Tiptap Editor from the view.
+ */
+function createKnowledgeMarkdownPasteExtension(readOnlyRef: MutableRefObject<boolean>) {
+  return Extension.create({
+    name: "knowledgeMarkdownPaste",
+    priority: 10000,
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          key: knowledgeMarkdownPasteKey,
+          props: {
+            handlePaste(view, event) {
+              if (readOnlyRef.current) {
+                return false;
+              }
+              const ed = tiptapEditorFromView(view);
+              if (!ed?.isEditable) {
+                return false;
+              }
+              const plain = clipboardPlainText(event.clipboardData);
+              if (!plain.trim() || !looksLikeMarkdown(plain)) {
+                return false;
+              }
+              event.preventDefault();
+              const html = markdownIt.render(plain);
+              const docJson = generateJSON(html, ed.extensionManager.extensions) as {
+                content?: unknown[];
+              };
+              const blocks = docJson.content;
+              if (Array.isArray(blocks) && blocks.length > 0) {
+                ed.chain().focus().insertContent(blocks).run();
+              } else {
+                ed.chain().focus().insertContent(html).run();
+              }
+              return true;
+            }
+          }
+        })
+      ];
+    }
+  });
+}
 
 function KnowledgeTiptapBubbleToolbar({
   editor,
@@ -238,12 +353,18 @@ export function KnowledgeTiptapEditor({
   const markdownRef = useRef(markdown);
   markdownRef.current = markdown;
 
+  const markdownPasteExtension = useMemo(
+    () => createKnowledgeMarkdownPasteExtension(readOnlyRef),
+    []
+  );
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] }
       }),
+      markdownPasteExtension,
       Link.configure({
         openOnClick: false,
         enableClickSelection: false,

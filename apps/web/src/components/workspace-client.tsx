@@ -21,7 +21,7 @@ import { TemplatePreviewContent } from "@/components/template-preview-content";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { agentAvatarSeed } from "@/lib/agent-avatar";
 import { cn } from "@/lib/utils";
-import { getStatusBadgeClassName } from "@/lib/status-presentation";
+import { getGoalLevelBadgeClassName, getStatusBadgeClassName } from "@/lib/status-presentation";
 import { getSupportedModelOptionsForProvider } from "@/lib/agent-runtime-options";
 import { formatAuditEventLabel } from "@/lib/event-display";
 import { formatSmartDateTime } from "@/lib/smart-date";
@@ -3580,7 +3580,11 @@ export function WorkspaceClient({
       {
         accessorKey: "level",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Level" />,
-        cell: ({ row }) => <Badge variant="outline">{row.original.level}</Badge>
+        cell: ({ row }) => (
+          <Badge variant="outline" className={getGoalLevelBadgeClassName(row.original.level)}>
+            {row.original.level}
+          </Badge>
+        )
       },
       {
         id: "parentGoal",

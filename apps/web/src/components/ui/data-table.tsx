@@ -35,6 +35,22 @@ import {
 } from "@/components/ui/drawer";
 import { SlidersHorizontal } from "lucide-react";
 
+type DataTableColumnMeta = {
+  headerClassName?: string;
+  cellClassName?: string;
+};
+
+function readDataTableColumnMeta(meta: unknown): DataTableColumnMeta {
+  if (!meta || typeof meta !== "object") {
+    return {};
+  }
+  const record = meta as Record<string, unknown>;
+  return {
+    headerClassName: typeof record.headerClassName === "string" ? record.headerClassName : undefined,
+    cellClassName: typeof record.cellClassName === "string" ? record.cellClassName : undefined
+  };
+}
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -158,11 +174,17 @@ export function DataTable<TData, TValue>({
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="ui-data-table-header-row">
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="ui-data-table-header-cell">
-                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                ))}
+                {headerGroup.headers.map((header) => {
+                  const colMeta = readDataTableColumnMeta(header.column.columnDef.meta);
+                  return (
+                    <TableHead
+                      key={header.id}
+                      className={cn("ui-data-table-header-cell", colMeta.headerClassName)}
+                    >
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             ))}
           </TableHeader>
@@ -175,11 +197,14 @@ export function DataTable<TData, TValue>({
                   className={cn("ui-data-table-row", onRowClick ? "ui-data-table-row-clickable" : undefined, getRowClassName?.(row.original))}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="ui-data-table-cell">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const colMeta = readDataTableColumnMeta(cell.column.columnDef.meta);
+                    return (
+                      <TableCell key={cell.id} className={cn("ui-data-table-cell", colMeta.cellClassName)}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             ) : (

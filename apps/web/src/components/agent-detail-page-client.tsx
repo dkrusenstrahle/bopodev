@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { ExecutionOutcome } from "bopodev-contracts";
+import { BUILTIN_BOPO_SKILL_IDS, companySkillAllowlistOnly, type ExecutionOutcome } from "bopodev-contracts";
 import { AppShell } from "@/components/app-shell";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { DataTable } from "@/components/ui/data-table";
@@ -17,10 +17,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api";
@@ -90,6 +92,22 @@ interface AgentRoutineRow {
   status: string;
   lastTriggeredAt: string | null;
   updatedAt: string;
+}
+
+interface AgentBuiltinSkillTableRow {
+  skillId: string;
+  title: string;
+}
+
+interface AgentCompanySkillPickerRow {
+  skillId: string;
+  /** Sidebar display title from the skills library, or the skill id when unset. */
+  title: string;
+}
+
+interface CompanySkillListItem {
+  skillId: string;
+  sidebarTitle: string | null;
 }
 
 interface HeartbeatRunRow {
@@ -325,6 +343,21 @@ function getProviderLabel(providerType: string) {
   return PROVIDER_LABELS[providerType] ?? providerType;
 }
 
+const BUILTIN_SKILL_TITLES: Record<string, string> = {
+  "bopodev-control-plane": "Bopo control plane",
+  "bopodev-create-agent": "Bopo create agent",
+  "para-memory-files": "PARA memory files"
+};
+
+function providerSupportsSkillLibrary(providerType: string): boolean {
+  return (
+    providerType === "codex" ||
+    providerType === "claude_code" ||
+    providerType === "cursor" ||
+    providerType === "opencode"
+  );
+}
+
 function getModelLabel(providerType: string, modelId: string) {
   const runtimeProvider = normalizeRuntimeProvider(providerType);
   if (!runtimeProvider) {
@@ -369,6 +402,23 @@ const AGENT_ISSUES_AREA_CHART_CONFIG = {
   active: { label: "Open / active", color: "var(--chart-3)" }
 } satisfies ChartConfig;
 
+function formatAgentBudgetInput(agent: { monthlyBudgetUsd?: number }): string {
+  return typeof agent.monthlyBudgetUsd === "number" ? String(agent.monthlyBudgetUsd) : "";
+}
+
+/** Parses sidebar budget text; empty string is treated as 0. */
+function parseNonnegativeUsdBudget(raw: string): number | null {
+  const t = raw.trim();
+  if (t === "") {
+    return 0;
+  }
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0) {
+    return null;
+  }
+  return n;
+}
+
 function ConfigRow({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="ui-config-kv-row">
@@ -412,6 +462,9 @@ export function AgentDetailPageClient({
   const [agentRoutines, setAgentRoutines] = useState<AgentRoutineRow[]>([]);
   const [routinesLoading, setRoutinesLoading] = useState(true);
   const [routinesError, setRoutinesError] = useState<string | null>(null);
+  const [companySkillsItems, setCompanySkillsItems] = useState<CompanySkillListItem[]>([]);
+  const [companySkillsLoading, setCompanySkillsLoading] = useState(false);
+  const [companySkillsError, setCompanySkillsError] = useState<string | null>(null);
 
   const loadAgentRoutines = useCallback(async () => {
     if (!companyId) {
@@ -440,6 +493,46 @@ export function AgentDetailPageClient({
   useEffect(() => {
     void loadAgentRoutines();
   }, [loadAgentRoutines]);
+
+  useEffect(() => {
+    if (!companyId || !providerSupportsSkillLibrary(agent.providerType)) {
+      setCompanySkillsItems([]);
+      setCompanySkillsLoading(false);
+      setCompanySkillsError(null);
+      return;
+    }
+    let cancelled = false;
+    setCompanySkillsLoading(true);
+    setCompanySkillsError(null);
+    void apiGet<{ items: CompanySkillListItem[] }>("/observability/company-skills", companyId)
+      .then((res) => {
+        if (cancelled) {
+          return;
+        }
+        const raw = res.data.items ?? [];
+        setCompanySkillsItems(
+          raw.map((row) => ({
+            skillId: row.skillId,
+            sidebarTitle: row.sidebarTitle ?? null
+          }))
+        );
+      })
+      .catch((e) => {
+        if (cancelled) {
+          return;
+        }
+        setCompanySkillsItems([]);
+        setCompanySkillsError(e instanceof ApiError ? e.message : "Failed to load company skills.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCompanySkillsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, agent.providerType]);
 
   const managerNameById = useMemo(() => new Map(agents.map((entry) => [entry.id, entry.name])), [agents]);
 
@@ -508,7 +601,30 @@ export function AgentDetailPageClient({
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
     [agent.id, issues]
   );
+
+  const explicitCompanySkillIds = useMemo(() => {
+    const es = agent.enabledSkillIds;
+    if (es === null || es === undefined) {
+      return null;
+    }
+    return companySkillAllowlistOnly(es);
+  }, [agent.enabledSkillIds]);
+
+  const skillsTabSuffix = useMemo(() => {
+    if (!providerSupportsSkillLibrary(agent.providerType)) {
+      return "";
+    }
+    if (explicitCompanySkillIds === null) {
+      if (companySkillsLoading) {
+        return "";
+      }
+      return ` (${BUILTIN_BOPO_SKILL_IDS.length + companySkillsItems.length})`;
+    }
+    return ` (${BUILTIN_BOPO_SKILL_IDS.length + explicitCompanySkillIds.length})`;
+  }, [agent.providerType, explicitCompanySkillIds, companySkillsLoading, companySkillsItems.length]);
+
   const chartGradientId = useId().replace(/:/g, "");
+  const sidebarBudgetFieldId = useId();
 
   const agentRunsDailyChartData = useMemo(() => {
     const now = new Date();
@@ -801,11 +917,107 @@ export function AgentDetailPageClient({
     ],
     [agent.id, companyId, pendingActionKeys]
   );
+
+  const builtinSkillTableRows = useMemo<AgentBuiltinSkillTableRow[]>(
+    () =>
+      BUILTIN_BOPO_SKILL_IDS.map((id) => ({
+        skillId: id,
+        title: BUILTIN_SKILL_TITLES[id] ?? id
+      })),
+    []
+  );
+
+  const builtinSkillColumns = useMemo<ColumnDef<AgentBuiltinSkillTableRow>[]>(
+    () => [
+      {
+        accessorKey: "title",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+        cell: ({ row }) => <span className="font-medium">{row.original.title}</span>
+      },
+      {
+        accessorKey: "skillId",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Skill ID" />,
+        cell: ({ row }) => (
+          <span className="ui-run-table-cell-muted font-mono text-xs">{row.original.skillId}</span>
+        )
+      },
+      {
+        id: "open",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Open" />,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <Link
+            href={
+              `/settings/skills?companyId=${encodeURIComponent(companyId)}&kind=builtin&skillId=${encodeURIComponent(row.original.skillId)}` as Route
+            }
+            className="ui-run-table-link text-sm"
+          >
+            View
+          </Link>
+        )
+      }
+    ],
+    [companyId]
+  );
+
+  const companySkillLibraryIds = useMemo(
+    () => companySkillsItems.map((row) => row.skillId),
+    [companySkillsItems]
+  );
+
+  const companySkillTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const row of companySkillsItems) {
+      const label = row.sidebarTitle?.trim() || row.skillId;
+      m.set(row.skillId, label);
+    }
+    return m;
+  }, [companySkillsItems]);
+
+  const companySkillPickerRows = useMemo<AgentCompanySkillPickerRow[]>(() => {
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const row of companySkillsItems) {
+      if (!seen.has(row.skillId)) {
+        seen.add(row.skillId);
+        ids.push(row.skillId);
+      }
+    }
+    if (explicitCompanySkillIds) {
+      for (const id of explicitCompanySkillIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          ids.push(id);
+        }
+      }
+    }
+    ids.sort((a, b) => a.localeCompare(b));
+    return ids.map((skillId) => ({
+      skillId,
+      title: companySkillTitleById.get(skillId) ?? skillId
+    }));
+  }, [companySkillsItems, explicitCompanySkillIds, companySkillTitleById]);
+
   const configuredThinkingEffort = state.runtime?.thinkingEffort ?? agent.runtimeThinkingEffort ?? "auto";
   const [selectedThinkingEffort, setSelectedThinkingEffort] = useState<"auto" | "low" | "medium" | "high">(
     configuredThinkingEffort
   );
   const [selectedManagerAgentId, setSelectedManagerAgentId] = useState(agent.managerAgentId ?? "__none");
+  const [budgetInput, setBudgetInput] = useState(() => formatAgentBudgetInput(agent));
+  const agentRef = useRef(agent);
+  agentRef.current = agent;
+  const budgetAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updateSidebarSettingsRef = useRef<
+    (
+      payload: {
+        runtimeConfig?: { runtimeModel?: string; runtimeThinkingEffort?: "auto" | "low" | "medium" | "high" };
+        providerType?: RuntimeProviderType;
+        managerAgentId?: string | null;
+        monthlyBudgetUsd?: number;
+      },
+      actionKey: string
+    ) => Promise<void>
+  >(async () => {});
 
   const capabilityHints = useMemo(() => {
     const capabilities = new Set<string>();
@@ -872,6 +1084,10 @@ export function AgentDetailPageClient({
     setSelectedManagerAgentId(agent.managerAgentId ?? "__none");
   }, [agent.managerAgentId]);
 
+  useEffect(() => {
+    setBudgetInput(formatAgentBudgetInput(agent));
+  }, [agent.monthlyBudgetUsd]);
+
   const isActionPending = useCallback(
     (actionKey: string) => pendingActionKeys[actionKey] === true,
     [pendingActionKeys]
@@ -899,6 +1115,117 @@ export function AgentDetailPageClient({
       });
     }
   }
+
+  const companySkillsActionKey = `agent:${agent.id}:company-skills`;
+
+  async function persistCompanySkillAllowlist(next: string[] | null) {
+    await runAgentAction(async () => {
+      await apiPut(`/agents/${agent.id}`, companyId, { runtimeConfig: { enabledSkillIds: next } });
+    }, "Failed to update company skills.", companySkillsActionKey);
+  }
+
+  async function handleCompanySkillToggle(skillId: string, checked: boolean) {
+    const libraryIds = companySkillLibraryIds;
+    const librarySorted = [...libraryIds].sort((a, b) => a.localeCompare(b));
+    if (explicitCompanySkillIds === null) {
+      if (!checked) {
+        const nextExplicit = companySkillAllowlistOnly(libraryIds.filter((id) => id !== skillId));
+        await persistCompanySkillAllowlist(nextExplicit);
+      }
+      return;
+    }
+    const nextSet = new Set(explicitCompanySkillIds);
+    if (checked) {
+      nextSet.add(skillId);
+    } else {
+      nextSet.delete(skillId);
+    }
+    let nextExplicit = companySkillAllowlistOnly([...nextSet]);
+    nextExplicit = nextExplicit.slice().sort((a, b) => a.localeCompare(b));
+    const matchesFullLibrary =
+      librarySorted.length > 0 &&
+      nextExplicit.length === librarySorted.length &&
+      librarySorted.every((id, i) => id === nextExplicit[i]);
+    await persistCompanySkillAllowlist(matchesFullLibrary ? null : nextExplicit);
+  }
+
+  const companySkillPickerColumns = useMemo<ColumnDef<AgentCompanySkillPickerRow>[]>(
+    () => [
+      {
+        id: "include",
+        meta: {
+          headerClassName: "w-20 min-w-20 max-w-24 shrink-0 !px-2 !text-center",
+          cellClassName: "w-20 min-w-20 max-w-24 shrink-0 !px-2 align-middle"
+        },
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Include" />,
+        enableSorting: false,
+        cell: ({ row }) => {
+          const skillId = row.original.skillId;
+          const included =
+            explicitCompanySkillIds === null || explicitCompanySkillIds.includes(skillId);
+          const disabled = agent.status === "terminated" || isActionPending(companySkillsActionKey);
+          const checkboxId = `agent-detail-co-skill-${skillId}`;
+          return (
+            <div className="flex justify-center">
+              <Checkbox
+                id={checkboxId}
+                checked={included}
+                disabled={disabled}
+                onCheckedChange={(value) => {
+                  void handleCompanySkillToggle(skillId, value === true);
+                }}
+                aria-label={`Include ${row.original.title}`}
+              />
+            </div>
+          );
+        }
+      },
+      {
+        accessorKey: "title",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+        cell: ({ row }) => {
+          const skillId = row.original.skillId;
+          const checkboxId = `agent-detail-co-skill-${skillId}`;
+          return (
+            <label htmlFor={checkboxId} className="font-medium cursor-pointer select-none">
+              {row.original.title}
+            </label>
+          );
+        }
+      },
+      {
+        accessorKey: "skillId",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Skill ID" />,
+        cell: ({ row }) => (
+          <span className="ui-run-table-cell-muted font-mono text-xs">{row.original.skillId}</span>
+        )
+      },
+      {
+        id: "open",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Open" />,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <Link
+            href={
+              `/settings/skills?companyId=${encodeURIComponent(companyId)}&kind=company&skillId=${encodeURIComponent(row.original.skillId)}&path=SKILL.md` as Route
+            }
+            className="ui-run-table-link text-sm"
+          >
+            View
+          </Link>
+        )
+      }
+    ],
+    [
+      companyId,
+      explicitCompanySkillIds,
+      agent.status,
+      companySkillsActionKey,
+      isActionPending,
+      pendingActionKeys,
+      handleCompanySkillToggle
+    ]
+  );
 
   async function runHeartbeat() {
     await runAgentAction(async () => {
@@ -947,6 +1274,7 @@ export function AgentDetailPageClient({
       runtimeConfig?: { runtimeModel?: string; runtimeThinkingEffort?: "auto" | "low" | "medium" | "high" };
       providerType?: RuntimeProviderType;
       managerAgentId?: string | null;
+      monthlyBudgetUsd?: number;
     },
     actionKey: string
   ) {
@@ -971,6 +1299,67 @@ export function AgentDetailPageClient({
         return next;
       });
     }
+  }
+
+  updateSidebarSettingsRef.current = updateSidebarSettings;
+
+  useEffect(() => {
+    if (budgetAutosaveTimerRef.current) {
+      clearTimeout(budgetAutosaveTimerRef.current);
+    }
+    budgetAutosaveTimerRef.current = setTimeout(() => {
+      budgetAutosaveTimerRef.current = null;
+      const raw = budgetInput;
+      const parsed = parseNonnegativeUsdBudget(raw);
+      if (parsed === null) {
+        return;
+      }
+      const a = agentRef.current;
+      const budgetActionKey = `agent:${a.id}:budget`;
+      const serverVal = typeof a.monthlyBudgetUsd === "number" ? a.monthlyBudgetUsd : 0;
+      if (Math.abs(parsed - serverVal) < 1e-6) {
+        return;
+      }
+      void (async () => {
+        try {
+          await updateSidebarSettingsRef.current({ monthlyBudgetUsd: parsed }, budgetActionKey);
+        } catch {
+          setBudgetInput(formatAgentBudgetInput(agentRef.current));
+        }
+      })();
+    }, 800);
+    return () => {
+      if (budgetAutosaveTimerRef.current) {
+        clearTimeout(budgetAutosaveTimerRef.current);
+        budgetAutosaveTimerRef.current = null;
+      }
+    };
+  }, [budgetInput]);
+
+  function flushBudgetOnBlur() {
+    if (budgetAutosaveTimerRef.current) {
+      clearTimeout(budgetAutosaveTimerRef.current);
+      budgetAutosaveTimerRef.current = null;
+    }
+    const a = agentRef.current;
+    const parsed = parseNonnegativeUsdBudget(budgetInput);
+    if (parsed === null) {
+      setSidebarError("Enter a valid monthly budget (0 or greater).");
+      setBudgetInput(formatAgentBudgetInput(a));
+      return;
+    }
+    setSidebarError(null);
+    const serverVal = typeof a.monthlyBudgetUsd === "number" ? a.monthlyBudgetUsd : 0;
+    if (Math.abs(parsed - serverVal) < 1e-6) {
+      return;
+    }
+    void (async () => {
+      try {
+        await updateSidebarSettingsRef.current({ monthlyBudgetUsd: parsed }, `agent:${a.id}:budget`);
+      } catch {
+        setBudgetInput(formatAgentBudgetInput(agentRef.current));
+      }
+    })();
   }
 
   async function handleModelChange(nextModelId: string) {
@@ -1152,6 +1541,7 @@ export function AgentDetailPageClient({
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="issues">Issues ({recentDeliveryIssues.length})</TabsTrigger>
           <TabsTrigger value="routines">Routines ({agentRoutines.length})</TabsTrigger>
+          <TabsTrigger value="skills">Skills{skillsTabSuffix}</TabsTrigger>
           <TabsTrigger value="runs">Runs ({agentRuns.length})</TabsTrigger>
         </TabsList>
 
@@ -1318,6 +1708,59 @@ export function AgentDetailPageClient({
           ) : null}
         </TabsContent>
 
+        <TabsContent value="skills" className="ui-issue-tabs-content">
+          {!providerSupportsSkillLibrary(agent.providerType) ? (
+            <Card>
+              <CardContent className="ui-detail-sidebar-section space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  The skills library is only injected for Codex, Claude Code, Cursor, and OpenCode. This agent uses{" "}
+                  <span className="text-foreground">{getProviderLabel(agent.providerType)}</span>.
+                </p>
+                {explicitCompanySkillIds !== null ? (
+                  <p className="text-sm text-muted-foreground">
+                    A skill allowlist is saved on this agent; it applies when you switch to a supported runtime.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <SectionHeading
+                title="Skills"
+                description="Always included when an allowlist is in effect."
+              />
+              <DataTable
+                columns={builtinSkillColumns}
+                data={builtinSkillTableRows}
+                emptyMessage="No built-in skills."
+                defaultPageSize={10}
+                showViewOptions={false}
+              />
+              <div className="mt-8 space-y-6">
+                <SectionHeading
+                  title="Custom"
+                  description={
+                    explicitCompanySkillIds === null
+                      ? "Every company skill is included. Uncheck any skill to use a custom allowlist instead."
+                      : "Checked skills are included for this agent. Built-in skills above always apply."
+                  }
+                />
+                {companySkillsLoading ? <p className="text-sm text-muted-foreground">Loading company skills…</p> : null}
+                {companySkillsError ? <p className="text-sm text-destructive">{companySkillsError}</p> : null}
+                {!companySkillsLoading && !companySkillsError ? (
+                  <DataTable
+                    columns={companySkillPickerColumns}
+                    data={companySkillPickerRows}
+                    emptyMessage="No company skills in the library yet. Add them under Company → Skills."
+                    defaultPageSize={10}
+                    showViewOptions={false}
+                  />
+                ) : null}
+              </div>
+            </>
+          )}
+        </TabsContent>
+
         <TabsContent value="runs" className="ui-issue-tabs-content">
           <SectionHeading title="Runs" description="Heartbeat runs scoped to this agent." />
           <DataTable
@@ -1421,6 +1864,23 @@ export function AgentDetailPageClient({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+
+          <Field className="ui-sidebar-field-spaced">
+            <FieldLabel htmlFor={sidebarBudgetFieldId}>Monthly budget (USD)</FieldLabel>
+            <Input
+              id={sidebarBudgetFieldId}
+              type="number"
+              min={0}
+              step={0.01}
+              value={budgetInput}
+              onChange={(e) => setBudgetInput(e.target.value)}
+              onBlur={() => flushBudgetOnBlur()}
+              readOnly={isActionPending(`agent:${agent.id}:budget`)}
+              disabled={agent.status === "terminated"}
+              aria-busy={isActionPending(`agent:${agent.id}:budget`)}
+              aria-label="Monthly budget in US dollars"
+            />
           </Field>
 
           {sidebarError ? <div className="ui-sidebar-error-text">{sidebarError}</div> : null}

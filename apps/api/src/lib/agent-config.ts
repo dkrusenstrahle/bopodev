@@ -58,6 +58,7 @@ export function requiresRuntimeCwd(providerType: string) {
     providerType === "cursor" ||
     providerType === "opencode" ||
     providerType === "gemini_cli" ||
+    providerType === "hermes_local" ||
     providerType === "shell"
   );
 }
@@ -75,6 +76,9 @@ export function resolveDefaultRuntimeModelForProvider(providerType: string | und
   }
   if (normalizedProviderType === "gemini_cli") {
     return "gemini-2.5-pro";
+  }
+  if (normalizedProviderType === "hermes_local") {
+    return "auto";
   }
   return undefined;
 }

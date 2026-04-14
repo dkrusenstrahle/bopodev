@@ -4,6 +4,7 @@ type ProviderType =
   | "cursor"
   | "opencode"
   | "gemini_cli"
+  | "hermes_local"
   | "openai_api"
   | "anthropic_api"
   | "openclaw_gateway"
@@ -63,6 +64,7 @@ const providerModelCatalog: Record<ProviderType, ModelOption[]> = {
     { value: "gemini-3-pro", label: "Gemini 3 Pro" },
     { value: "gemini-3-pro-200k", label: "Gemini 3 Pro (>200k context)" }
   ],
+  hermes_local: [{ value: "auto", label: "Auto" }],
   openclaw_gateway: [],
   http: [],
   shell: []

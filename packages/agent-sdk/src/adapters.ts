@@ -669,6 +669,15 @@ const staticMetadata: AdapterMetadata[] = [
     requiresRuntimeCwd: true
   },
   {
+    providerType: "hermes_local",
+    label: "Hermes",
+    supportsModelSelection: true,
+    supportsEnvironmentTest: true,
+    supportsWebSearch: false,
+    supportsThinkingEffort: false,
+    requiresRuntimeCwd: true
+  },
+  {
     providerType: "openai_api",
     label: "OpenAI API",
     supportsModelSelection: true,
@@ -750,6 +759,7 @@ const modelCatalog: Record<Exclude<AgentProviderType, "http" | "shell" | "opencl
     { id: "gemini-3-pro", label: "Gemini 3 Pro" },
     { id: "gemini-3-pro-200k", label: "Gemini 3 Pro (>200k context)" }
   ],
+  hermes_local: [{ id: "auto", label: "Auto" }],
   openai_api: [
     { id: "gpt-5", label: "GPT-5" },
     { id: "gpt-5-mini", label: "GPT-5 Mini" },
@@ -917,7 +927,8 @@ function detectProviderCommandMismatch(providerType: AgentProviderType, command:
     codex: ["codex", "codex.exe", "codex.cmd"],
     cursor: ["cursor", "cursor.exe", "cursor.cmd"],
     opencode: ["opencode", "opencode.exe", "opencode.cmd"],
-    gemini_cli: ["gemini", "gemini.exe", "gemini.cmd"]
+    gemini_cli: ["gemini", "gemini.exe", "gemini.cmd"],
+    hermes_local: ["hermes", "hermes.exe", "hermes.cmd"]
   };
   const expected = known[providerType as keyof typeof known];
   if (!expected) {
@@ -3015,6 +3026,12 @@ export function applyProviderSessionState(
     return nextState;
   }
   if (provider === "gemini_cli") {
+    if (sessionUpdate?.currentSessionId?.trim()) {
+      nextState.sessionId = sessionUpdate.currentSessionId.trim();
+    }
+    return nextState;
+  }
+  if (provider === "hermes_local") {
     if (sessionUpdate?.currentSessionId?.trim()) {
       nextState.sessionId = sessionUpdate.currentSessionId.trim();
     }

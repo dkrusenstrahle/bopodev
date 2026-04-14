@@ -6,6 +6,7 @@ export type RuntimeProviderType =
   | "cursor"
   | "opencode"
   | "gemini_cli"
+  | "hermes_local"
   | "openai_api"
   | "anthropic_api"
   | "openclaw_gateway"
@@ -62,6 +63,8 @@ export function getDefaultModelForProvider(providerType: RuntimeProviderType): s
       return "opencode/big-pickle";
     case "gemini_cli":
       return "gemini-2.5-pro";
+    case "hermes_local":
+      return "auto";
     default:
       return null;
   }
@@ -93,7 +96,8 @@ export const ALLOWED_MODEL_IDS_BY_PROVIDER: Partial<Record<RuntimeProviderType, 
     "gemini-3-flash",
     "gemini-3-pro",
     "gemini-3-pro-200k"
-  ]
+  ],
+  hermes_local: ["auto"]
 };
 
 export function getAllowedModelIdsForProvider(providerType: RuntimeProviderType): string[] {

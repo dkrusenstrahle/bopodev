@@ -66,6 +66,7 @@ type ProviderType =
   | "cursor"
   | "opencode"
   | "gemini_cli"
+  | "hermes_local"
   | "openai_api"
   | "anthropic_api"
   | "openclaw_gateway"
@@ -105,6 +106,7 @@ const EDIT_AGENT_VISIBLE_PROVIDER_TYPES: ProviderType[] = [
   "codex",
   "opencode",
   "gemini_cli",
+  "hermes_local",
   "openclaw_gateway"
 ];
 
@@ -113,6 +115,7 @@ const defaultVisibleProviders: ProviderOption[] = [
   { providerType: "codex", label: "Codex" },
   { providerType: "opencode", label: "OpenCode" },
   { providerType: "gemini_cli", label: "Gemini CLI" },
+  { providerType: "hermes_local", label: "Hermes" },
   { providerType: "openclaw_gateway", label: "OpenClaw Gateway" }
 ];
 
@@ -288,6 +291,7 @@ export function CreateAgentModal({
     providerType === "claude_code" ||
     providerType === "cursor" ||
     providerType === "opencode" ||
+    providerType === "hermes_local" ||
     providerType === "shell"
   );
   const serverModelsForPicker = useMemo(() => {
@@ -440,6 +444,7 @@ export function CreateAgentModal({
       value === "cursor" ||
       value === "opencode" ||
       value === "gemini_cli" ||
+      value === "hermes_local" ||
       value === "openai_api" ||
       value === "anthropic_api" ||
       value === "openclaw_gateway" ||

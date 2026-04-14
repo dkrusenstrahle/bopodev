@@ -34,6 +34,7 @@ describe("adapter module contracts", () => {
       "claude-code",
       "cursor",
       "gemini-cli",
+      "hermes-local",
       "opencode",
       "openai-api",
       "anthropic-api",

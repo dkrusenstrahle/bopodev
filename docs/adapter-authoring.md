@@ -94,6 +94,7 @@ Shared helpers are for common mechanics such as process spawning, retries, timeo
 
 - Add the provider to `ProviderTypeSchema` in `packages/contracts/src/index.ts`.
 - Ensure DB repository/provider unions include the new type in `packages/db/src/repositories.ts`.
+- Keep naming aligned with existing runtime ids (for example: `claude_code`, `codex`, `hermes_local`).
 
 ## 2. Implement the adapter package
 

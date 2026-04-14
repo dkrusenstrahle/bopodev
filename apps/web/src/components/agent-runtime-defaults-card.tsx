@@ -204,6 +204,7 @@ export function AgentRuntimeDefaultsCard({
                   <SelectItem value="codex">OpenAI Codex</SelectItem>
                   <SelectItem value="opencode">OpenCode</SelectItem>
                   <SelectItem value="gemini_cli">Gemini CLI</SelectItem>
+                  <SelectItem value="hermes_local">Hermes</SelectItem>
                   <SelectItem value="http">HTTP Worker</SelectItem>
                   <SelectItem value="shell">Shell Runtime</SelectItem>
                 </SelectContent>

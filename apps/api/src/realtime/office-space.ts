@@ -442,6 +442,7 @@ function normalizeProviderType(value: string): OfficeOccupant["providerType"] {
     value === "cursor" ||
     value === "opencode" ||
     value === "gemini_cli" ||
+    value === "hermes_local" ||
     value === "openai_api" ||
     value === "anthropic_api" ||
     value === "openclaw_gateway" ||

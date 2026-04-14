@@ -16,6 +16,7 @@ Built-in adapter implementations for supported runtime providers.
 - `opencode`
 - `openai-api`
 - `anthropic-api`
+- `hermes-local`
 - `http`
 - `shell`
 - `gemini-cli`

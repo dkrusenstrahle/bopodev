@@ -55,6 +55,7 @@ type AgentProvider =
   | "claude_code"
   | "cursor"
   | "gemini_cli"
+  | "hermes_local"
   | "opencode"
   | "openai_api"
   | "anthropic_api"
@@ -409,6 +410,7 @@ function parseAgentProvider(value: unknown): AgentProvider | null {
     value === "claude_code" ||
     value === "cursor" ||
     value === "gemini_cli" ||
+    value === "hermes_local" ||
     value === "opencode" ||
     value === "openai_api" ||
     value === "anthropic_api" ||
@@ -448,6 +450,9 @@ async function resolveSeedRuntimeModel(
 ): Promise<string | undefined> {
   if (input.requestedModel) {
     return input.requestedModel;
+  }
+  if (agentProvider === "hermes_local") {
+    return process.env.BOPO_HERMES_MODEL?.trim() || "auto";
   }
   if (agentProvider !== "opencode") {
     return undefined;

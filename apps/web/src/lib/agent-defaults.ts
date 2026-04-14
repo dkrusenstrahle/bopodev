@@ -6,6 +6,7 @@ export interface AgentRuntimeDefaults {
     | "codex"
     | "opencode"
     | "gemini_cli"
+    | "hermes_local"
     | "openai_api"
     | "anthropic_api"
     | "openclaw_gateway"
@@ -123,6 +124,7 @@ function isProviderType(value: unknown): value is AgentRuntimeDefaults["provider
     value === "codex" ||
     value === "opencode" ||
     value === "gemini_cli" ||
+    value === "hermes_local" ||
     value === "openai_api" ||
     value === "anthropic_api" ||
     value === "openclaw_gateway" ||

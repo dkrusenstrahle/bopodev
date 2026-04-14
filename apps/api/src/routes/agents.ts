@@ -85,6 +85,7 @@ const runtimePreflightSchema = z.object({
     "cursor",
     "opencode",
     "gemini_cli",
+    "hermes_local",
     "openai_api",
     "anthropic_api",
     "openclaw_gateway",

@@ -13,6 +13,7 @@ import { claudecodeAdapterModule } from "../../adapters/claude-code/src";
 import { cursorAdapterModule } from "../../adapters/cursor/src";
 import { opencodeAdapterModule } from "../../adapters/opencode/src";
 import { geminiCliAdapterModule } from "../../adapters/gemini-cli/src";
+import { hermesLocalAdapterModule } from "../../adapters/hermes-local/src";
 import { openaiapiAdapterModule } from "../../adapters/openai-api/src";
 import { anthropicapiAdapterModule } from "../../adapters/anthropic-api/src";
 import { httpAdapterModule } from "../../adapters/http/src";
@@ -25,6 +26,7 @@ const adapterModules: Record<AgentProviderType, AdapterModule> = {
   cursor: cursorAdapterModule,
   opencode: opencodeAdapterModule,
   gemini_cli: geminiCliAdapterModule,
+  hermes_local: hermesLocalAdapterModule,
   openai_api: openaiapiAdapterModule,
   anthropic_api: anthropicapiAdapterModule,
   openclaw_gateway: openclawGatewayAdapterModule,
@@ -56,6 +58,10 @@ const adapters: Record<AgentProviderType, AgentAdapter> = {
   gemini_cli: {
     providerType: "gemini_cli",
     execute: (context) => adapterModules.gemini_cli.server.execute(context)
+  },
+  hermes_local: {
+    providerType: "hermes_local",
+    execute: (context) => adapterModules.hermes_local.server.execute(context)
   },
   openai_api: {
     providerType: "openai_api",

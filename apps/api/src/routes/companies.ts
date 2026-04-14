@@ -509,9 +509,11 @@ function parseAgentProvider(value: unknown) {
     value === "claude_code" ||
     value === "cursor" ||
     value === "gemini_cli" ||
+    value === "hermes_local" ||
     value === "opencode" ||
     value === "openai_api" ||
     value === "anthropic_api" ||
+    value === "openclaw_gateway" ||
     value === "http" ||
     value === "shell"
   ) {

@@ -38,6 +38,7 @@ type AgentProvider =
   | "codex"
   | "claude_code"
   | "gemini_cli"
+  | "hermes_local"
   | "opencode"
   | "openai_api"
   | "anthropic_api"
@@ -82,6 +83,7 @@ const CLI_ONBOARD_VISIBLE_PROVIDERS: Array<{ value: AgentProvider; label: string
   { value: "codex", label: "Codex" },
   { value: "claude_code", label: "Claude Code" },
   { value: "gemini_cli", label: "Gemini" },
+  { value: "hermes_local", label: "Hermes" },
   { value: "opencode", label: "OpenCode" }
 ];
 const CLI_ONBOARD_TEMPLATES = [
@@ -599,6 +601,9 @@ function deriveAvailableAgentProviders(checks: DoctorCheck[]): AgentProvider[] {
     if (check.label === "Gemini runtime") {
       providers.push("gemini_cli");
     }
+    if (check.label === "Hermes runtime") {
+      providers.push("hermes_local");
+    }
     if (check.label === "OpenCode runtime") {
       providers.push("opencode");
     }
@@ -647,6 +652,9 @@ function getDefaultModelForProvider(provider: AgentProvider): string | null {
   if (provider === "gemini_cli") {
     return process.env.BOPO_GEMINI_MODEL?.trim() || "gemini-2.5-pro";
   }
+  if (provider === "hermes_local") {
+    return process.env.BOPO_HERMES_MODEL?.trim() || "auto";
+  }
   if (provider === "shell") {
     return "n/a";
   }
@@ -682,6 +690,9 @@ function getModelPresetsForProvider(provider: AgentProvider): string[] {
   }
   if (provider === "gemini_cli") {
     return ["gemini-2.5-pro", "gemini-2.5-flash"];
+  }
+  if (provider === "hermes_local") {
+    return ["auto"];
   }
   if (provider === "opencode") {
     return ["opencode/default"];
@@ -728,6 +739,7 @@ function parseAgentProvider(value: unknown): AgentProvider | null {
     value === "codex" ||
     value === "claude_code" ||
     value === "gemini_cli" ||
+    value === "hermes_local" ||
     value === "opencode" ||
     value === "openai_api" ||
     value === "anthropic_api" ||
@@ -751,6 +763,9 @@ function formatAgentProvider(provider: AgentProvider) {
   }
   if (provider === "opencode") {
     return "OpenCode";
+  }
+  if (provider === "hermes_local") {
+    return "Hermes";
   }
   if (provider === "openai_api") {
     return "OpenAI API (direct)";

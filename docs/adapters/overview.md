@@ -83,6 +83,7 @@ The `cli/` directory owns adapter-specific terminal formatting for command-line 
 - `opencode`
 - `openai_api`
 - `anthropic_api`
+- `hermes_local`
 - `openclaw_gateway`
 - `http`
 - `shell`
@@ -95,7 +96,7 @@ Dedicated guide: [`openclaw-gateway.md`](./openclaw-gateway.md).
 
 ## Provider selection quick guide
 
-- Use `codex` / `claude_code` when you want CLI-native behavior on hosts where those CLIs are installed.
+- Use `codex` / `claude_code` / `hermes_local` when you want CLI-native behavior on hosts where those CLIs are installed.
 - Use `opencode` when you want OpenCode CLI execution; configure `runtimeModel` in `provider/model` format.
 - Use `openai_api` / `anthropic_api` for direct provider API execution with API keys only.
 - Use `openclaw_gateway` when heartbeats should invoke OpenClaw’s gateway (see [Gateway](https://docs.openclaw.ai/gateway) and [protocol](https://docs.openclaw.ai/gateway/protocol)); configure a `ws://` / `wss://` URL and gateway credentials on the agent.

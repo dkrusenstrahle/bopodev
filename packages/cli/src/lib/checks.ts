@@ -24,13 +24,15 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
   const openCodeCommand = process.env.BOPO_OPENCODE_COMMAND?.trim() || "opencode";
   const claudeCommand = process.env.BOPO_CLAUDE_COMMAND?.trim() || "claude";
   const geminiCommand = process.env.BOPO_GEMINI_COMMAND?.trim() || "gemini";
-  const [pnpmAvailable, gitRuntime, codex, openCode, claude, gemini] = await Promise.all([
+  const hermesCommand = process.env.BOPO_HERMES_COMMAND?.trim() || "hermes";
+  const [pnpmAvailable, gitRuntime, codex, openCode, claude, gemini, hermes] = await Promise.all([
     commandExists("pnpm"),
     checkRuntimeCommandHealth("git", options?.workspaceRoot),
     checkRuntimeCommandHealth(codexCommand, options?.workspaceRoot),
     checkRuntimeCommandHealth(openCodeCommand, options?.workspaceRoot),
     checkRuntimeCommandHealth(claudeCommand, options?.workspaceRoot),
-    checkRuntimeCommandHealth(geminiCommand, options?.workspaceRoot)
+    checkRuntimeCommandHealth(geminiCommand, options?.workspaceRoot),
+    checkRuntimeCommandHealth(hermesCommand, options?.workspaceRoot)
   ]);
 
   checks.push({
@@ -82,6 +84,15 @@ export async function runDoctorChecks(options?: { workspaceRoot?: string }): Pro
       gemini.available && gemini.exitCode === 0
         ? `Command '${geminiCommand}' is available`
         : gemini.error ?? `Command '${geminiCommand}' exited with ${String(gemini.exitCode)}`
+  });
+
+  checks.push({
+    label: "Hermes runtime",
+    ok: hermes.available && hermes.exitCode === 0,
+    details:
+      hermes.available && hermes.exitCode === 0
+        ? `Command '${hermesCommand}' is available`
+        : hermes.error ?? `Command '${hermesCommand}' exited with ${String(hermes.exitCode)}`
   });
 
   try {

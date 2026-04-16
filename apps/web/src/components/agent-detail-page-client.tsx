@@ -1812,7 +1812,7 @@ export function AgentDetailPageClient({
               }
             >
               <SelectTrigger className="ui-select-trigger-full">
-                <SelectValue placeholder={modelOptions.length === 0 ? "Not configurable for this provider" : "Select a model"} />
+                <SelectValue placeholder={modelOptions.length === 0 ? "Not configurable" : "Select a model"} />
               </SelectTrigger>
               <SelectContent>
                 {modelOptions.map((option) => (
